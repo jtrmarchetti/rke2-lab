@@ -19,7 +19,6 @@ extensions = [
     "sphinx.ext.todo",
 ]
 
-templates_path = ["_templates"]
 exclude_patterns = ["_build"]
 
 # Warnings are errors in the Makefile (-W), so a broken cross-reference or an
@@ -29,8 +28,14 @@ todo_include_todos = True
 
 html_theme = "furo"
 html_title = "dev.lo Sysadmin Guide"
-html_static_path = ["_static"]
 html_show_sourcelink = True
+
+# No html_static_path and no templates_path: this guide overrides nothing in
+# the theme, and both directories would be empty. Git does not track an empty
+# directory, so declaring them builds locally and fails in CI with
+# "html_static_path entry '_static' does not exist" — which is what happened on
+# the first Pages run. Add the setting back in the same change that adds a file
+# to the directory, never before.
 
 html_theme_options = {
     "navigation_with_keys": True,
