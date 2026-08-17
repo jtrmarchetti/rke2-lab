@@ -312,6 +312,14 @@ path, not the contents.
 
 ## Rotation
 
+The operator-facing version of this section — one table of every credential,
+where it is changed, and which playbook pushes the change outward — is
+`docs/source/tasks/rotating-credentials.rst`. **A secret added to or removed
+from this document is added to or removed from that page in the same change.**
+A rotation procedure that exists only in the design record is one nobody will
+find on the day they need it.
+
+
 Both WireGuard private keys were previously committed in plaintext, so they exist in
 git history and should be treated as exposed. To rotate:
 

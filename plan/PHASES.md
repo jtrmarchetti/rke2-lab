@@ -1,8 +1,13 @@
 # Phases
 
 Six phases, executed in order. Each one runs the same flow — **Review → Research →
-Implement → Test** — as defined in `OVERVIEW.md`. A phase does not start until the
-previous phase's exit criteria pass.
+Implement → Test → Document** — as defined in `OVERVIEW.md`. A phase does not start
+until the previous phase's exit criteria pass.
+
+The fifth step is not optional and is not only about this directory: every phase
+that changes how the environment is *operated* — a service, a credential, a URL,
+a version, or a fault worth recording — updates the sysadmin guide in `docs/`
+before it is called complete. See `OVERVIEW.md`.
 
 | Phase | Deliverable | Hosts | Artifact tier introduced |
 | --- | --- | --- | --- |
@@ -420,3 +425,6 @@ kube-prometheus-stack, Loki + Alloy, Grafana, Tempo, and the OTel collector.
   in Git" has to mean the Git that survives losing `repo01`.
 - `repo01` holds only bootstrap artifacts; everything else lives in GitLab.
 - The controller can be rebuilt from documentation alone.
+- The sysadmin guide in `docs/` describes what was actually built: every service
+  with a URL, every credential with a rotation procedure, and the faults the
+  phase found in operator form. Added 2026-08-17, with the guide itself.

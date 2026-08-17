@@ -468,6 +468,26 @@ CoP references used during validation:
 
 ---
 
+## Documentation
+
+A change is not complete when the automation is correct. Two documents follow
+every change that has an operational effect:
+
+- **The relevant `plan/` document**, corrected for anything the change
+  invalidated — including "Status" and "Still open" sections in earlier phase
+  documents, which describe the present and go stale even though the phase is
+  finished.
+- **The sysadmin guide in `docs/`**, which is the operator's view: a new
+  service, credential, URL, address, version, storage decision or newly learned
+  failure mode all oblige a page there.
+  `docs/source/reference/maintaining-this-guide.rst` maps the kind of change to
+  the page, and `make -C docs html` must still pass — it builds with `-W`, so a
+  broken cross-reference fails it.
+
+The test is the same one the rest of this file applies to code: could someone
+who was not here follow it? A role that only its author can operate is not
+finished, however idempotent it is.
+
 ## Decision Rules
 
 - If a dedicated module exists, use it.

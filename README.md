@@ -48,6 +48,30 @@ not surface as an unexplained failure in the next.
 | `ansible/` | Every host's configuration: roles, playbooks, and the inventory that drives them |
 | `ansible/inventory/group_vars/repo/artifacts.yml` | The artifact manifest — every binary, image and archive the lab consumes, with checksums |
 | `plan/` | Architecture, per-phase implementation records, and the standards all automation follows |
+| `docs/` | The sysadmin guide: how the built environment is operated, as a Sphinx site |
+
+## Operate it
+
+The sysadmin guide in [`docs/`](docs/) is written for whoever runs this
+environment rather than whoever built it: service URLs and how to reach them,
+granting access, rotating every credential, adding a GitOps-managed service,
+growing Longhorn and PVCs, and a troubleshooting page ordered by symptom. It
+assumes no prior Kubernetes.
+
+Published from `main` at **<https://jtrmarchetti.github.io/rke2-lab/>**, by
+`.github/workflows/docs.yml`. To build it locally:
+
+```bash
+python3 -m venv ~/.venvs/rke2lab-docs
+~/.venvs/rke2lab-docs/bin/pip install -r docs/requirements.txt
+make -C docs html          # docs/_build/html/index.html
+```
+
+A change to the environment is not finished until that guide reflects it — the
+same rule the plan documents live under. See
+[`docs/source/reference/maintaining-this-guide.rst`](docs/source/reference/maintaining-this-guide.rst).
+
+## Where to read next
 
 Start with [`plan/OVERVIEW.md`](plan/OVERVIEW.md) for the architecture and the
 cross-phase rules, [`plan/CONTROLLER.md`](plan/CONTROLLER.md) for the

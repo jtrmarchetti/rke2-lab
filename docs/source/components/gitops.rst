@@ -1,0 +1,100 @@
+====================
+Flux and GitOps
+====================
+
+Flux reconciles the whole cluster from ``platform/cluster-state`` in GitLab.
+Five Kustomizations, eight HelmReleases, and no route to the internet: the
+charts come from ``oci://registry.gitlab.dev.lo/rke2/charts`` and the images
+from the same registry.
+
+The layers
+==========
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 74
+
+   * - Kustomization
+     - Contains
+   * - ``flux-system``
+     - Flux's own controllers, and the sync of the repository itself
+   * - ``infra-controllers``
+     - cert-manager, Longhorn, OpenBao, External Secrets, Sealed Secrets,
+       kube-vip's cloud provider, the cluster's CoreDNS, the registry
+       credential
+   * - ``infra-configs``
+     - The ``k8s-ca`` ClusterIssuer, the ClusterSecretStore, the Longhorn
+       StorageClasses
+   * - ``apps``
+     - Keycloak, Garage, the observability stack, the Longhorn auth proxy
+   * - ``unsealer``
+     - The OpenBao unseal loop, kept separate so retiring it is deleting one
+       declaration
+
+Health
+======
+
+.. code-block:: console
+
+   $ flux get kustomizations
+   $ flux get helmreleases -A
+   $ flux get sources all -A
+
+   $ flux reconcile source git flux-system      # pull now, do not wait
+   $ flux reconcile kustomization apps --with-source
+
+   $ kubectl -n flux-system logs deploy/kustomize-controller --tail=100
+   $ kubectl -n flux-system logs deploy/helm-controller --tail=100
+
+``flux get`` tells you *what* failed; the controller logs tell you why. A
+HelmRelease that says ``upgrade retries exhausted`` needs
+``flux reconcile helmrelease <name> -n <ns> --force`` once the underlying
+problem is fixed.
+
+The rule that catches people
+============================
+
+**The repository in GitLab is not the source.** It is rendered from
+``ansible/files/gitops_source/cluster-state`` by ``playbooks/gitops.yml``, and
+a commit made in GitLab is overwritten on the next render — by design. See
+:doc:`../tasks/adding-a-service`.
+
+The review gate before any change to a running component:
+
+.. code-block:: console
+
+   $ cd ansible
+   $ ansible-playbook playbooks/gitops.yml -e gitops_source_push=false
+
+That renders the tree, seals into it, prints the diff, and stops before the
+commit. It is the only way to see what Flux is about to be told without telling
+it, and it caught four real bugs on its first use.
+
+Suspending reconciliation
+=========================
+
+For a deliberate manual intervention — never as a way of living:
+
+.. code-block:: console
+
+   $ flux suspend helmrelease longhorn -n longhorn-system
+   $ ... do the thing ...
+   $ flux resume helmrelease longhorn -n longhorn-system
+
+A suspended resource is invisible in ``kubectl get pods`` and obvious in
+``flux get``. Check for suspensions before concluding that Flux is broken.
+
+How Flux authenticates
+======================
+
+* The repository: a GitLab **project deploy token** scoped to
+  ``read_repository`` on one project, created by the ``gitops_bootstrap`` role
+  and recorded at ``~/.config/rke2lab/flux-deploy-token.yml`` on the
+  controller. A cluster that leaks it leaks the ability to read its own
+  declared state and nothing more.
+* The domain CA: in the same ``flux-system`` Secret, because the GitRepository
+  is HTTPS against an internally signed certificate.
+* The registry: the ``rke2-nodes`` deploy token, sealed into the repository as
+  a docker config Secret.
+
+Rotating either is in :doc:`../tasks/rotating-credentials`.

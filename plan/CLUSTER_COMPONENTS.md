@@ -1,12 +1,24 @@
 # Cluster Components
 
+This file records **which component was chosen and why**. How each one is
+operated — health checks, failure modes, URLs, rotation — is the sysadmin
+guide's, in `docs/source/components/`. Adding, removing or replacing anything
+in this file obliges a matching change there; a component chosen and never
+documented for whoever has to run it is half a decision.
+
 ## Node Managed
 
 ### Core
 - CNI: Cilium — installed in Phase 4 as RKE2's packaged chart (`cni: cilium`),
   not in Phase 5. A node without a CNI never reaches `Ready`, so the control
   plane could not have been declared healthy without it.
-- DNS: CoreDNS + (maybe ExternalDNS)
+- DNS: **CoreDNS, twice.** RKE2's own for `*.svc.cluster.local`, and a second
+  deployment in `cluster-dns` that is authoritative for `k8s.dev.lo` on a
+  LoadBalancer address FreeIPA forwards to. ExternalDNS was never adopted and
+  is not needed: the second CoreDNS answers every single-label name under the
+  subdomain with the ingress address, so a GitOps-managed name needs no record
+  created anywhere. Corrected 2026-08-17; this line read "CoreDNS + (maybe
+  ExternalDNS)" for the whole build.
 - GitOps Engine: Flux CD
 - Ingress: **Traefik v3** — `v3.7.8`, RKE2's packaged chart, selected in Phase 5
   with `ingress-controller: traefik`.
@@ -52,7 +64,15 @@
   A one-replica class exists alongside it for data that is genuinely
   reconstructible — caches, scratch — and is not used for anything whose loss
   matters. See `PHASE6_IMPLEMENTATION.md`.
-- Load Balancing: Cilium LB-IPAM
+- Load Balancing: **kube-vip**, not Cilium LB-IPAM. Corrected 2026-08-17 —
+  the plan named Cilium and 6b chose otherwise, for two reasons that still
+  hold: Cilium's L2 announcements require kube-proxy replacement, which this
+  cluster does not run and which cannot be enabled on a live cluster without
+  taking service networking down, and they hold a lease per service with a
+  two-second renew deadline — a steady stream of etcd writes on storage
+  measured at 32-50 fsync/s. kube-vip was already here holding the API VIP;
+  the LoadBalancer half is a second DaemonSet of the same image plus a cloud
+  provider handing out `192.168.2.40-52`. See `PHASE6_IMPLEMENTATION.md`.
 - Object Storage: Garage
 - Secrets Management: **OpenBao + External Secrets Operator**, with **Sealed
   Secrets** retained for bootstrap material only. Settled in Phase 6.
@@ -107,9 +127,15 @@
   first-class provider. Same reasoning that put GitLab CE here rather than EE.
 
   Note the storage cost: OpenBao's Raft backend fsyncs per commit — etcd's write
-  pattern, on storage already at etcd's floor — so it runs single-node on a
-  one-replica StorageClass rather than as a three-node HA cluster. See
-  `PHASE6_IMPLEMENTATION.md`.
+  pattern, on storage already at etcd's floor — so it runs as a **single node**
+  rather than a three-node HA cluster. It does **not** run on the one-replica
+  StorageClass: this sentence said it did until 2026-08-17, and it was the
+  tempting wrong answer rather than the decision. `longhorn-single` is the
+  fastest storage here and the vault is the thing most bothered by slow
+  storage, but one replica means a single node loss destroys every runtime
+  secret in the cluster. OpenBao is on the two-replica `longhorn` class, which
+  is what the manifests, the storage class's own comment and
+  `PHASE6_IMPLEMENTATION.md`'s risk gate all say.
 - Service Mesh: Cilium (sidecarless)
 - SSO: **Keycloak**, federated to FreeIPA and now the front door to every
   service that has one. Applied and verified on 2026-08-17.

@@ -1,0 +1,103 @@
+---
+# Publish the sysadmin guide to GitHub Pages.
+#
+# Two jobs on purpose. `build` runs on every pull request as well, because the
+# guide builds with `-W` — a broken cross-reference or an orphaned page fails
+# it — and finding that on the pull request is cheaper than finding it on main.
+# `deploy` runs only on main, and is the only job that touches Pages.
+#
+# The published site is https://jtrmarchetti.github.io/rke2-lab/. Pages is
+# already configured with `build_type: workflow`, so this file is the whole of
+# the deployment; no branch and no `gh-pages` history is involved.
+#
+# Nothing here reaches the lab. The guide is built from the checkout alone —
+# see docs/conf.py, which carries no extension that fetches anything.
+
+name: docs
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - docs/**
+      - .github/workflows/docs.yml
+  # So the site can be republished without a docs commit — after enabling
+  # Pages, or to recover a deployment that failed for a reason outside the
+  # build.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time, and let a newer commit supersede an older one that
+# has not started. `cancel-in-progress: false` because cancelling a deployment
+# mid-flight can leave Pages serving a half-published site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # 3.12 is Ubuntu 24.04's system Python, which is what every host in the
+      # lab and the automation controller run. Building the guide on the same
+      # interpreter the environment uses keeps a CI-only failure from being a
+      # thing that can happen.
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      # The same pinned file the controller installs from. Sphinx and furo are
+      # exact pins for the reason plan/CONTROLLER.md gives about every other
+      # pin in this repository: a floor records what was tested against
+      # nothing in particular.
+      - name: Install the documentation toolchain
+        run: python -m pip install -r docs/requirements.txt
+
+      # SPHINXBUILD overrides the Makefile's default, which points at the
+      # controller's own virtual environment. Same Makefile, same -W, same
+      # output directory as a local build.
+      - name: Build the site
+        run: make -C docs html SPHINXBUILD=sphinx-build
+
+      # Not needed by actions/deploy-pages, which does not run Jekyll — but it
+      # costs nothing and it is what stops Sphinx's _static and _sources
+      # directories being dropped if this is ever served any other way.
+      - name: Disable Jekyll processing
+        run: touch docs/_build/html/.nojekyll
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html
+
+  deploy:
+    # Pull requests build and stop there: a fork's pull request must not be
+    # able to publish to the repository's Pages site.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

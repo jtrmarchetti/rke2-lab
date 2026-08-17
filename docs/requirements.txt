@@ -1,0 +1,9 @@
+# The sysadmin guide's build dependencies, pinned for the same reason
+# bootstrap/requirements-controller.txt is: plan/CONTROLLER.md records what is
+# installed and working, and a floor (">=") records nothing in particular.
+#
+# Its own file, and its own virtual environment, because it pins a different
+# thing for a different reason than the automation environment does — the same
+# split infra/pulumi/requirements.txt already makes.
+sphinx==9.1.0
+furo==2025.12.19
