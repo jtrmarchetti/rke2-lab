@@ -1,0 +1,79 @@
+---
+# Public keys, derived rather than declared.
+#
+# A WireGuard public key is a pure function of its private key, and both
+# private keys in this tunnel are already on this host in
+# ~/.config/rke2lab/env.sh. Pasting the derived values into two group_vars
+# files — as this environment did until now — creates two copies that nothing
+# keeps in agreement with the secrets they came from. plan/SECRETS.md's
+# rotation procedure then has a manual step that fails silently: a tunnel with
+# a stale peer key comes up, shows an interface, reports a peer, and never
+# completes a handshake.
+#
+# The private keys reach `wg pubkey` on stdin, never on a command line, so they
+# do not appear in the process table of a host that also holds every other
+# secret in the environment.
+
+- name: keys | Derive this host's public key from its private key
+  when: (controller_tunnel_private_key | trim | length) > 0
+  changed_when: false
+  check_mode: false
+  no_log: true
+  register: _reg_controller_tunnel_local_key
+  ansible.builtin.command:
+    cmd: wg pubkey
+    stdin: "{{ controller_tunnel_private_key | trim }}"
+
+- name: keys | Publish this host's public key for the gateway play
+  when: (controller_tunnel_private_key | trim | length) > 0
+  ansible.builtin.set_fact:
+    controller_tunnel_local_public_key: >-
+      {{ _reg_controller_tunnel_local_key['stdout'] | trim }}
+
+- name: keys | Derive the gateway's public key from its private key
+  when: (controller_tunnel_peer_private_key | trim | length) > 0
+  changed_when: false
+  check_mode: false
+  no_log: true
+  register: _reg_controller_tunnel_peer_key
+  ansible.builtin.command:
+    cmd: wg pubkey
+    stdin: "{{ controller_tunnel_peer_private_key | trim }}"
+
+# The derived value wins where both are available, and the assertion below is
+# what makes that safe to say: a declared key that disagrees with the derived
+# one is a stale paste, and silently preferring the correct one would leave the
+# stale copy in inventory to be trusted by the next person who reads it.
+- name: keys | Assert a declared gateway key matches the derived one
+  when:
+    - (controller_tunnel_peer_private_key | trim | length) > 0
+    - (controller_tunnel_peer_public_key | trim | length) > 0
+  ansible.builtin.assert:
+    that:
+      - (controller_tunnel_peer_public_key | trim)
+        == (_reg_controller_tunnel_peer_key['stdout'] | trim)
+    fail_msg: >-
+      controller_tunnel_peer_public_key does not match the key derived from
+      controller_tunnel_peer_private_key. One of the two is stale — almost
+      certainly the declared one, after a rotation of the private key in
+      ~/.config/rke2lab/env.sh. Remove the declared value and let it be
+      derived, or correct it.
+    quiet: true
+
+- name: keys | Resolve the gateway's public key
+  ansible.builtin.set_fact:
+    controller_tunnel_gateway_public_key: >-
+      {{ (_reg_controller_tunnel_peer_key['stdout'] | default('') | trim)
+         if (controller_tunnel_peer_private_key | trim | length) > 0
+         else (controller_tunnel_peer_public_key | trim) }}
+
+- name: keys | Assert both ends of the tunnel have a key
+  ansible.builtin.assert:
+    that:
+      - (controller_tunnel_local_public_key | default('') | length) > 0
+      - (controller_tunnel_gateway_public_key | length) > 0
+    fail_msg: >-
+      The tunnel needs this host's private key and the gateway's public key.
+      Both come from ~/.config/rke2lab/env.sh as WIREGUARD_CONTROLLER_PRIVATE_KEY
+      and WIREGUARD_REPO_PRIVATE_KEY; see plan/SECRETS.md.
+    quiet: true

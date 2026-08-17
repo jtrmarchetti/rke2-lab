@@ -1,0 +1,35 @@
+---
+# The interface itself: the configuration, and the unit that brings it up at
+# boot. Everything here is what playbooks/tunnel_controller_access.yml used to
+# carry inline.
+
+- name: interface | Ensure the WireGuard configuration directory exists
+  ansible.builtin.file:
+    path: "{{ _var_controller_tunnel_config_path }}"
+    state: directory
+    mode: "0700"
+
+# 0600 because this file contains this host's private key. The handler restarts
+# the interface rather than the template task doing it directly, so a run that
+# changes nothing does not drop the tunnel every playbook after it needs.
+- name: interface | Ensure the WireGuard interface configuration is rendered
+  notify:
+    - Restart controller WireGuard
+  ansible.builtin.template:
+    src: "{{ _var_controller_tunnel_files_dir }}/wg_controller.conf.j2"
+    dest: "{{ _var_controller_tunnel_config_file }}"
+    mode: "0600"
+
+- name: interface | Ensure the WireGuard interface is enabled and started
+  when: not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_controller_tunnel_service }}"
+    enabled: true
+    state: started
+
+# The tunnel is the path to every internal host, so a configuration change has
+# to take effect before the next play rather than at the end of this one — the
+# gateway play that follows reaches repo01 on 192.168.1.20 and does not need
+# it, but everything after that does.
+- name: interface | Apply any pending interface restart
+  ansible.builtin.meta: flush_handlers

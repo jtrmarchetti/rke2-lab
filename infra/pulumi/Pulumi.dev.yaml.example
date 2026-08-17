@@ -22,8 +22,12 @@ config:
   deployment:vmUsername: devops
   deployment:vmDomain: dev.lo
 
-  # Optional cloud image override when no templateVmId is set.
-  # deployment:baseImageUrl: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  # Optional cloud image override when no templateVmId is set. The stack's
+  # default is a pinned dated release with the checksum published beside it;
+  # override the URL and the checksum together or the download will fail, which
+  # is the intended behaviour.
+  # deployment:baseImageUrl: https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img
+  # deployment:baseImageChecksum: 6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733
   # deployment:baseImageFileName: noble-server-cloudimg-amd64.qcow2
 
   # Either set deployment:vmSshPublicKey or VM_SSH_PUBLIC_KEY.

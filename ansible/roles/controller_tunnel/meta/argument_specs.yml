@@ -1,0 +1,106 @@
+---
+argument_specs:
+  main:
+    short_description: >-
+      The controller's WireGuard endpoint into the internal network.
+    description:
+      - Configures this host's end of the point-to-point tunnel to the gateway
+        that fronts the internal network, and the route down it.
+      - >-
+        Derives both ends' public keys from their private keys and sets them as
+        the facts controller_tunnel_local_public_key and
+        controller_tunnel_gateway_public_key. The first is what the play
+        configuring the gateway passes to it as its peer key.
+    options:
+      controller_tunnel_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether this role does anything at all.
+      controller_tunnel_configure_enabled:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Whether to write the interface configuration and start it. Set false
+          to run validation alone against a tunnel already configured.
+      controller_tunnel_validate_enabled:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Whether to prove the tunnel handshakes and carries traffic. Set false
+          in the pass that configures this end, because the far end does not
+          exist yet.
+      controller_tunnel_interface:
+        type: str
+        required: false
+        default: wg0
+        description: The WireGuard interface name, and the wg-quick unit instance.
+      controller_tunnel_address:
+        type: str
+        required: false
+        description: This host's address inside the tunnel, in CIDR form.
+      controller_tunnel_listen_port:
+        type: int
+        required: false
+        default: 51821
+        description: The UDP port this end listens on.
+      controller_tunnel_private_key:
+        type: str
+        required: false
+        description: >-
+          This host's WireGuard private key. From the environment; never
+          committed. See plan/SECRETS.md.
+      controller_tunnel_peer_private_key:
+        type: str
+        required: false
+        description: >-
+          The gateway's WireGuard private key, used only to derive its public
+          key so that no copy of the derived value has to be maintained by hand.
+      controller_tunnel_peer_public_key:
+        type: str
+        required: false
+        description: >-
+          The gateway's public key stated directly, for a controller that does
+          not hold the gateway's private key. When both are supplied the
+          derived value is used and a mismatch is a hard failure.
+      controller_tunnel_peer_endpoint:
+        type: str
+        required: false
+        description: The gateway's host and UDP port, as host:port.
+      controller_tunnel_peer_allowed_ips:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          The addresses reached through the gateway. wg-quick routes these,
+          which is what makes the internal network reachable from here.
+      controller_tunnel_peer_persistent_keepalive:
+        type: int
+        required: false
+        default: 25
+        description: Keepalive interval in seconds.
+      controller_tunnel_route_subnets:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Subnets given an explicit PostUp route down the interface, in
+          addition to those wg-quick derives from the allowed addresses.
+      controller_tunnel_validate_address:
+        type: str
+        required: false
+        description: >-
+          An address inside the internal network, not the gateway's own tunnel
+          address, so that a successful check proves forwarding and SNAT.
+      controller_tunnel_validate_port:
+        type: int
+        required: false
+        default: 22
+        description: The TCP port checked at that address.
+      controller_tunnel_validate_timeout:
+        type: int
+        required: false
+        default: 30
+        description: Seconds to wait for that port to answer.

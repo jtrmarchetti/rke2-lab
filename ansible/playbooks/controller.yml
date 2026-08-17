@@ -62,15 +62,30 @@
       tags:
         - kube_cli
       vars:
+        # Version, URL and checksum for each binary, all three from
+        # inventory/group_vars/controller/artifacts.yml so that a bump is one
+        # edit and cannot leave a checksum pointing at the previous release.
+        kube_cli_controller_flux_sha256: >-
+          {{ inventory_kube_cli_controller_flux_sha256 }}
         kube_cli_controller_flux_url: >-
           {{ inventory_kube_cli_controller_flux_url }}
+        kube_cli_controller_flux_version: >-
+          {{ inventory_kube_cli_controller_flux_version }}
+        kube_cli_controller_k9s_sha256: >-
+          {{ inventory_kube_cli_controller_k9s_sha256 }}
         kube_cli_controller_k9s_url: "{{ inventory_kube_cli_controller_k9s_url }}"
+        kube_cli_controller_k9s_version: >-
+          {{ inventory_kube_cli_controller_k9s_version }}
         kube_cli_controller_kubectl_source_host: >-
           {{ inventory_kubewk_control_host }}
         kube_cli_controller_kubectl_source_path: >-
           {{ hostvars[inventory_kubewk_control_host]['inventory_rke2_node_data_dir'] }}/bin/kubectl
+        kube_cli_controller_kubeseal_sha256: >-
+          {{ inventory_kube_cli_controller_kubeseal_sha256 }}
         kube_cli_controller_kubeseal_url: >-
           {{ inventory_kube_cli_controller_kubeseal_url }}
+        kube_cli_controller_kubeseal_version: >-
+          {{ inventory_kube_cli_controller_kubeseal_version }}
         kube_cli_controller_kubectl_version: >-
           {{ hostvars[inventory_kubewk_control_host]['inventory_rke2_node_version']
              | regex_replace('\+.*$', '') }}

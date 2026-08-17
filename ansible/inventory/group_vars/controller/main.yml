@@ -41,10 +41,19 @@ inventory_controller_wireguard_enabled: true
 inventory_controller_wireguard_interface: wg0
 inventory_controller_wireguard_address: 10.66.66.2/30
 inventory_controller_wireguard_listen_port: 51821
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+# Secrets sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+#
+# Both private keys, and no public key anywhere. A WireGuard public key is a
+# pure function of its private key, and until 2026-08-17 this file held the
+# gateway's public key as a pasted literal while the gateway's group_vars held
+# this host's — two copies of a derived value, kept in agreement by hand.
+# roles/controller_tunnel derives both with `wg pubkey` and hands the
+# controller's to the gateway play, so rotating a key is now editing env.sh and
+# re-running the playbook, with nothing left to remember.
 inventory_controller_wireguard_private_key: >-
   {{ lookup('env', 'WIREGUARD_CONTROLLER_PRIVATE_KEY') }}
-inventory_controller_wireguard_peer_public_key: XspK6b4+WTxxSyGlEZB+6F/poERI4YvNk8Tlsb3fZ34=
+inventory_controller_wireguard_peer_private_key: >-
+  {{ lookup('env', 'WIREGUARD_REPO_PRIVATE_KEY') }}
 inventory_controller_wireguard_peer_endpoint: 192.168.1.20:51820
 inventory_controller_wireguard_peer_allowed_ips:
   - 10.66.66.1/32
@@ -53,9 +62,30 @@ inventory_controller_wireguard_peer_persistent_keepalive: 25
 inventory_controller_wireguard_route_subnets:
   - 192.168.2.0/24
 
+# What the tunnel is validated against, which plan/PROXMOX.md asked for in
+# Phase 1 and nothing implemented until now.
+#
+# repo01's internal address rather than a deeper host, and the choice is the
+# same one split DNS's zone check faces: this play runs during a cold rebuild,
+# when repo01 is the only internal host that exists, and a check that cannot
+# pass on the first run of a rebuild is a check that gets disabled during
+# rebuilds. It proves the route down the tunnel and the return path from
+# 192.168.2.0/24 — everything except the gateway forwarding to a third host,
+# which the first playbook to touch core01 exercises.
+inventory_controller_wireguard_validate_address: 192.168.2.99
+inventory_controller_wireguard_validate_port: 22
+
 # controller_runtime
+#
+# Read from artifacts.yml rather than written here, so the version, the URL and
+# the checksum are one edit in one place. See that file for why the controller
+# needed a manifest of its own.
 inventory_controller_runtime_pulumi_url: >-
-  https://get.pulumi.com/releases/sdk/pulumi-v3.256.0-linux-x64.tar.gz
+  {{ inventory_controller_artifacts['pulumi-cli']['url'] }}
+inventory_controller_runtime_pulumi_sha256: >-
+  {{ inventory_controller_artifacts['pulumi-cli']['sha256'] }}
+inventory_controller_runtime_pulumi_version: >-
+  {{ inventory_controller_artifacts['pulumi-cli']['version'] }}
 
 # controller_trust
 # Fetched over plain HTTP from the artifact host, which is the only path that
@@ -223,12 +253,27 @@ inventory_keycloak_ldap_groups_dn: cn=groups,cn=accounts,dc=dev,dc=lo
 inventory_keycloak_ldap_connection_url: ldaps://core.dev.lo:636
 
 # kube_cli_controller
+#
+# All three from artifacts.yml, for the reason above: a version bump is one
+# edit, and the checksum cannot be left behind by it.
 inventory_kube_cli_controller_k9s_url: >-
-  https://github.com/derailed/k9s/releases/download/v0.51.0/k9s_Linux_amd64.tar.gz
+  {{ inventory_controller_artifacts['k9s']['url'] }}
+inventory_kube_cli_controller_k9s_sha256: >-
+  {{ inventory_controller_artifacts['k9s']['sha256'] }}
+inventory_kube_cli_controller_k9s_version: >-
+  {{ inventory_controller_artifacts['k9s']['version'] }}
 inventory_kube_cli_controller_flux_url: >-
-  http://192.168.2.99/flux/flux_2.9.4_linux_amd64.tar.gz
+  {{ inventory_controller_artifacts['flux-cli']['url'] }}
+inventory_kube_cli_controller_flux_sha256: >-
+  {{ inventory_controller_artifacts['flux-cli']['sha256'] }}
+inventory_kube_cli_controller_flux_version: >-
+  {{ inventory_controller_artifacts['flux-cli']['version'] }}
 inventory_kube_cli_controller_kubeseal_url: >-
-  http://192.168.2.99/sealed-secrets/kubeseal-0.38.4-linux-amd64.tar.gz
+  {{ inventory_controller_artifacts['kubeseal']['url'] }}
+inventory_kube_cli_controller_kubeseal_sha256: >-
+  {{ inventory_controller_artifacts['kubeseal']['sha256'] }}
+inventory_kube_cli_controller_kubeseal_version: >-
+  {{ inventory_controller_artifacts['kubeseal']['version'] }}
 
 # openbao_config
 # The vault's own API, through the ingress the cluster issued a certificate

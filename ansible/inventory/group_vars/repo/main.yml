@@ -42,7 +42,16 @@ inventory_wireguard_gateway_address: 10.66.66.1/30
 inventory_wireguard_gateway_listen_port: 51820
 # Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
 inventory_wireguard_gateway_private_key: "{{ lookup('env', 'WIREGUARD_REPO_PRIVATE_KEY') }}"
-inventory_wireguard_gateway_peer_public_key: 8tvqTeVmhfMNEuHyKJON2nmtzcqi6pDZvI5ym360+RE=
+# The controller's public key is no longer here. It was a pasted literal, and
+# so was this host's public key in the controller's group_vars — two derived
+# values maintained by hand against the secrets they came from. The controller
+# derives both with `wg pubkey` and the tunnel playbook passes this one in;
+# see roles/controller_tunnel.
+#
+# Which host that is, named rather than taken from the group, because a role
+# input must not depend on inventory group membership. Same pattern as
+# inventory_kubewk_control_host.
+inventory_wireguard_gateway_controller_host: controller01
 inventory_wireguard_gateway_peer_endpoint: 192.168.1.15:51821
 inventory_wireguard_gateway_peer_allowed_ips:
   - 10.66.66.2/32

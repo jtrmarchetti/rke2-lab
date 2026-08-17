@@ -77,9 +77,9 @@ argument_specs:
       kube_cli_controller_flux_version:
         type: str
         required: false
-        default: "2.9.4"
         description: >-
           Flux CLI version. Used to decide whether the local copy is stale.
+          Supplied by the caller from the controller's artifact manifest.
       kube_cli_controller_flux_url:
         type: str
         required: false
@@ -98,10 +98,10 @@ argument_specs:
       kube_cli_controller_kubeseal_version:
         type: str
         required: false
-        default: "0.38.4"
         description: >-
           kubeseal version. Used to decide whether the local copy is stale, and
-          tracks the controller version deployed in cluster-state.
+          tracks the controller version deployed in cluster-state. Supplied by
+          the caller from the controller's artifact manifest.
       kube_cli_controller_kubeseal_url:
         type: str
         required: false

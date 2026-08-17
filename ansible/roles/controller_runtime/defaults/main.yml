@@ -72,18 +72,20 @@ controller_runtime_require_managed_venv: true
 # The IaC half of the rebuild path: every VM in the environment is created by
 # it, so a controller without it can configure the lab but cannot create it.
 #
-# Pinned and checksummed like every other artifact in this repository. The
-# checksum is the one Pulumi publishes in pulumi-<version>-checksums.txt.
-#
 # Installed from upstream rather than staged on repo01, and that is not a hole
 # in the artifact rule: repo01 is a VM this tool creates, so a Pulumi that came
 # from repo01 could never build the host serving it. The rule constrains
 # internal nodes, and this host is outside the Proxmox environment.
+#
+# The version, URL and checksum are in
+# inventory/group_vars/controller/artifacts.yml and passed in by the caller.
+# They used to be split between this file and group_vars, which meant a version
+# bump could change the URL and leave the checksum behind — a failure that
+# looks like a corrupted download rather than a half-finished edit.
 controller_runtime_pulumi_enabled: true
-controller_runtime_pulumi_version: 3.256.0
+controller_runtime_pulumi_version: null
 controller_runtime_pulumi_url: null
-controller_runtime_pulumi_sha256: >-
-  fe4afd4cda48f7fe06961268834caf78fb1efa8b31ee61ad00ee2e6cfa91caea
+controller_runtime_pulumi_sha256: null
 controller_runtime_pulumi_home: >-
   {{ ansible_facts['env']['HOME'] }}/.pulumi
 

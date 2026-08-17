@@ -20,6 +20,48 @@
     state: directory
     mode: "{{ _item_kube_cli_controller_dir['mode'] }}"
 
+# Every downloaded binary here is pinned by three values that travel together —
+# version, URL and checksum — and none of them has a value that is correct in
+# any environment, so all three come from the caller. Checked up front because
+# the alternative failure is get_url reporting an unparseable URL two task
+# files later, which reads as a network problem rather than a missing input.
+- name: main | Assert every downloaded binary is fully pinned
+  when: (kube_cli_controller_enabled | bool)
+  loop:
+    - enabled: "{{ kube_cli_controller_k9s_enabled }}"
+      name: k9s
+      sha256: "{{ kube_cli_controller_k9s_sha256 }}"
+      url: "{{ kube_cli_controller_k9s_url }}"
+      version: "{{ kube_cli_controller_k9s_version }}"
+    - enabled: "{{ kube_cli_controller_flux_enabled }}"
+      name: flux
+      sha256: "{{ kube_cli_controller_flux_sha256 }}"
+      url: "{{ kube_cli_controller_flux_url }}"
+      version: "{{ kube_cli_controller_flux_version }}"
+    - enabled: "{{ kube_cli_controller_kubeseal_enabled }}"
+      name: kubeseal
+      sha256: "{{ kube_cli_controller_kubeseal_sha256 }}"
+      url: "{{ kube_cli_controller_kubeseal_url }}"
+      version: "{{ kube_cli_controller_kubeseal_version }}"
+  loop_control:
+    loop_var: _item_kube_cli_controller_pin
+    label: "{{ _item_kube_cli_controller_pin['name'] }}"
+  ansible.builtin.assert:
+    that:
+      - not (_item_kube_cli_controller_pin['enabled'] | bool)
+        or ((_item_kube_cli_controller_pin['version']
+             | default('', true) | string | trim | length) > 0
+            and (_item_kube_cli_controller_pin['url']
+                 | default('', true) | string | trim | length) > 0
+            and (_item_kube_cli_controller_pin['sha256']
+                 | default('', true) | string | trim | length) > 0)
+    fail_msg: >-
+      {{ _item_kube_cli_controller_pin['name'] }} is enabled but not fully
+      pinned. Its version, URL and checksum come from
+      inventory/group_vars/controller/artifacts.yml, passed in by
+      playbooks/controller.yml.
+    quiet: true
+
 - name: main | Install kubectl from the cluster's own binary
   when:
     - (kube_cli_controller_enabled | bool)

@@ -42,13 +42,14 @@ kube_cli_controller_kubectl_version: 1.35.7
 # Controller only: this host has internet access, so it needs no staging on
 # repo01, and the cluster nodes are better off with fewer binaries on them.
 #
-# Pinned and checksummed like every other artifact in this repository. The
-# checksum is the one k9s publishes in checksums.sha256 for this release.
+# Pinned and checksummed like every other artifact in this repository, in
+# inventory/group_vars/controller/artifacts.yml rather than here: a URL and a
+# checksum are not environment-independent values, and keeping the two beside
+# the version is what stops a bump from leaving the checksum behind.
 kube_cli_controller_k9s_enabled: true
-kube_cli_controller_k9s_version: v0.51.0
+kube_cli_controller_k9s_version: null
 kube_cli_controller_k9s_url: null
-kube_cli_controller_k9s_sha256: >-
-  c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7
+kube_cli_controller_k9s_sha256: null
 
 # --- shell integration ----------------------------------------------------
 #
@@ -64,15 +65,13 @@ kube_cli_controller_alias: k
 # The GitOps CLI, and the thing that bootstraps the cluster. Unlike k9s it is
 # fetched from repo01's artifact host, not from upstream: it is part of the
 # rebuild path, and a rebuild must not depend on this host reaching GitHub.
-# Staged as a bootstrap artifact — see inventory/group_vars/repo/artifacts.yml.
-#
-# v2.9 is the first Flux line whose compatibility matrix lists Kubernetes
-# v1.35 (">= 1.35.0"); this cluster runs v1.35.7.
+# Staged as a bootstrap artifact — see inventory/group_vars/repo/artifacts.yml,
+# and inventory/group_vars/controller/artifacts.yml for the version, URL and
+# checksum the caller passes in.
 kube_cli_controller_flux_enabled: true
-kube_cli_controller_flux_version: 2.9.4
+kube_cli_controller_flux_version: null
 kube_cli_controller_flux_url: null
-kube_cli_controller_flux_sha256: >-
-  c2c397a52930f52d2005c01d276116b059d062de379386d58e98115380a766a2
+kube_cli_controller_flux_sha256: null
 
 # --- kubeseal -------------------------------------------------------------
 #
@@ -81,11 +80,9 @@ kube_cli_controller_flux_sha256: >-
 # OpenBao unseal keys with it, and the rebuild path must not assume this host
 # can reach GitHub.
 #
-# The version tracks the controller deployed in cluster-state. kubeseal and
-# the controller are tolerant of a version skew, but keeping them equal means
-# one number to check rather than a compatibility question to answer.
+# Version, URL and checksum come from
+# inventory/group_vars/controller/artifacts.yml.
 kube_cli_controller_kubeseal_enabled: true
-kube_cli_controller_kubeseal_version: 0.38.4
+kube_cli_controller_kubeseal_version: null
 kube_cli_controller_kubeseal_url: null
-kube_cli_controller_kubeseal_sha256: >-
-  ab5ae808b0efcb167a825b6cf7f3a7c0034bd99a6301d78db2012da651a8c0b9
+kube_cli_controller_kubeseal_sha256: null

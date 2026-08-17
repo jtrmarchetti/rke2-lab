@@ -6,6 +6,26 @@
 # IaC half of a rebuild depend on someone remembering two commands — on the one
 # host whose loss makes everything else unrebuildable.
 
+# The three pins travel together and none of them has a safe default, so a
+# caller that passes two of them is a half-finished edit rather than a
+# configuration choice. Asserted here because the alternative failure is
+# get_url reporting an unparseable URL, which reads as a network problem.
+- name: pulumi | Assert the release is fully pinned
+  ansible.builtin.assert:
+    that:
+      - controller_runtime_pulumi_version is not none
+      - (controller_runtime_pulumi_version | string | length) > 0
+      - controller_runtime_pulumi_url is not none
+      - (controller_runtime_pulumi_url | string | trim | length) > 0
+      - controller_runtime_pulumi_sha256 is not none
+      - (controller_runtime_pulumi_sha256 | string | trim | length) > 0
+    fail_msg: >-
+      controller_runtime_pulumi_version, _url and _sha256 must all be supplied.
+      They come from the pulumi-cli entry in
+      inventory/group_vars/controller/artifacts.yml, passed in by
+      playbooks/controller_bootstrap.yml.
+    quiet: true
+
 - name: pulumi | Read the version already installed here
   changed_when: false
   failed_when: false

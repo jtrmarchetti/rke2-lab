@@ -163,7 +163,20 @@ Suggested environment variables:
 
 ## Phase 1 Technical Approach
 
-1. Build or import Ubuntu 24.04 cloud image/template in Proxmox.
+1. Build or import Ubuntu 24.04 cloud image/template in Proxmox. **Pinned to a
+   dated release directory and verified against its published SHA256 since
+   2026-08-17.** It was fetched from `noble/current/` with no checksum, which
+   made two rebuilds a fortnight apart produce different base images from
+   identical source — and made the disk every VM here is imported from the only
+   artifact in the environment that nothing verified. Changing the URL means
+   changing the checksum beside it in `infra/pulumi/__main__.py`; the two are
+   deliberately coupled so that a half-finished edit fails the download rather
+   than silently widening what is accepted.
+
+   Note for the first `pulumi up` after that change: the image resource is
+   **replaced**, so the file is deleted from the datastore and re-downloaded
+   with verification. The existing VMs are updated, not replaced — they imported
+   their disks at creation and do not re-read the image.
 2. Create Pulumi project using Python and pinned provider version.
 3. Define explicit Proxmox provider resource and use it for all VM resources.
 4. Provision repo01 VM from template with:
@@ -223,3 +236,11 @@ Future optimization (optional):
 
 - Risk: Tunnel or forwarding misconfiguration blocks controller access to internal nodes.
     - Mitigation: Add explicit tunnel validation tasks (`ping`, TCP/22 checks, Ansible ad-hoc command) before running service roles.
+    - **Implemented 2026-08-17**, five phases after it was written, by the third
+      play of `playbooks/tunnel_controller_access.yml`. Three checks, each a
+      different question: the interface is up and the gateway is a peer of it;
+      a handshake has completed, which is what a wrong key breaks; and a TCP
+      port inside `192.168.2.0/24` answers through the tunnel. Until then the
+      failure this mitigation names surfaced as every later playbook timing out
+      against an internal host, with an error naming the host and saying
+      nothing about the path to it.

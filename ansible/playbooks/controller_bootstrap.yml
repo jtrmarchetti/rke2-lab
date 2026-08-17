@@ -68,8 +68,15 @@
       tags:
         - controller_runtime
       vars:
+        # All three from inventory/group_vars/controller/artifacts.yml, which
+        # is the controller's own artifact manifest: the version, the URL and
+        # the checksum are one entry, so a bump cannot leave one of them behind.
+        controller_runtime_pulumi_sha256: >-
+          {{ inventory_controller_runtime_pulumi_sha256 }}
         controller_runtime_pulumi_url: >-
           {{ inventory_controller_runtime_pulumi_url }}
+        controller_runtime_pulumi_version: >-
+          {{ inventory_controller_runtime_pulumi_version }}
         # The repository root, derived from where this playbook lives rather
         # than configured, so a clone in any directory works with no edit.
         controller_runtime_repo_dir: "{{ playbook_dir | dirname | dirname }}"

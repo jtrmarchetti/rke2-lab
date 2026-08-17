@@ -1,0 +1,21 @@
+---
+# wireguard-tools rather than wireguard: this end terminates a tunnel and needs
+# wg-quick and wg, not the metapackage that also pulls the kernel module
+# sources. The gateway role installs the metapackage because repo01 is a VM
+# whose kernel may need it.
+_var_controller_tunnel_packages:
+  - wireguard-tools
+
+_var_controller_tunnel_config_path: /etc/wireguard
+
+# Templates for this role live in ansible/files/controller_tunnel/ rather than
+# inside the role, so the tree that renders a host's configuration can be read
+# without opening the role.
+_var_controller_tunnel_files_dir: >-
+  {{ role_path | dirname | dirname }}/files/controller_tunnel
+
+_var_controller_tunnel_config_file: >-
+  {{ _var_controller_tunnel_config_path }}/{{ controller_tunnel_interface }}.conf
+
+_var_controller_tunnel_service: >-
+  wg-quick@{{ controller_tunnel_interface }}

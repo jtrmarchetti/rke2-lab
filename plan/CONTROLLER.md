@@ -35,16 +35,35 @@ Versions are what is installed and working as of 2026-08-15. Pinning here means
 accident".
 
 **Since 2026-08-16 this table is a record rather than the source.** Each pinned
-version is declared in a file automation reads —
-`bootstrap/requirements-controller.txt`, `ansible/requirements.yml`,
-`infra/pulumi/requirements.txt`, and the `controller_runtime` defaults — and
-upgrading is editing one of those, not this document. A manifest a human
-maintains beside the thing it describes is a manifest that drifts; this one now
-describes files that cannot.
+version is declared in a file automation reads, and upgrading is editing one of
+those, not this document. A manifest a human maintains beside the thing it
+describes is a manifest that drifts; this one now describes files that cannot.
+
+**Since 2026-08-17 there is one place to start reading, and it is not here.**
+`ansible/inventory/group_vars/controller/artifacts.yml` is the controller's own
+artifact manifest — the counterpart to `group_vars/repo/artifacts.yml`, which
+has covered the machines being *built* since Phase 1 while the machine doing
+the building had nothing. Every download this host makes has an entry: the four
+that Ansible installs carry the version, URL and checksum the roles consume, and
+the rest are index rows naming the file their pin actually lives in
+(`bootstrap/requirements-controller.txt`, `ansible/requirements.yml`,
+`infra/pulumi/requirements.txt`, `infra/pulumi/__main__.py`, and the role
+defaults that list apt packages).
+
+The gap that closed was never that the controller's downloads were unpinned —
+they were pinned and checksummed already. It was that they were pinned in five
+places, so the only way to answer "what does this host pull from the internet"
+was to read every role, and two of the pins were split across files: the Pulumi
+URL was in `group_vars` while its checksum was in the role's defaults, and the
+same for k9s, Flux and kubeseal. A version bump could change the URL and leave
+the checksum behind, which fails as a corrupted download rather than as the
+half-finished edit it is. Version, URL and checksum are now one entry, the role
+defaults are `null`, and both roles assert that a caller supplied all three.
 
 | Dependency | Version | Source | Why it is here |
 | --- | --- | --- | --- |
 | Ubuntu | 24.04.4 LTS | OS install | Base |
+| Ubuntu cloud image | 24.04, `release-20260814` | `cloud-images.ubuntu.com`, checksummed, by Pulumi | The disk every VM in the lab is imported from. Not on this table until 2026-08-17, and not verified either: it was fetched from `noble/current/` — a moving target — with no checksum, which made it the one unpinned artifact in an environment whose whole premise is pinned artifacts |
 | Python | system `python3` | `apt python3-venv`, by `bootstrap/` | Runs Ansible and Pulumi |
 | Ansible | 13.4.0 | `bootstrap/requirements-controller.txt`, into `~/.venvs/rke2lab` | Configuration management |
 | ansible-core | 2.20.3 | dependency of the above | — |
@@ -198,11 +217,26 @@ What each step owns, and the two places the order is load-bearing:
      `infra/pulumi/.venv` from `infra/pulumi/requirements.txt`. The provider
      plugin downloads itself on first use, which is the only path Pulumi
      supports.
-   - **The tunnel**, last. WireGuard to `repo01`, `10.66.66.2/30` on this end.
-     Ordering trap: the tunnel is what reaches `192.168.2.0/24`, so it precedes
-     every Ansible run against an internal host — but the play that configures
-     it reaches `repo01` on `192.168.1.20`, so configuring the tunnel never
-     depends on the tunnel.
+   - **The tunnel**, last. WireGuard to `repo01`, `10.66.66.2/30` on this end,
+     via the `controller_tunnel` role. Ordering trap: the tunnel is what
+     reaches `192.168.2.0/24`, so it precedes every Ansible run against an
+     internal host — but the play that configures it reaches `repo01` on
+     `192.168.1.20`, so configuring the tunnel never depends on the tunnel.
+
+     Three plays, not one, and the split exists so the result can be checked:
+     this end is written first, then the gateway end, then this end again to
+     prove a handshake completed and that an address inside
+     `192.168.2.0/24` answers through it. `PROXMOX.md` asked for that check in
+     Phase 1 and nothing implemented it until 2026-08-17. What it catches is a
+     gateway that is up but not forwarding, which otherwise surfaces as every
+     later playbook timing out against an internal host with an error that
+     names the host and says nothing about the path to it.
+
+     Neither peer's **public** key is in inventory any more. Both are derived
+     from the private keys in `env.sh` with `wg pubkey`, and the controller
+     hands its own to the gateway play. Each used to be a literal pasted into
+     the other host's `group_vars` — see `SECRETS.md` for why that failure mode
+     was worth engineering away rather than documenting.
 4. **`playbooks/site.yml`** builds the environment, and imports step 3 as its
    own first play.
 
@@ -291,6 +325,30 @@ scripted**. As of 2026-08-16 both halves are met: this document is the manifest,
 and `bootstrap/` plus `controller_runtime` are the script. The cold start above
 is four commands, one of which is a shell script whose entire scope is that
 Ansible cannot install itself, and the other three of which are Ansible.
+
+An audit on **2026-08-17** re-read that claim against the code and found it
+true, with one exception and three rough edges. The exception was real: the
+Ubuntu cloud image, downloaded by Pulumi from a moving URL with no checksum —
+the disk every VM in the lab is imported from, and the only artifact in the
+environment that nothing verified. It is pinned and checksummed now.
+
+The three rough edges were all the same shape — automation that worked while
+depending on a human to keep two things in agreement:
+
+- The controller's WireGuard endpoint was **inline tasks in a playbook**, which
+  `ANSIBLE_STANDARDS.md` forbids twice over, and so had no argument validation.
+  It is the `controller_tunnel` role now. The gateway end had been a role since
+  Phase 1; only the end reaching it was loose tasks.
+- Both **public keys were pasted literals**, one in each end's `group_vars`,
+  derived from private keys sitting in `env.sh`. Derived at run time now.
+- **Nothing proved the tunnel carried traffic**, which `PROXMOX.md` asked for in
+  Phase 1. It does now, in a third play, and the check is what makes the two
+  changes above safe to have made.
+
+Worth stating plainly, because the audit was prompted by a belief that the
+tunnel was undocumented and unautomated: it was neither. It had been automated
+since Phase 1 and described in this document and in `OVERVIEW.md`. What it
+lacked was a role boundary, a derivation, and a test.
 
 What is left is not automation, it is **state that only a backup can supply**:
 

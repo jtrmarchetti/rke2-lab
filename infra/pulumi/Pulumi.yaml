@@ -1,4 +1,19 @@
 name: proxmox-lab
 runtime:
   name: python
+  options:
+    # The virtual environment `controller_runtime` builds from
+    # requirements.txt, named here so Pulumi uses it rather than whatever
+    # `python3` leads PATH.
+    #
+    # Without this the runtime resolved to the ambient interpreter, so every
+    # Pulumi command failed with "No module named 'pulumi'" unless the operator
+    # remembered to activate .venv first — on a host where the leading python3
+    # may be Homebrew's. The role pinned an environment that the tool then
+    # ignored, which is the same fault plan/CONTROLLER.md records about Ansible
+    # reconciling one virtual environment while running from another.
+    #
+    # Pulumi creates and populates the environment from requirements.txt if it
+    # is missing, so a fresh clone needs no manual step either.
+    virtualenv: .venv
 description: Proxmox VM lifecycle for dev.lo lab phases

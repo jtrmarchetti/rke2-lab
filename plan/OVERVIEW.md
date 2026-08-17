@@ -84,6 +84,12 @@ Implementation model:
 - SNAT on `repo01` for tunnel traffic entering `192.168.2.0/24`, so internal hosts
   need no return route toward the controller.
 
+Both ends are Ansible and have been since Phase 1: `playbooks/tunnel_controller_access.yml`
+runs the `controller_tunnel` role here and the `wireguard_gateway` role there, and
+`playbooks/controller_bootstrap.yml` imports it as its last play. Since 2026-08-17
+neither peer's public key is in inventory — both are derived from the private keys
+in `env.sh` — and the playbook proves the path carries traffic before it exits.
+
 ## Network and Routing Model
 
 | Network | CIDR | Internet Access |
@@ -141,6 +147,21 @@ The manifest is what makes the environment rebuildable, so it must cover the
 machine that does the rebuilding — Python, Pulumi, Ansible and its collections,
 WireGuard, `kubectl`, `k9s` — not just the machines being built. A manifest that
 assumes a working controller cannot recover from losing one.
+
+**There are two manifests, since 2026-08-17.** `group_vars/repo/artifacts.yml`
+covers the machines being built and is iterated by `artifact_stage`;
+`group_vars/controller/artifacts.yml` covers the machine doing the building and
+is looked up by name from three roles. The second one existed only as prose in
+`CONTROLLER.md` until then, which met the letter of this rule — every controller
+dependency *was* documented and pinned — while leaving the pins scattered across
+five files, two of them with the URL in one file and its checksum in another.
+
+The controller downloads from upstream, and that is not an exception to the rule
+above. The rule constrains **internal** nodes; the controller sits outside the
+Proxmox environment, and a controller that fetched Pulumi from `repo01` could
+never build the host serving it. Where a tool is in the *rebuild* path rather
+than merely convenient — the Flux CLI, kubeseal — it comes from Apache instead,
+so a rebuild does not depend on this host reaching GitHub.
 
 Distribution happens in two tiers. Tier 1 exists from Phase 1 onward; Tier 2 only
 exists once GitLab is running, and GitLab itself is delivered by Tier 1.
@@ -210,7 +231,7 @@ second internet egress.
 | RKE2 images | **Transit** — removed after publish | Tier 2 — GitLab registry |
 | RKE2 binaries, charts, packages | **Transit** — removed after publish | Tier 2 — GitLab packages |
 | GitOps workload images | **Transit** — removed after publish | Tier 2 — GitLab registry |
-| Controller dependencies | Documented in the manifest; installed on the controller | Upstream at build time |
+| Controller dependencies | Documented in `group_vars/controller/artifacts.yml`; installed on the controller | Upstream at build time, except the Flux CLI and kubeseal — Tier 1 Apache |
 
 Bootstrap artifacts are what a rebuild starts from, before GitLab exists to serve
 anything. Transit artifacts pass through.

@@ -10,9 +10,16 @@
 #
 # See plan/CONTROLLER.md.
 
+# check_mode: false because this only reads a version, and because the
+# comparison below is a `when:` on every task that follows. A command skipped
+# by --check registers a result with no `rc` in it, so the guard cannot
+# evaluate the way it does on a real run — the download block was entered
+# during --check and then failed on the scratch directory that --check had
+# also skipped. Same pattern controller_runtime uses for the Pulumi CLI.
 - name: flux | Read the version already installed here
   changed_when: false
   failed_when: false
+  check_mode: false
   register: _reg_kube_cli_controller_flux
   ansible.builtin.command:
     cmd: "{{ kube_cli_controller_bin_dir }}/flux --version"

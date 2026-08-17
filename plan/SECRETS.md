@@ -59,13 +59,13 @@ being interpreted.
 | `PULUMI_CONFIG_PASSPHRASE` | `env.sh` | Pulumi stack config decryption |
 | `VM_USERNAME`, `VM_USER_PASSWORD`, `VM_SSH_PUBLIC_KEY` | `env.sh` | cloud-init, Ansible connection |
 | `WIREGUARD_CONTROLLER_PRIVATE_KEY` | `env.sh` | `group_vars/controller/main.yml` |
-| `WIREGUARD_REPO_PRIVATE_KEY` | `env.sh` | `group_vars/repo/main.yml` |
+| `WIREGUARD_REPO_PRIVATE_KEY` | `env.sh` | `group_vars/repo/main.yml`, and `group_vars/controller/main.yml` since 2026-08-17 — the controller reads it only to derive the gateway's public key, which is what removed the pasted copy of that key from inventory |
 | `FREEIPA_ADMIN_PASSWORD`, `FREEIPA_DIR_MANAGER_PASSWORD` | `env.sh` | `freeipa_server` role, compose env file |
 | `FREEIPA_ADMIN_PASSWORD` (again) | `env.sh` | `ipa_service_cert` role, to sign CSRs on `core01` |
 | `GITLAB_ROOT_PASSWORD` | `env.sh` | `gitlab` role compose env file; `rke2_publish` role, to create the GitLab group, projects, and deploy token and to push images |
 | `RKE2_TOKEN` | `env.sh` | `rke2_server` and `rke2_agent` roles — the shared cluster join secret, the same value on servers and workers. A node with the wrong value is rejected at registration |
 | `GITLAB_REGISTRY_USER`, `GITLAB_REGISTRY_TOKEN` | `env.sh`, **optional** | `rke2_publish` role. Set both to use a deploy token issued by hand; left empty, the role mints one and records it on `repo01` |
-| WireGuard **public** keys | repo `group_vars` | Not secret; safe to commit |
+| WireGuard **public** keys | **nowhere, since 2026-08-17** | Derived from the private keys by `roles/controller_tunnel` at run time. They were never secret, and that was never the problem: a derived value pasted into two `group_vars` files is a copy nothing keeps in agreement with the key it came from |
 | `KEYCLOAK_ADMIN_PASSWORD`, `KEYCLOAK_DB_PASSWORD`, `GRAFANA_ADMIN_PASSWORD` | `env.sh`, **added 2026-08-16** | `openbao_secrets` role, which writes them into the vault. They existed before only as ciphertext in GitLab, which meant the plaintext was recoverable solely by decrypting the thing it was supposed to be the source of. Recovered with the sealing key backup and written here; see below. Sealed into Git until **2026-08-16**, when they moved to OpenBao |
 | `GARAGE_ADMIN_TOKEN`, `GARAGE_METRICS_TOKEN`, `GARAGE_RPC_SECRET` | `env.sh` | `openbao_secrets` role, written into the vault at `kv/garage-cluster`. Authored, not generated — Garage's config names them, so they have to exist before Garage does. Sealed into Git until **2026-08-16** |
 | `GARAGE_S3_ACCESS_KEY`, `GARAGE_S3_SECRET_KEY` | `env.sh` | Written by the `garage_init` role, not supplied by hand, and copied into the vault at `kv/garage` by `openbao_secrets` on the **next** run — see below |
@@ -316,16 +316,30 @@ Both WireGuard private keys were previously committed in plaintext, so they exis
 git history and should be treated as exposed. To rotate:
 
 ```bash
-# Generate a new pair; the first line is the private key, the second the public key.
-wg genkey | tee /dev/stderr | wg pubkey
+# Generate a new private key. The public key is derived by automation.
+wg genkey
 ```
 
 For each end:
 
 1. Put the new **private** key in `~/.config/rke2lab/env.sh`.
-2. Put the new **public** key in the *other* end's `*_peer_public_key` in `group_vars`.
-3. Re-run `ansible-playbook playbooks/tunnel_controller_access.yml`, which reconfigures
-   both ends in one pass.
+2. Re-run `ansible-playbook playbooks/tunnel_controller_access.yml`, which reconfigures
+   both ends in one pass and validates the result.
+
+**Step 2 used to be step 3, and the step between them is gone as of 2026-08-17.**
+It was: derive the public key by hand and paste it into the *other* end's
+`*_peer_public_key` in `group_vars`. Both public keys are now derived from the
+private keys by `roles/controller_tunnel`, and neither appears in inventory at
+all.
+
+That manual step is worth recording rather than quietly deleting, because of how
+it failed. A WireGuard peer with a stale public key does not report an error:
+the interface comes up, `wg show` lists the peer, and `systemctl status` is
+green. The only symptom is that `latest-handshakes` stays at 0 and every
+playbook afterwards times out against an internal host — with an error naming
+the host and saying nothing about the tunnel. The third play of
+`tunnel_controller_access.yml` now checks exactly that, so a rotation that goes
+wrong fails on the rotation.
 
 Rotating breaks the tunnel until both ends are re-applied, so run the playbook from a
 path that does not depend on the tunnel itself.

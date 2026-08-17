@@ -1,0 +1,6 @@
+---
+- name: Restart controller WireGuard
+  when: not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_controller_tunnel_service }}"
+    state: restarted

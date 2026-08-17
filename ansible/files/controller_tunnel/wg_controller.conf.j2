@@ -1,0 +1,24 @@
+{#
+  The controller's end of the point-to-point tunnel to the internal network's
+  gateway.
+
+  Both keys below are derived by roles/controller_tunnel/tasks/keys.yml from
+  the private keys in the environment, rather than pasted into inventory. The
+  route in the PostUp lines is deliberate redundancy: wg-quick already routes
+  everything in AllowedIPs, and this is the one path the whole environment is
+  reached through.
+#}
+[Interface]
+Address = {{ controller_tunnel_address }}
+ListenPort = {{ controller_tunnel_listen_port }}
+PrivateKey = {{ controller_tunnel_private_key | trim }}
+{% for _item_controller_tunnel_subnet in controller_tunnel_route_subnets %}
+PostUp = ip route replace {{ _item_controller_tunnel_subnet }} dev {{ controller_tunnel_interface }}
+PostDown = ip route del {{ _item_controller_tunnel_subnet }} dev {{ controller_tunnel_interface }} || true
+{% endfor %}
+
+[Peer]
+PublicKey = {{ controller_tunnel_gateway_public_key }}
+AllowedIPs = {{ controller_tunnel_peer_allowed_ips | join(',') }}
+Endpoint = {{ controller_tunnel_peer_endpoint }}
+PersistentKeepalive = {{ controller_tunnel_peer_persistent_keepalive }}

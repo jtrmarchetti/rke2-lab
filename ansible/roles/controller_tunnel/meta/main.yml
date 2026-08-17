@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  role_name: controller_tunnel
+  author: devops
+  description: >-
+    The automation controller's WireGuard endpoint and route into the internal
+    network, with validation that the path carries traffic.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []
