@@ -90,6 +90,18 @@ argument_specs:
         description:
           - Directory attribute holding the given name. Keycloak's rhds default
             is cn, which in FreeIPA is the full name.
+      keycloak_ldap_email_verified_mapper_enabled:
+        type: bool
+        default: true
+        description:
+          - Mark federated users' addresses as verified. FreeIPA has no such
+            attribute, so Keycloak imports every user with the flag false, and
+            oauth2-proxy then refuses the login after authentication succeeds.
+      keycloak_ldap_email_verified_mapper_name:
+        type: str
+        default: email verified
+        description:
+          - Name of the hardcoded-attribute mapper on the federation provider.
       keycloak_ldap_group_mapper_enabled:
         type: bool
         default: true
@@ -107,6 +119,13 @@ argument_specs:
           - Import groups now rather than at a later synchronisation. Keycloak
             imports on sync and not on login, so a group created moments ago is
             otherwise invisible to keycloak_clients.
+      keycloak_ldap_user_sync:
+        type: bool
+        default: true
+        description:
+          - Re-import users after the mappers are written. A mapper shapes a
+            user only as they are imported, so without this a corrected mapper
+            leaves every user already in the realm exactly as they were.
       keycloak_ldap_no_log:
         type: bool
         default: true

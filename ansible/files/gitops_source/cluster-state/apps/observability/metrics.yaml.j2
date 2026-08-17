@@ -220,11 +220,18 @@ spec:
         auth.generic_oauth:
           enabled: true
           name: dev.lo single sign-on
-          # Off. Grafana would otherwise create an account for anyone who
-          # authenticates at Keycloak, including people in none of the Grafana
-          # groups, and they would land on whatever auto_assign_org_role says.
-          # With role_attribute_strict below, a user with no Grafana role is
-          # refused rather than admitted as a Viewer.
+          # On, and it has to be: no Grafana account exists for a federated
+          # user until their first sign-in creates one, so with this off every
+          # SSO login is refused and the only account that works is the local
+          # admin.
+          #
+          # What keeps that from meaning "anyone at Keycloak gets a Grafana
+          # account" is role_attribute_strict below, not this setting. A user
+          # in none of the Grafana groups matches neither branch of
+          # role_attribute_path, and strict mode refuses them outright rather
+          # than admitting them on auto_assign_org_role. The two are a pair:
+          # turning strict mode off while leaving this on is what makes
+          # "everyone in the domain is a Grafana Viewer" happen by accident.
           allow_sign_up: true
           auto_login: false
           client_id: grafana

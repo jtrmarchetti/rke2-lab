@@ -62,7 +62,17 @@ _var_openbao_oidc_admin_policy: |
   path "sys/policies/acl/*" {
     capabilities = ["read"]
   }
-  path "auth" {
+  # `sys/auth`, not `auth`. The latter is not a path the vault serves — it is
+  # the prefix each auth *method* is mounted under, so a grant on it matches
+  # nothing, returns 404 to anyone who tries it, and reads in a policy review
+  # as though the capability were present. The list of enabled auth methods,
+  # which is what the UI's Access tab asks for and what "diagnose the vault"
+  # means here, lives at sys/auth.
+  #
+  # Read-only, and it stays that way: enabling or tuning a method is
+  # sys/auth/* with update, which would let a Keycloak session grant itself
+  # another way in.
+  path "sys/auth" {
     capabilities = ["read", "list"]
   }
   path "identity/*" {

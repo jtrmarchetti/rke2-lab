@@ -76,6 +76,34 @@ _var_keycloak_ldap_component:
     readTimeout: ["10000"]
     pagination: ["true"]
 
+# The email-verified mapper.
+#
+# `hardcoded-attribute-mapper` writes a fixed value onto every user the
+# provider imports. `user.model.attribute` names a field on Keycloak's own user
+# model rather than an LDAP attribute — emailVerified is one of the built-in
+# ones, alongside enabled and firstName — so this sets the flag Keycloak
+# publishes as the `email_verified` claim without asking the directory for
+# anything it does not have.
+#
+# The value is the string "true", not a boolean. Component config is a map of
+# lists of strings throughout Keycloak's API, and a YAML boolean here is
+# serialised as `True` by Python, which Keycloak reads as neither true nor
+# false and quietly treats as false — the exact symptom this mapper exists to
+# remove, reproduced one layer down.
+_var_keycloak_ldap_email_verified_mapper:
+  name: "{{ keycloak_ldap_email_verified_mapper_name }}"
+  providerId: hardcoded-attribute-mapper
+  providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+  parentId: "{{ _var_keycloak_ldap_provider_id | trim }}"
+  config:
+    user.model.attribute: ["emailVerified"]
+    attribute.value: ["true"]
+
+_var_keycloak_ldap_email_verified_matching: >-
+  {{ _reg_keycloak_ldap_mappers['json'] | default([])
+     | selectattr('name', 'equalto', keycloak_ldap_email_verified_mapper_name)
+     | list }}
+
 # The group mapper, which turns FreeIPA's user groups into Keycloak groups.
 #
 # `mode: READ_ONLY` for the same reason the provider is: FreeIPA owns

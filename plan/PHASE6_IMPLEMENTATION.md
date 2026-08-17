@@ -1594,3 +1594,110 @@ federation without disturbing that number can hide the next change the way it
 hid this one. **Recorded here rather than fixed**, because the fix is the
 config comparison the group mapper already demonstrates and it belongs in a
 change of its own, where a second run can prove it.
+
+## Sign-in was never actually tried — 2026-08-17
+
+**Applied to the live cluster and verified.** Everything the section above
+recorded as verified was verified *from the outside*: anonymous redirects,
+generated example tokens, group-to-role mappings read back through the admin
+API. No one had typed a password into any of the four services. The first
+interactive login found a defect that none of those checks could reach, and
+the shape of the miss is the part worth keeping.
+
+### Longhorn refused every login after Keycloak accepted it
+
+`longhorn.k8s.dev.lo` authenticated correctly at Keycloak and then answered the
+callback with **HTTP 500**, for both the administrator and the ordinary user:
+
+```
+Error redeeming code during OAuth2 callback:
+  email in id_token (jmarchetti.adm@dev.lo) isn't verified
+```
+
+FreeIPA has no notion of a verified address — an account's `mail` is set by an
+administrator in the domain, which is a stronger assurance than the click-a-link
+flow the flag was invented for — so Keycloak imports every federated user with
+`emailVerified` false. oauth2-proxy refuses on that alone. `--email-domain=*`
+does not cover it: that filters *which* domains are acceptable and is a separate
+check from whether the address is verified at all.
+
+Nothing upstream could have caught this. The roles were right, the token
+carried `resource_access.longhorn.roles: ["admin"]` exactly as designed, and the
+proxy's `--allowed-role` would have matched it — the request never got that far.
+The claim that decided the outcome was one no check was looking at, because it
+is not part of authorisation.
+
+Fixed at the directory's edge with a `hardcoded-attribute-mapper` on the
+federation provider, not with the proxy's
+`--insecure-oidc-allow-unverified-email`. The flag is per-service, so the next
+service put behind a proxy meets the same wall; and it is named `insecure`
+because it tells a proxy to stop checking. The mapper makes the claim true once,
+for the whole realm, and it is honest — FreeIPA *is* the authority for these
+addresses.
+
+A mapper only shapes a user as they are imported, so adding it changed nothing
+about the two users already in the realm. `keycloak_ldap_user_sync` triggers a
+`triggerFullSync` after the mappers are written, for the same reason
+`keycloak_ldap_group_sync` exists. `triggerChangedUsersSync` would not do:
+it selects on the directory's modify timestamp, and correcting a mapper on
+Keycloak's side does not touch it — every user would be skipped, which looks
+exactly like a successful sync.
+
+### OpenBao granted a path that does not exist
+
+`sso-admins` carried `path "auth"`, which is not a path the vault serves — it is
+the prefix each auth *method* is mounted under. The grant matched nothing,
+returned 404 to anyone who tried it, and read in a policy review as though the
+capability were present. The list of enabled auth methods, which is what the
+UI's Access tab asks for and what the policy's own comment means by "diagnose
+the vault", lives at `sys/auth`. Corrected, and still read-only: enabling or
+tuning a method is `sys/auth/*` with `update`, which would let a Keycloak
+session grant itself another way in.
+
+The rest of the report that prompted this — that OpenBao gave no real
+administrative access — did not survive testing. A token carrying `sso-admins`
+lists `kv/metadata`, reads `kv/data/keycloak` (both `admin-password` and
+`db-password` visible), and writes; `sso-users` reads and cannot write; the
+UI's engine list resolves. The identity entity created by the administrator's
+own past login is a member of `sso-admins`. Policies attach **at login**, so a
+session opened before `openbao_oidc` bound the group aliases carries none of
+this until the next sign-in — which is the most likely explanation, and is worth
+knowing before reaching for the policy.
+
+### The guard that had been reading its own prose
+
+Correcting the policy tripped `policies | Assert no OIDC policy can seal, rekey
+or grant access` — on a **comment** mentioning `sys/auth/*`. The assertion
+strips comments before checking, precisely so that the explanations do not fail
+the check they explain. It had never worked: inside a folded scalar the `'\n'`
+given to `.split()` never became a newline, so the policy was one long line, no
+line ever matched the comment pattern, and nothing was ever stripped. The guard
+had been scanning the prose all along and only passed because no comment had yet
+contained a forbidden path.
+
+Rewritten as `regex_replace('(?m)^[ \t]*#.*$', '')`, which anchors per line and
+needs no newline literal. A guard that silently checks the wrong thing until the
+day it fails on the right one is worse than no guard, because the failure
+arrives attached to the wrong cause.
+
+### Still not proven
+
+Grafana and GitLab remain unexercised by an interactive login. Grafana's
+configuration is correct — the PKCE redirect resolves, `role_attribute_path`
+reads the `roles` claim, `role_attribute_strict` refuses a roleless user — and
+Grafana does not check `email_verified`, so the defect above never applied to
+it. But **no SSO user has ever signed in**: the org holds only the local admin.
+That is the same gap this section is about, and it is recorded rather than
+claimed.
+
+GitLab maps no administrator role and never will here: group-to-admin sync is an
+Enterprise feature, so `gitlab-admins` is issued in the token and ignored, and
+administrator rights are granted in GitLab by `root`. That is by design and is
+already recorded in the role's defaults.
+
+A stale comment above Grafana's `allow_sign_up` claimed the setting was off
+while the value was `true`. The value is correct and has to be — no Grafana
+account exists for a federated user until their first sign-in creates one — and
+what keeps it safe is `role_attribute_strict`, not the flag. The comment was
+rewritten to say so. It reaches the cluster on the next `gitops_source` render;
+nothing behavioural changes with it.

@@ -127,6 +127,51 @@
                    recursive=True) }}
     status_code: [204]
 
+# Every federated user is imported with emailVerified false, because FreeIPA
+# has no attribute that says otherwise. oauth2-proxy then refuses the login
+# *after* Keycloak has authenticated the user, with a 500 and a message about
+# an unverified address. See the defaults for why this is fixed at the
+# directory's edge rather than by telling the proxy to stop checking.
+- name: federation | Create the email-verified mapper
+  when:
+    - (keycloak_ldap_email_verified_mapper_enabled | bool)
+    - (_var_keycloak_ldap_email_verified_matching | length) == 0
+  changed_when: true
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: "{{ _var_keycloak_ldap_email_verified_mapper }}"
+    status_code: [201]
+
+- name: federation | Update an existing email-verified mapper
+  when:
+    - (keycloak_ldap_email_verified_mapper_enabled | bool)
+    - (_var_keycloak_ldap_email_verified_matching | length) > 0
+    - >-
+      (_var_keycloak_ldap_email_verified_matching[0]['config']
+       | combine(_var_keycloak_ldap_email_verified_mapper['config']))
+      != _var_keycloak_ldap_email_verified_matching[0]['config']
+  changed_when: true
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components/{{ _var_keycloak_ldap_email_verified_matching[0]['id'] }}
+    method: PUT
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: >-
+      {{ _var_keycloak_ldap_email_verified_matching[0]
+         | combine(_var_keycloak_ldap_email_verified_mapper) }}
+    status_code: [204]
+
 # The groups. Everything above this point federates identity; this federates
 # authorisation, and without it Keycloak can say who someone is and nothing
 # about what they may do.
@@ -248,6 +293,66 @@
       {{ keycloak_ldap_realm }}: group import from
       {{ keycloak_ldap_groups_dn }} —
       {{ _reg_keycloak_ldap_group_sync['json']['status'] | default('no status') }}
+    verbosity: 0
+
+# Re-import the users, so the mappers above reach the ones already in the
+# realm.
+#
+# A mapper shapes a user as they are imported and at no other moment. Adding
+# the email-verified mapper to a realm that already holds imported users leaves
+# every one of them exactly as they were, so without this the run that fixes
+# the mapper is indistinguishable from a run that fixed nothing — the realm
+# reports the mapper present and the logins keep failing.
+#
+# triggerFullSync, not triggerChangedUsersSync: the changed-users variant
+# selects on the directory's modify timestamp, and correcting a mapper on
+# Keycloak's side does not touch it. Every user would be skipped, which looks
+# like a successful sync of nothing.
+#
+# Reported unchanged for the reason the group import is: it re-reads the
+# directory and leaves no state of its own.
+- name: federation | Re-import the directory's users into the realm
+  when:
+    - (keycloak_ldap_user_sync | bool)
+  changed_when: false
+  register: _reg_keycloak_ldap_user_sync
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/user-storage/{{ _var_keycloak_ldap_provider_id | trim
+      }}/sync?action=triggerFullSync
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    status_code: [200]
+
+# A fresh token again, for the reason the group import needed one: this walks
+# the whole user subtree and master's access tokens last 60 seconds.
+- name: federation | Obtain a fresh admin token after the user import
+  when:
+    - (keycloak_ldap_user_sync | bool)
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_token
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/realms/master/protocol/openid-connect/token
+    method: POST
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_ldap_admin_user }}"
+      password: "{{ keycloak_ldap_admin_password }}"
+
+- name: federation | Report the user import
+  when:
+    - (keycloak_ldap_user_sync | bool)
+  ansible.builtin.debug:
+    msg: >-
+      {{ keycloak_ldap_realm }}: user import from
+      {{ keycloak_ldap_users_dn }} —
+      {{ _reg_keycloak_ldap_user_sync['json']['status'] | default('no status') }}
     verbosity: 0
 
 # Keycloak's own connection test, which is the only check that proves the

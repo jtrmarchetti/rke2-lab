@@ -63,6 +63,36 @@ keycloak_ldap_connection_url: null
 keycloak_ldap_first_name_mapper: first name
 keycloak_ldap_first_name_attribute: givenName
 
+# The email-verified mapper.
+#
+# FreeIPA has no notion of a "verified" address: an account's mail attribute is
+# set by an administrator in the domain, which is a stronger assurance than the
+# click-a-link flow the flag was invented for. Keycloak nonetheless imports
+# every federated user with emailVerified false, because nothing in the
+# directory says otherwise.
+#
+# That default is not cosmetic. oauth2-proxy refuses to complete a login when
+# the ID token carries `email_verified: false`, and it does so *after* the user
+# has authenticated at Keycloak — the callback returns HTTP 500 and the log
+# says `email in id_token (someone@dev.lo) isn't verified`, which reads like a
+# proxy fault rather than a directory attribute. `--email-domain=*` does not
+# cover it; that flag filters which domains are acceptable and is a separate
+# check from whether the address is verified at all.
+#
+# Fixed here rather than with the proxy's
+# `--insecure-oidc-allow-unverified-email`, and the choice is deliberate. The
+# flag is per-service, so every future service put behind a proxy meets the
+# same wall; and it is named `insecure` because it tells a proxy to stop
+# checking. This mapper instead makes the claim true at the source, once, for
+# the whole realm — which is honest, because FreeIPA *is* the authority for
+# these addresses.
+#
+# Applies at import. Users already in the realm keep the false they were
+# imported with, so changing this is not enough on its own — see
+# keycloak_ldap_user_sync.
+keycloak_ldap_email_verified_mapper_enabled: true
+keycloak_ldap_email_verified_mapper_name: email verified
+
 # The group mapper.
 #
 # Without it Keycloak knows who someone is and nothing about what they may do,
@@ -81,5 +111,19 @@ keycloak_ldap_group_mapper_name: freeipa-groups
 # periodic sync, the first run after adding an application fails on a group
 # that plainly exists in the directory.
 keycloak_ldap_group_sync: true
+
+# Whether to re-import the directory's *users* after the mappers are in place.
+#
+# The group sync above walks the group subtree; this walks the user subtree,
+# and it exists for the same reason: a mapper only shapes a user as they are
+# imported. Adding the email-verified mapper to a realm that already holds
+# imported users changes nothing about those users until something re-reads
+# them from the directory, so the run that fixes the mapper is otherwise
+# exactly the run that appears not to have fixed anything.
+#
+# `triggerFullSync` rather than `triggerChangedUsersSync`: the changed-users
+# sync selects on the directory's modify timestamp, and correcting a mapper on
+# Keycloak's side does not touch it. Every user would be skipped.
+keycloak_ldap_user_sync: true
 
 keycloak_ldap_no_log: true

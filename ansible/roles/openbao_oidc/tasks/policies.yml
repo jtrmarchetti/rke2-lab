@@ -89,9 +89,19 @@
     # for. Checking the prose as if it were policy is how a comment reading
     # "sealing stays with the root token" fails an assertion about sealing —
     # the check has to see what the vault sees.
+    #
+    # regex_replace rather than splitting on newlines and rejecting the comment
+    # lines, which is what this did until a comment mentioning `sys/auth/*`
+    # tripped the auth assertion and exposed it. Inside a folded scalar the
+    # `'\n'` those filters were given never became a newline, so the text was
+    # one long line, no line ever matched the comment pattern, and nothing was
+    # ever stripped. The check had been reading the prose all along and only
+    # passed because no comment had yet contained a forbidden path — a guard
+    # that silently checks the wrong thing until the day it fails on the right
+    # one. `(?m)` anchors ^ and $ per line, so no newline literal is needed.
     _openbao_oidc_text: >-
-      {{ (_item_openbao_oidc_stored[1] | default('')).split('\n')
-         | reject('match', '\\s*#') | join('\n') }}
+      {{ _item_openbao_oidc_stored[1] | default('')
+         | regex_replace('(?m)^[ \\t]*#.*$', '') }}
   ansible.builtin.assert:
     that:
       # The paths that would let a Keycloak session take the vault away from
