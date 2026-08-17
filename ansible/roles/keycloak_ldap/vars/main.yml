@@ -66,6 +66,11 @@ _var_keycloak_ldap_component:
     importEnabled: ["true"]
     syncRegistrations: ["false"]
     cachePolicy: ["DEFAULT"]
+    # Verify the directory's certificate against Keycloak's own truststore,
+    # which is where the manifest mounts the domain CA. The connection is
+    # ldaps://, so this is load-bearing rather than incidental: the other
+    # values this setting takes end at a provider that connects to whatever
+    # answers on 636 and trusts it.
     useTruststoreSpi: ["always"]
     connectionTimeout: ["10000"]
     readTimeout: ["10000"]

@@ -715,7 +715,7 @@ and both are recorded here as decisions rather than as adjustments.
 | External Secrets Operator | v2.9.0, Kubernetes auth, no stored credential. A secret written to OpenBao appeared in a Kubernetes Secret |
 | Controller trust | Both carry-forward items paid: the domain CA is in the trust store and every managed host's key is in `known_hosts` |
 | Garage | Deployed, layout applied, buckets created. An object written through the ingress over the cluster's own TLS returns 200 |
-| Keycloak | Running, federated to FreeIPA over LDAP. FIPS is a component production enables |
+| Keycloak | Running, federated to FreeIPA over LDAPS. FIPS is a component production enables. **Applied and verified on the wire 2026-08-17** |
 | Single sign-on | Realm `dev-lo`; groups federated; Grafana, OpenBao, GitLab and the Longhorn proxy federated. **Applied and verified 2026-08-17**, second run reports `changed=0` |
 
 ### The artifact model gained a third type, because the second one is broken
@@ -927,7 +927,7 @@ what is mirrored, and it is not authoritative about what will be requested.
 
 ## Identity is federated, not duplicated
 
-Keycloak reads users from FreeIPA over LDAP rather than holding its own. The
+Keycloak reads users from FreeIPA over LDAPS rather than holding its own. The
 bind account is a system account under `cn=sysaccounts` — no POSIX identity, no
 Kerberos principal, no way to become a user — and Keycloak's provider is
 `READ_ONLY`, because the domain is the authority and a Keycloak that can write
@@ -1480,3 +1480,117 @@ Everything else federates by configuration.
 - Removing a user from a FreeIPA group removes their access at their next
   sign-in, with nothing done in Keycloak or in any service.
 - A second run of `cluster_init.yml` reports no change.
+
+## The directory connection is encrypted — 2026-08-17
+
+**Applied to the live cluster and proven on the wire.** `tcpdump` on `core01`
+during a forced full sync counted 55 packets on 636 and zero on 389.
+
+Keycloak reached FreeIPA over `ldap://core.dev.lo:389`. That was a decision on
+record, not an oversight, and the reasoning it was defended with is worth
+keeping visible now that it has been reversed:
+
+> the connection crosses the internal network between two hosts in the same
+> domain, and terminating it in FIPS strict mode would require Keycloak to hold
+> a BCFKS truststore — a second keystore format to generate and rotate for a
+> hop that never leaves 192.168.2.0/24.
+
+Three things are wrong with it, and only the third is about cryptography.
+
+**The bind is `authType: simple`.** So the exposure was never really the
+confidentiality of user attributes, which is what "internal network" is an
+argument about. It is the bind account's password, sent in the clear on every
+connection, for an account that can read the entire user tree. The thing on the
+wire was a credential, not a name.
+
+**The hop is not host-to-host.** Keycloak runs in a pod. The traffic crosses
+the pod network, the node's bridge, and the LAN between two VMs on a hypervisor
+that is itself a VM. "Two hosts in the same domain" describes a topology this
+lab has not had since Keycloak moved into the cluster — the sentence was true
+when it was written and quietly stopped being true.
+
+**The BCFKS cost was priced for the wrong cluster.** It applies under
+`KC_FIPS_MODE=strict`, which is a Kustomize component `dev-lo` does not enable.
+Outside strict mode Keycloak reads PEM from `conf/truststores` and builds the
+truststore itself: no keystore file, no format, nothing to rotate beyond the CA
+that was already being distributed to three other namespaces.
+
+### What it took
+
+Less than the comment claimed, which is the general lesson.
+
+- `ldaps://core.dev.lo:636`. FreeIPA has served 636 since Phase 2 — the
+  container runs with host networking precisely so it can — so the directory
+  side needed nothing at all.
+- A `keycloak-domain-ca` Secret mounted at `/opt/keycloak/conf/truststores`.
+  Keycloak scans that directory at startup with no `KC_TRUSTSTORE_PATHS` set,
+  and adds to the JRE's roots rather than replacing them. The bytes are read
+  from the controller's trust store at render time, the same arrangement the
+  registry and Grafana CA Secrets already use.
+- `useTruststoreSpi: always` was already on the provider, and only now means
+  anything.
+
+The host name earns its comment twice over. `core.dev.lo` rather than
+`core01.dev.lo` was a DNS fix; under LDAPS the same name also has to match the
+certificate 389-ds presents, which is issued for the host as the domain knows
+it. The inventory name would now fail twice for two different reasons.
+
+### What production still owes
+
+Upstream is explicit that in strict mode the default truststore type is BCFKS
+and that `jks` and `pkcs12` are unsupported. It says nothing either way about
+the PEM material `conf/truststores` loads, and that gap is not something to
+resolve by reading the source and hoping. The first cluster to enable the FIPS
+component has to prove the federation still connects and convert the CA to
+BCFKS if it does not. The note is in the component itself, where whoever
+enables it will be looking.
+
+Reverting to plain LDAP is not the fallback. A directory-wide bind credential
+in the clear is a worse answer inside the FIPS boundary than outside it.
+
+### Applied, in the order the ordering mattered
+
+The manifest first, the provider second. Reversed, the provider would point at
+a TLS endpoint before Keycloak held the CA to verify it, and the failure would
+be a live single sign-on outage between the two steps.
+
+1. `gitops.yml --tags gitops_source` pushed the CA Secret and the mount; Flux
+   reconciled and the Deployment rolled. Startup logged the CA loaded from
+   `conf/truststores` before anything depended on it.
+2. `cluster_init.yml --tags keycloak_ldap` moved the provider to
+   `ldaps://core.dev.lo:636`.
+
+### Verified
+
+- **On the wire.** `tcpdump` on `core01` during a forced full sync: 55 packets
+  on 636, **zero on 389**, from `192.168.2.32`. This is the only check that
+  proves the property the change exists for; everything else proves it still
+  works.
+- `testConnection` and `testAuthentication` both return 204 against the LDAPS
+  URL — the checks that distinguish a provider that is present from one that is
+  usable, and with TLS in the path they now also prove the truststore mount.
+- The realm still holds 2 federated users and 12 groups, and a triggered full
+  sync reports `0 imported users, 2 updated users` — the group mapper survived
+  the transport change.
+- A second `gitops_source` run reports *"cluster-state is already in sync with
+  the template tree"*, and `cluster_init.yml` reports `changed=0`.
+
+### One thing the apply exposed, not caused
+
+`cluster_init.yml` reported `changed=0` on the run that moved the provider from
+`ldap://` to `ldaps://`. The federation genuinely changed; the run said it had
+not.
+
+The cause is that `federation | Update the existing provider to match this
+definition` carries no `changed_when`, so its PUT always reports `ok` — while
+the two group-mapper tasks beside it set `changed_when: true` and compare the
+existing config first, which is the pattern the provider task never got. The
+provider PUT is also unconditional, so simply adding `changed_when: true` would
+trade a task that never reports change for one that always does.
+
+It is pre-existing and it is not cosmetic: `changed=0` is the signal this
+repository uses to mean *converged*, and a role that can rewrite the identity
+federation without disturbing that number can hide the next change the way it
+hid this one. **Recorded here rather than fixed**, because the fix is the
+config comparison the group mapper already demonstrates and it belongs in a
+change of its own, where a second run can prove it.

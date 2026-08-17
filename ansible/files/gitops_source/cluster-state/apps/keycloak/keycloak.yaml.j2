@@ -18,9 +18,13 @@
 #   - `proxy-headers=xforwarded` is what makes that safe: without it Keycloak
 #     builds redirect URLs from the request it actually received, which is
 #     plain HTTP from Traefik, and every OIDC redirect would downgrade.
-#   - Users come from FreeIPA over LDAP, configured by the keycloak_ldap role
+#   - Users come from FreeIPA over LDAPS, configured by the keycloak_ldap role
 #     rather than declared here, because the bind credential belongs in a
-#     request and not in a file in Git.
+#     request and not in a file in Git. What this file owns is the other half
+#     of that connection: the domain CA, mounted below. Without it Keycloak
+#     cannot verify the directory's certificate and the federation does not
+#     connect at all — which is the intended failure mode, and the reason the
+#     two halves have to be committed together.
 #
 # Plain manifests rather than the Operator or the community chart. For a single
 # instance the Operator is a controller to keep current for no gain, and the
@@ -107,6 +111,25 @@ spec:
           requests:
             storage: 5Gi
 ---
+# The domain CA, so Keycloak can verify FreeIPA's LDAPS certificate.
+#
+# Public material, committed in the clear but read from the controller's trust
+# store at render time rather than pasted, so reissuing the domain CA changes
+# this file without anyone remembering to re-copy it — the same arrangement as
+# the registry's CA Secret and Grafana's.
+#
+# The domain root is the right anchor here rather than the cluster's
+# intermediate: 389-ds inside FreeIPA is served a certificate by the IPA CA
+# directly, not by the sub-CA that issues for the cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-domain-ca
+  namespace: keycloak
+data:
+  ca.crt: >-
+    {{ lookup('file', gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -182,6 +205,26 @@ spec:
               name: http
             - containerPort: 9000
               name: management
+          # `conf/truststores` is loaded automatically — Keycloak scans it and
+          # its subdirectories at startup, so no `KC_TRUSTSTORE_PATHS` is
+          # needed and there is no keystore file to generate or rotate. The
+          # JRE's own trusted roots are kept, not replaced; this only adds to
+          # them, which is why mounting a single-certificate Secret here does
+          # not break anything else Keycloak talks to.
+          #
+          # Startup logs the CA three times — as `ca.crt`, as `..data/ca.crt`
+          # and once under a timestamped directory. That is Kubernetes' atomic
+          # secret-update layout being scanned recursively, not three
+          # certificates, and it is harmless: the same anchor loaded three
+          # times trusts exactly what it would have trusted once. Do not
+          # "tidy" it with a `subPath` mount — subPath severs the symlink that
+          # makes the update atomic, and the pod would then keep serving the
+          # old CA after the domain reissues it, which fails as an expired
+          # trust anchor months later with nothing to connect it to this file.
+          volumeMounts:
+            - name: domain-ca
+              mountPath: /opt/keycloak/conf/truststores
+              readOnly: true
           resources:
             requests:
               cpu: 200m
@@ -202,6 +245,10 @@ spec:
               path: /health/ready
               port: 9000
             periodSeconds: 15
+      volumes:
+        - name: domain-ca
+          secret:
+            secretName: keycloak-domain-ca
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

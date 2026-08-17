@@ -197,17 +197,30 @@ inventory_keycloak_ldap_url: https://sso.k8s.dev.lo
 # mapper reads this subtree, and pointing it at the wrong one produces a realm
 # with no groups in it and no error anywhere.
 inventory_keycloak_ldap_groups_dn: cn=groups,cn=accounts,dc=dev,dc=lo
-# LDAP rather than LDAPS, and this is a decision rather than an oversight: the
-# connection crosses the internal network between two hosts in the same domain,
-# and terminating it in FIPS strict mode would require Keycloak to hold a BCFKS
-# truststore — a second keystore format to generate and rotate for a hop that
-# never leaves 192.168.2.0/24. Revisit when the boundary changes.
+# LDAPS. This was plain LDAP, defended on the grounds that the hop never
+# leaves 192.168.2.0/24 and that terminating it would cost a BCFKS truststore.
+# Both halves were wrong in a way worth recording rather than quietly deleting:
+#
+#   - The bind is `authType: simple`, so the argument was never really about
+#     the confidentiality of user attributes. Every connection put the bind
+#     account's password on the wire in the clear, and that account can read
+#     the whole user tree. The blast radius of anyone with a span port is a
+#     directory credential, not a name.
+#   - The hop is not host-to-host. Keycloak runs in a pod, so the traffic
+#     crosses the pod network, the node's bridge, and the LAN between two VMs
+#     on a hypervisor that is itself a VM. "Internal" was doing a lot of work.
+#   - The BCFKS cost applies only under `KC_FIPS_MODE=strict`, which dev-lo
+#     does not enable. Here it is a PEM file in `conf/truststores`, which
+#     Keycloak reads without a keystore of any format. See the note in
+#     apps/keycloak/components/fips for what production still owes.
 #
 # `core.dev.lo`, not `core01.dev.lo`. The inventory calls this host core01 and
 # the domain calls it core, and only the second is a name anything can resolve
 # — Keycloak answered the first attempt with `UnknownHost`, which is a DNS
-# failure wearing an LDAP error's clothes.
-inventory_keycloak_ldap_connection_url: ldap://core.dev.lo:389
+# failure wearing an LDAP error's clothes. It matters twice over now: the name
+# also has to match FreeIPA's certificate, which is issued for the host as the
+# domain knows it.
+inventory_keycloak_ldap_connection_url: ldaps://core.dev.lo:636
 
 # kube_cli_controller
 inventory_kube_cli_controller_k9s_url: >-

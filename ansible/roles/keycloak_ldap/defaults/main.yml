@@ -37,16 +37,24 @@ keycloak_ldap_admin_user: admin
 # keycloak_ldap_admin_password:
 keycloak_ldap_provider_name: freeipa
 
-# LDAP rather than LDAPS, and this is a decision rather than an oversight: the
-# connection crosses the internal network between two hosts in the same domain,
-# and terminating it in FIPS strict mode would require Keycloak to hold a BCFKS
-# truststore — a second keystore format to generate and rotate for a hop that
-# never leaves 192.168.2.0/24. Revisit when the boundary changes.
+# Expected to be an `ldaps://` URL on port 636. The bind is `authType: simple`
+# — a password sent as-is — so an unencrypted connection publishes a credential
+# that can read the entire user tree to anything on the path. This was plain
+# LDAP once; see the inventory for why the argument for that did not survive
+# contact with what the connection actually crosses.
+#
+# Two things have to be true for it to work, and the second is not this role's
+# to arrange: FreeIPA must serve LDAPS (it does, on 636, by default), and
+# Keycloak must trust the domain CA. The manifest mounts it into
+# `conf/truststores`; `useTruststoreSpi: always` below is what points the
+# provider at it.
 #
 # `core.dev.lo`, not `core01.dev.lo`. The inventory calls this host core01 and
 # the domain calls it core, and only the second is a name anything can resolve
 # — Keycloak answered the first attempt with `UnknownHost`, which is a DNS
-# failure wearing an LDAP error's clothes.
+# failure wearing an LDAP error's clothes. Under LDAPS the same name must also
+# match the certificate FreeIPA presents, which is issued for the host as the
+# domain knows it.
 keycloak_ldap_connection_url: null
 
 # Keycloak's generated mapper for the `rhds` vendor takes the first name from

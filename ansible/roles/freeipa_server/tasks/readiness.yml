@@ -19,6 +19,11 @@
     - not ansible_check_mode
   loop:
     - 389
+    # 636 as well as 389, because Keycloak federates over LDAPS and a
+    # directory that answers in the clear but not on TLS is a working domain
+    # with a broken single sign-on — a failure that would otherwise surface
+    # several roles later as a Keycloak connection test, pointing at Keycloak.
+    - 636
     - 443
     - 88
   loop_control:
