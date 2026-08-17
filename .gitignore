@@ -1,0 +1,20 @@
+# Secrets live outside the repo, in ~/.config/rke2lab/ (see plan/SECRETS.md).
+# These patterns are a backstop against anything sensitive landing here by accident.
+*.env
+.env
+env.sh
+secrets.yml
+vault-pass*
+*.pem
+*.key
+!**/templates/*.key
+id_rsa*
+id_ed25519*
+
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+
+# Ansible
+*.retry

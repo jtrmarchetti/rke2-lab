@@ -1,0 +1,26 @@
+---
+# ansible-lint configuration for this repository.
+#
+# plan/ANSIBLE_STANDARDS.md is the source of truth for Ansible content here,
+# and it states that repository rules win where they differ from Red Hat CoP
+# guidance.
+
+profile: moderate
+
+skip_list:
+  # name[casing] requires every task name to start with an uppercase letter.
+  # ANSIBLE_STANDARDS.md requires multi-file roles to prefix each task name
+  # with its task file name ("main | Ensure ..."), which is lowercase because
+  # the file name is. The two rules cannot both be satisfied, and the prefix
+  # is the more useful of the two: it tells a reader which file a task in a
+  # long run came from. Task names still use imperative voice after the
+  # prefix, which is what the casing rule is really protecting.
+  - name[casing]
+
+exclude_paths:
+  - .venv/
+  - infra/pulumi/
+  # Vendor release assets, carried byte for byte so they match the upstream
+  # checksum. Reformatting them to satisfy a linter would destroy the one
+  # property that makes vendoring them defensible.
+  - ansible/roles/gitops_source/files/
