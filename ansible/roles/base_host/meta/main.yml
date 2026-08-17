@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: base_host
+  author: devops
+  description: Base package and hostname preparation for phase1 hosts.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

@@ -1,0 +1,72 @@
+---
+# Gates on a transaction rather than on a status, for the reason the server role
+# states at more length: `systemctl is-active rke2-agent` reports that systemd
+# has not given up on the unit, not that the node ever became schedulable.
+
+# Decides whether a queued restart handler should fire at all. An agent that has
+# never started does not need restarting — it is about to be started, and it
+# will read the new configuration when it does. Restarting anyway interrupts a
+# first join partway through, which looks like a crash rather than like this
+# role doing it.
+- name: service | Gather the current service state
+  ansible.builtin.service_facts:
+
+- name: service | Record whether a restart is meaningful
+  ansible.builtin.set_fact:
+    _rke2_service_running: >-
+      {{ ansible_facts['services']['rke2-agent.service']['state']
+         | default('') == 'running' }}
+
+# Flushed here rather than at the end of the play, because the readiness check
+# below is meaningless against an agent still running the old configuration.
+- name: service | Apply any pending restart before checking readiness
+  ansible.builtin.meta: flush_handlers
+
+- name: service | Enable and start the RKE2 agent
+  ansible.builtin.systemd_service:
+    name: rke2-agent
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# Read from the host rather than assumed from the inventory name. RKE2 registers
+# a node under its fully qualified name — kubewk01.dev.lo, not kubewk01 — so a
+# lookup by inventory name finds nothing and the wait below spends its full
+# retry budget on a node that was Ready the whole time. This cost Phase 4 a run.
+- name: service | Read the name this node will register under
+  changed_when: false
+  register: _reg_rke2_agent_node_name
+  ansible.builtin.command:
+    cmd: hostname --fqdn
+
+# Asked from a control plane host, because this one cannot answer it: an agent
+# has no kubeconfig. `kubectl wait` rather than a jsonpath condition polled in a
+# loop — the obvious jsonpath for Ready cannot survive the command module's
+# shell-like quoting, which eats the inner double quotes and makes kubectl fail
+# every iteration. Phase 4 recorded that one too.
+- name: service | Wait for this node to report Ready
+  changed_when: false
+  failed_when: _reg_rke2_agent_node_ready['rc'] != 0
+  delegate_to: "{{ rke2_agent_control_host }}"
+  register: _reg_rke2_agent_node_ready
+  ansible.builtin.command:
+    cmd: >-
+      {{ rke2_agent_control_data_dir }}/bin/kubectl
+      --kubeconfig {{ rke2_agent_control_kubeconfig }}
+      wait --for=condition=Ready
+      node/{{ _reg_rke2_agent_node_name['stdout'] | trim }}
+      --timeout={{ rke2_agent_ready_retries | int
+                   * rke2_agent_ready_delay | int }}s
+  # noqa: no-changed-when - checked above; kubectl wait is a read that blocks.
+
+- name: service | Assert the node joined and became Ready
+  ansible.builtin.assert:
+    that:
+      - _reg_rke2_agent_node_ready['rc'] == 0
+    fail_msg: >-
+      {{ inventory_hostname }} did not reach Ready. A node that never appears in
+      `kubectl get nodes` did not reach the supervisor at all — that is the VIP,
+      the token, or the CA, and the answer is in `journalctl -u rke2-agent`. A
+      node that appears and stays NotReady did reach it, and the answer is
+      whether Cilium could pull through the mirror.
+    quiet: true

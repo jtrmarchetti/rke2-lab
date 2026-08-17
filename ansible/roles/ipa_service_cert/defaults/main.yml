@@ -1,0 +1,55 @@
+---
+ipa_service_cert_enabled: false
+
+# Service names to issue certificates for. One certificate per name rather than
+# one certificate carrying both as SANs: a multi-SAN certificate requires the
+# requesting principal to hold manage rights over every other name in it, and
+# nginx wants a separate certificate per server block anyway.
+#
+# Each entry is a mapping:
+#   name     The DNS name. Becomes the certificate CN, its SAN, and the file
+#            name under ipa_service_cert_dir.
+#   service  The service prefix of the principal. Defaults to HTTP.
+ipa_service_cert_names: []
+
+# The IPA server that signs. This host is not enrolled in the domain — see the
+# role's meta description — so signing is delegated to the host that is.
+ipa_service_cert_ipa_host: ""
+ipa_service_cert_ipa_container: freeipa-server
+
+# Credentials used to obtain a Kerberos ticket on the signing host. Sourced from
+# the environment by inventory; never stored in the repository.
+ipa_service_cert_admin_user: admin
+ipa_service_cert_admin_password: ""
+
+# Where the issued material lands on the requesting host.
+ipa_service_cert_dir: null
+ipa_service_cert_ca_file: null
+ipa_service_cert_key_size: 2048
+
+# Optional second location for the CA certificate, under the Tier 1 artifact
+# root. Consuming nodes in later phases have to trust this CA before they can
+# talk to anything it secures, and Apache over plain HTTP is the only
+# distribution path that does not already require the trust it is delivering.
+# Empty disables publishing.
+ipa_service_cert_ca_publish_path: ""
+
+# Install the domain CA into the host trust store.
+#
+# Needed by anything that validates a dev.lo name without being told where the
+# CA lives. The container registry is the concrete case: a registry push
+# authenticates against https://gitlab.dev.lo/jwt/auth, and Docker's per-registry
+# /etc/docker/certs.d only covers the registry host, so the token request is
+# validated against the system store and fails with "certificate signed by
+# unknown authority" while `docker login` itself succeeds.
+ipa_service_cert_trust_ca: true
+ipa_service_cert_trust_ca_path: null
+
+# Reissue when the existing certificate expires within this many days. FreeIPA
+# issues for two years by default, so this normally never fires; it exists so a
+# certificate cannot silently expire under a role that only checks presence.
+ipa_service_cert_renew_before_days: 30
+
+# Set false only when debugging an issuance failure; it exposes the admin
+# password in task output.
+ipa_service_cert_no_log: true

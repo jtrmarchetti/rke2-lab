@@ -1,0 +1,23 @@
+---
+data_volume_enabled: true
+
+# The secondary disk attached by the IaC layer. Every host in TARGETS.md gets a
+# 100 GB data disk as its second virtio device, so this is the same on all of
+# them and only changes if the VM definition changes.
+data_volume_device: /dev/sdb
+
+# Filesystem is created directly on the whole device with no partition table.
+# A data disk gains nothing from a partition, and skipping it means the volume
+# can be grown by resizing the disk and running resize2fs, with no partition
+# table edit in between.
+data_volume_filesystem: ext4
+data_volume_label: data1
+
+data_volume_mount_path: /data1
+data_volume_mount_options: defaults,noatime
+
+# Ownership of the mount point itself. Service roles create and own their own
+# subdirectories underneath it.
+data_volume_owner: root
+data_volume_group: root
+data_volume_mode: "0755"

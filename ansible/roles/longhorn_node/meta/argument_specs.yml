@@ -1,0 +1,41 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare a node for Longhorn
+    description:
+      - Installs and starts the iSCSI initiator Longhorn attaches volumes
+        through, and the NFS client ReadWriteMany volumes are mounted with.
+      - Tells multipathd to ignore Longhorn's devices, which is the first
+        entry in the upstream troubleshooting guide.
+      - Asserts the replica directory is on its own filesystem, so replicas
+        cannot land on the OS disk.
+    options:
+      longhorn_node_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      longhorn_node_packages:
+        type: list
+        elements: str
+        description: Host packages Longhorn requires.
+      longhorn_node_iscsi_service:
+        type: str
+        default: iscsid
+        description: The iSCSI initiator service to run and enable.
+      longhorn_node_data_path:
+        type: str
+        default: /var/lib/longhorn
+        description: Directory Longhorn keeps replica data in.
+      longhorn_node_root_device:
+        type: str
+        default: /dev/sda
+        description:
+          - Device the root filesystem is on, used to prove the replica
+            directory is not on it.
+      longhorn_node_multipath_blacklist:
+        type: bool
+        default: true
+        description: Whether the multipath blacklist file is written.
+      longhorn_node_multipath_conf:
+        type: str
+        description: Path of the multipath blacklist drop-in.

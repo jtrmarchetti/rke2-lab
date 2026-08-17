@@ -1,0 +1,71 @@
+---
+# Applies the retention model from plan/OVERVIEW.md to what this role just
+# published: a transit artifact's local copy is dead weight once GitLab holds
+# it, and keeping it is what filled repo01's OS disk.
+#
+# The marker is written first and the file deleted second. If the run dies
+# between the two, the next run finds a marker and a file, skips the download,
+# and deletes the file — which is the same end state. The reverse order could
+# delete the file and lose the record that it was ever published, which would
+# re-download it on the next run.
+#
+# Presence is established from the destination, not from the disk. Every caller
+# of this file has already read back what GitLab holds; that read is the
+# authority, and the marker is only its local cache.
+
+- name: retention | Select the transit artifacts confirmed present in GitLab
+  ansible.builtin.set_fact:
+    _rke2_publish_retire: >-
+      {{ rke2_publish_manifest
+         | rejectattr('type', 'equalto', 'mirror')
+         | selectattr('retention', 'defined')
+         | selectattr('retention', 'equalto', 'transit')
+         | selectattr('name', 'in', _var_rke2_publish_confirmed_names)
+         | list }}
+
+- name: retention | Report what is being retired from local storage
+  ansible.builtin.debug:
+    msg: >-
+      {{ _rke2_publish_retire | length }} transit artifact(s) confirmed in
+      GitLab and no longer needed on this host:
+      {{ _rke2_publish_retire | map(attribute='name') | join(', ')
+         | default('none', true) }}
+
+- name: retention | Record that the destination holds each artifact
+  loop: "{{ _rke2_publish_retire }}"
+  loop_control:
+    loop_var: _item_rke2_publish_retire
+    label: "{{ _item_rke2_publish_retire['name'] }}"
+  ansible.builtin.file:
+    path: >-
+      {{ rke2_publish_artifact_root }}/{{ _item_rke2_publish_retire['dest']
+      }}{{ _var_rke2_publish_published_suffix }}
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+
+- name: retention | Remove the local copy of each published transit artifact
+  loop: "{{ _rke2_publish_retire }}"
+  loop_control:
+    loop_var: _item_rke2_publish_retire
+    label: "{{ _item_rke2_publish_retire['name'] }}"
+  ansible.builtin.file:
+    path: "{{ rke2_publish_artifact_root }}/{{ _item_rke2_publish_retire['dest'] }}"
+    state: absent
+
+# The checksum sidecar goes with it. It describes a file that is no longer
+# served, and leaving it behind would advertise an artifact Apache cannot
+# deliver.
+- name: retention | Remove the checksum sidecar of each retired artifact
+  loop: "{{ _rke2_publish_retire }}"
+  loop_control:
+    loop_var: _item_rke2_publish_retire
+    label: "{{ _item_rke2_publish_retire['name'] }}"
+  ansible.builtin.file:
+    path: >-
+      {{ rke2_publish_artifact_root }}/{{ _item_rke2_publish_retire['dest'] }}{{
+      _var_rke2_publish_checksum_suffix }}
+    state: absent

@@ -1,0 +1,158 @@
+---
+- name: main | Ensure Apache is installed
+  when: (artifact_host_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ _var_artifact_host_packages }}"
+    state: present
+
+# The document root is on the data volume. Serving from an unmounted mount
+# point would quietly fill the OS disk and publish an empty tree, so the check
+# is explicit rather than implied by task ordering.
+- name: main | Assert the document root parent is a mounted filesystem
+  when:
+    - (artifact_host_enabled | bool)
+    - not ansible_check_mode
+  vars:
+    _artifact_host_root_parent: "{{ artifact_host_document_root | dirname }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        _artifact_host_root_parent in
+        (ansible_facts['mounts'] | map(attribute='mount') | list)
+    fail_msg: >-
+      {{ _artifact_host_root_parent }} is not a mounted filesystem. Run the
+      data_volume role before artifact_host.
+    quiet: true
+
+- name: main | Ensure the artifact document root exists
+  when: (artifact_host_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ artifact_host_document_root }}"
+    state: directory
+    owner: "{{ artifact_host_owner }}"
+    group: "{{ artifact_host_group }}"
+    mode: "{{ artifact_host_directory_mode }}"
+
+- name: main | Ensure the per-consumer artifact directories exist
+  when: (artifact_host_enabled | bool)
+  loop: "{{ artifact_host_directories }}"
+  loop_control:
+    loop_var: _item_artifact_host_directory
+  ansible.builtin.file:
+    path: "{{ artifact_host_document_root }}/{{ _item_artifact_host_directory }}"
+    state: directory
+    owner: "{{ artifact_host_owner }}"
+    group: "{{ artifact_host_group }}"
+    mode: "{{ artifact_host_directory_mode }}"
+
+- name: main | Ensure the required Apache modules are enabled
+  when: (artifact_host_enabled | bool)
+  loop: "{{ _var_artifact_host_modules_enabled }}"
+  loop_control:
+    loop_var: _item_artifact_host_enable
+  notify:
+    - Restart Apache
+  community.general.apache2_module:
+    name: "{{ _item_artifact_host_enable }}"
+    state: present
+
+- name: main | Ensure unused Apache modules are disabled
+  when: (artifact_host_enabled | bool)
+  loop: "{{ _var_artifact_host_modules_disabled }}"
+  loop_control:
+    loop_var: _item_artifact_host_disable
+  notify:
+    - Restart Apache
+  community.general.apache2_module:
+    name: "{{ _item_artifact_host_disable }}"
+    state: absent
+    ignore_configcheck: true
+
+- name: main | Ensure the superseded hardening configuration names are absent
+  when: (artifact_host_enabled | bool)
+  loop: "{{ _var_artifact_host_hardening_legacy }}"
+  loop_control:
+    loop_var: _item_artifact_host_legacy
+  notify:
+    - Reload Apache
+  ansible.builtin.file:
+    path: "{{ _item_artifact_host_legacy }}"
+    state: absent
+
+- name: main | Ensure the artifact host hardening configuration is present
+  when: (artifact_host_enabled | bool)
+  notify:
+    - Reload Apache
+  ansible.builtin.template:
+    src: "{{ _var_artifact_host_files_dir }}/artifact_host_hardening.conf.j2"
+    dest: "{{ _var_artifact_host_hardening_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Ensure the artifact host virtual host is present
+  when: (artifact_host_enabled | bool)
+  notify:
+    - Reload Apache
+  ansible.builtin.template:
+    src: "{{ _var_artifact_host_files_dir }}/artifact_host_vhost.conf.j2"
+    dest: "{{ _var_artifact_host_site_available }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# force is required so these stay check-mode safe. In check mode the templates
+# above are not written, so the link source does not exist yet and the module
+# would refuse to plan the link at all.
+- name: main | Ensure the artifact host hardening configuration is enabled
+  when: (artifact_host_enabled | bool)
+  notify:
+    - Reload Apache
+  ansible.builtin.file:
+    src: "{{ _var_artifact_host_hardening_conf }}"
+    dest: "{{ _var_artifact_host_hardening_enabled }}"
+    state: link
+    force: true
+
+- name: main | Ensure the artifact host virtual host is enabled
+  when: (artifact_host_enabled | bool)
+  notify:
+    - Reload Apache
+  ansible.builtin.file:
+    src: "{{ _var_artifact_host_site_available }}"
+    dest: "{{ _var_artifact_host_site_enabled }}"
+    state: link
+    force: true
+
+# The packaged default site serves /var/www/html on the same port with no
+# source address restriction, so it would answer requests this role is meant to
+# refuse.
+- name: main | Ensure the packaged default site is disabled
+  when: (artifact_host_enabled | bool)
+  notify:
+    - Reload Apache
+  ansible.builtin.file:
+    path: "{{ _var_artifact_host_default_site_enabled }}"
+    state: absent
+
+# Apache validates only the whole configuration tree, not an individual
+# fragment, so this runs once after every file is in place rather than as a
+# `validate:` on each template. It also runs before the reload handlers, so a
+# bad fragment fails the play while the running server still has good config.
+- name: main | Verify the Apache configuration parses
+  when:
+    - (artifact_host_enabled | bool)
+    - not ansible_check_mode
+  changed_when: false
+  register: _reg_artifact_host_configtest
+  ansible.builtin.command:
+    cmd: apache2ctl -t
+
+- name: main | Ensure Apache is enabled and started
+  when:
+    - (artifact_host_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_artifact_host_service }}"
+    enabled: true
+    state: started

@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: data_volume
+  author: devops
+  description: >-
+    Create and mount the secondary data volume that service roles write to.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []
+
+collections:
+  - community.general
+  - ansible.posix

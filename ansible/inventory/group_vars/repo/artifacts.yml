@@ -1,0 +1,923 @@
+---
+# Artifact manifest — the single source of truth for what repo01 stages and
+# serves from Apache.
+#
+# Rule from plan/OVERVIEW.md: every artifact used in every phase is downloaded
+# to repo01 first, then served to internal nodes from here. No internal node
+# ever reaches the internet. Adding an entry here and re-running
+# playbooks/repo01.yml is the only supported way to publish an artifact; nobody
+# scp's a file into the document root by hand.
+#
+# Entry schema
+#
+#   name    Short identifier, used in task output and to name the checksum file.
+#   phase   The phase that consumes the artifact. Documentation only.
+#   retention
+#           'bootstrap' — consumed from Apache by a host that has no other
+#                         source, or needed by the publishing step itself.
+#                         Stays on repo01 permanently: these are what a
+#                         cold-start begins from, before GitLab exists.
+#           'transit'   — staged only in order to be published into GitLab,
+#                         and consumed from GitLab forever after. The local
+#                         copy is deleted once the push is confirmed.
+#
+#           Added in Phase 6. Everything used to be staged and kept, which was
+#           correct while everything was consumed from Apache. It stopped being
+#           correct in Phase 4, when RKE2 images began being staged here only
+#           to be pushed onward, and it is what filled the OS disk.
+#
+#           The trap: a role that deletes after publishing and then checks the
+#           local disk to decide whether to re-fetch downloads the whole set on
+#           every run. Presence for a transit artifact is therefore recorded by
+#           a .published marker written when the destination confirmed the
+#           upload — never by the file being on disk. See plan/OVERVIEW.md.
+#   type    'file'   — fetched from a URL and verified against a recorded
+#                      SHA256.
+#           'image'  — pulled from a registry, verified against a recorded
+#                      manifest digest, then saved as a tarball served by
+#                      Apache. For images a host must load from a file because
+#                      it has no registry to pull from.
+#           'mirror' — copied registry to registry into GitLab and never staged
+#                      here at all. For images the cluster pulls from the
+#                      mirror, which is most of them.
+#
+#           The two image types are not a redundancy. A tarball is the only way
+#           to deliver an image to core01, which has no registry, and it is the
+#           shape RKE2 publishes its airgap sets in. Everything else is transit
+#           from one registry to another, and routing that through pull, save,
+#           load and push copies the bytes four times, needs a staging tree
+#           measured in gigabytes, and depends on the local image store.
+#
+#           It also does not work. Docker's containerd image store discards a
+#           layer's compressed blob once the layer is unpacked, so an image
+#           that pulls and runs cannot always be exported: `docker save` writes
+#           a manifest with no layers, and the push then fails with "does not
+#           provide any platform" — an error naming the platform when the fault
+#           is missing content. moby/moby#52897, docker/cli#5476. A mirror
+#           entry copies with skopeo instead, which streams blobs by digest and
+#           touches neither the image store nor the disk.
+#   dest    Path under the document root. The first path element must be one of
+#           inventory_artifact_host_directories. Not used by 'mirror' entries, which have
+#           no local path.
+#
+#   type: file
+#     url     Upstream download URL.
+#     sha256  Expected SHA256 of the downloaded file. Required — the download is
+#             verified against it, so this is the integrity control, not a note.
+#
+#   type: image
+#     image   Registry reference including the tag. The tarball is saved under
+#             this tag, and the consuming host loads and runs exactly this tag,
+#             so it must match the consumer's configured image name.
+#     digest  Expected registry manifest digest. Verified after the pull.
+#
+#   type: mirror
+#     image   Registry reference including the tag. The tag is what the image
+#             is published under in GitLab, and therefore what a node asks for
+#             once the containerd rewrite has resolved the upstream name.
+#     digest  Registry manifest digest. The copy is made from the digest and
+#             skopeo verifies it, so this is the integrity control.
+#     Always transit by nature: there is no local copy to retain.
+#
+# A saved image tarball has no stable SHA256 of its own — `docker save` output
+# varies with runtime version and layer ordering — so image integrity is pinned
+# at the registry digest instead. The .sha256 file published next to every
+# artifact is generated after staging and describes what is actually being
+# served, which is what consumers verify against.
+
+inventory_artifact_stage_manifest:
+  # --- Phase 2: FreeIPA identity, DNS, and CA on core01 -------------------
+  #
+  # core01 has no route to a registry, so the image arrives as a tarball over
+  # HTTP and is loaded locally. The tag below must stay equal to
+  # inventory_freeipa_server_container_image, or the compose file will try to pull an
+  # image the host does not have.
+  - name: freeipa-server
+    phase: 2
+    retention: bootstrap
+    type: image
+    image: freeipa/freeipa-server:almalinux-8
+    digest: >-
+      sha256:8ee3bd90f3428a6f55662266f0e6383deb2c1beb6a75813b7c231a3e4f65a6b2
+    dest: freeipa/freeipa-server-almalinux-8.tar
+
+  # --- Phase 3: GitLab on repo01 -----------------------------------------
+  #
+  # Pinned to a release tag rather than `latest`, so a rebuild six months from
+  # now stages the same GitLab the lab was built against. At the time of
+  # staging, `latest` resolved to this same digest.
+  - name: gitlab-ce
+    phase: 3
+    retention: bootstrap
+    type: image
+    image: gitlab/gitlab-ce:19.2.2-ce.0
+    digest: >-
+      sha256:e81a78bc2dc4261bb728193ab2e91f948797bceb423a6bda2dcbff5b0b0a2bdd
+    dest: gitlab/gitlab-ce-19.2.2-ce.0.tar
+
+  # --- Phase 4: RKE2 control plane on kubecp01-03 ------------------------
+  #
+  # These entries are staged here but, unlike every entry above, most of them
+  # are never served to a consuming node. They are raw material for the
+  # rke2_publish role, which loads the image tarballs on this host, retags each
+  # image into the GitLab registry, and uploads the installer and the binary to
+  # the GitLab generic package registry. The nodes consume Tier 2, not Tier 1.
+  #
+  # See plan/PHASE4_IMPLEMENTATION.md for why the airgap image tarballs are
+  # deliberately not placed on the nodes: containerd would find every image
+  # already local and never contact the registry, so a broken mirror would pass
+  # this phase and fail in a later one with nothing pointing at the cause.
+  #
+  # The checksums below are Rancher's own, from sha256sum-amd64.txt for this
+  # release tag. The checksum of that file is itself recorded, so the chain
+  # terminates in this repository rather than in a file downloaded at run time.
+
+  # The image sets that get pushed into the GitLab container registry. Core is
+  # the control plane itself; cilium is the CNI, brought forward from Phase 5
+  # because a node with no CNI never reports Ready.
+  - name: rke2-images-core
+    phase: 4
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-core.linux-amd64.tar.zst
+    sha256: f7d4aad521229dfa820a3dea2365582681aa1aa4a076bd02122b0ac0eb79e265
+    dest: rke2/rke2-images-core.linux-amd64.tar.zst
+
+  - name: rke2-images-cilium
+    phase: 4
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-cilium.linux-amd64.tar.zst
+    sha256: dc9cb3d8af8db6a0a0312e3be3e31b1fa44a20731b8d3f7a1e30e8481940c12c
+    dest: rke2/rke2-images-cilium.linux-amd64.tar.zst
+
+  # The authoritative list of what each tarball contains. rke2_publish reads
+  # these to know what to retag and push; deriving the list from `docker load`
+  # output instead would depend on the runtime's formatting.
+  - name: rke2-images-core-list
+    phase: 4
+    retention: bootstrap
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-core.linux-amd64.txt
+    sha256: edfba07837576859ecb87e260a0681aef22c24d4f07e2884130146b08c6d78e4
+    dest: rke2/rke2-images-core.linux-amd64.txt
+
+  - name: rke2-images-cilium-list
+    phase: 4
+    retention: bootstrap
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-cilium.linux-amd64.txt
+    sha256: 4b9c3daf33d66bb8867e42a05fd278a9dedaec2d72538184196359e79a00050a
+    dest: rke2/rke2-images-cilium.linux-amd64.txt
+
+  # The binary and its installer, uploaded to the GitLab generic package
+  # registry and fetched from there by every node.
+  #
+  # install.sh is pinned to the release tag rather than taken from
+  # https://get.rke2.io. The integrity control in this manifest is a recorded
+  # SHA256, and get.rke2.io serves a moving target that no checksum describes.
+  - name: rke2-binary
+    phase: 4
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2.linux-amd64.tar.gz
+    sha256: 7a29a6fbf512903a6a4611a289bcb3bdf01ddeea9df1a09b1bd1f210f3d6948a
+    dest: rke2/rke2.linux-amd64.tar.gz
+
+  # install.sh verifies the binary tarball against this file, so it travels
+  # with it to every node rather than being consumed only here.
+  - name: rke2-checksums
+    phase: 4
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/sha256sum-amd64.txt
+    sha256: 373b8b0499f2510ac6f4be5cdf4d0e32bd9db9ce5b1ed5b0b31a0cb0cedbd8b7
+    dest: rke2/sha256sum-amd64.txt
+
+  - name: rke2-install-script
+    phase: 4
+    retention: transit
+    type: file
+    url: >-
+      https://raw.githubusercontent.com/rancher/rke2/v1.35.7%2Brke2r1/install.sh
+    sha256: 2d24db2184dd6b1a5e281fa45cc9a8234c889394721746f89b5fe953fdaaf40a
+    dest: rke2/install.sh
+
+  # The API server VIP. Not part of any RKE2 release, so it is pulled and
+  # pinned by digest like the other single-image entries, then pushed into the
+  # GitLab registry alongside the RKE2 image set.
+  - name: kube-vip
+    phase: 4
+    retention: transit
+    type: image
+    image: ghcr.io/kube-vip/kube-vip:v1.2.2
+    digest: >-
+      sha256:b2e00d870995f9c32f4e87d28a4ddf10d53bf54b50dc4456c3ea8bb94a52b414
+    dest: rke2/kube-vip-v1.2.2.tar
+
+  # --- Phase 5: RKE2 workers on kubewk01-03 ------------------------------
+  #
+  # The worker agents need no new RKE2 entries — they install from the same
+  # binary and pull from the same registry the control plane does. The only
+  # addition is the ingress controller, which is a separate release asset:
+  # Traefik is deliberately not inside rke2-images-core, so an air-gapped
+  # install has to stage it explicitly.
+  #
+  # Traefik rather than ingress-nginx because ingress-nginx reached end of life
+  # in March 2026 and RKE2 makes Traefik the default for new clusters at v1.36.
+  # See plan/PHASE5_IMPLEMENTATION.md; this lab runs v1.35.7, which is inside
+  # the supported window for it.
+  #
+  # Both checksums below come from the same sha256sum-amd64.txt already staged
+  # and pinned above, so the chain still terminates in this repository.
+  - name: rke2-images-traefik
+    phase: 5
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-traefik.linux-amd64.tar.zst
+    sha256: 6dabff733c90a3c2c7304bfe0c530cb6a2304c5a585b0de4fc5f46e700c5fcee
+    dest: rke2/rke2-images-traefik.linux-amd64.tar.zst
+
+  - name: rke2-images-traefik-list
+    phase: 5
+    retention: bootstrap
+    type: file
+    url: >-
+      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-traefik.linux-amd64.txt
+    sha256: 42f401dbd52251dd96e09ed22563a88cb269c62b2e775d0f4910745e90b4d06e
+    dest: rke2/rke2-images-traefik.linux-amd64.txt
+
+  # --- Phase 6a: Flux CD, the GitOps engine ------------------------------
+  #
+  # Flux v2.9.4, the current release at the time of staging. v2.9 is the first
+  # line that lists Kubernetes v1.35 in its compatibility matrix — ">= 1.35.0",
+  # and this cluster runs v1.35.7 — so it was checked against the vendor's
+  # matrix rather than assumed from the version being recent. v2.9 also adds
+  # native OpenBao authentication, which 6b uses.
+  #
+  # Four controllers, not six. image-reflector-controller and
+  # image-automation-controller are optional components that `flux install`
+  # does not include by default, and image update automation is not used here.
+  # The list comes from `flux install --export`, which is the vendor's own
+  # answer to "what does this version pull".
+  #
+  # All four are transit: the cluster pulls them from the GitLab registry, and
+  # a copy on Apache after that is dead weight.
+  - name: flux-source-controller
+    phase: 6
+    retention: transit
+    type: image
+    image: ghcr.io/fluxcd/source-controller:v1.9.4
+    digest: >-
+      sha256:8a8ed0a57b8b86f561d5a4309a69f65e62f0cebe4de8801593c5ff35a3bc3c23
+    dest: flux/source-controller-v1.9.4.tar
+
+  - name: flux-kustomize-controller
+    phase: 6
+    retention: transit
+    type: image
+    image: ghcr.io/fluxcd/kustomize-controller:v1.9.4
+    digest: >-
+      sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f
+    dest: flux/kustomize-controller-v1.9.4.tar
+
+  - name: flux-helm-controller
+    phase: 6
+    retention: transit
+    type: image
+    image: ghcr.io/fluxcd/helm-controller:v1.6.3
+    digest: >-
+      sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038
+    dest: flux/helm-controller-v1.6.3.tar
+
+  - name: flux-notification-controller
+    phase: 6
+    retention: transit
+    type: image
+    image: ghcr.io/fluxcd/notification-controller:v1.9.3
+    digest: >-
+      sha256:071c351a0fb163eeb6a2bb82f1e894f51b6b0734216d2e97d3d99c9ab9d710b9
+    dest: flux/notification-controller-v1.9.3.tar
+
+  # The CLI runs on the automation controller, not on a cluster node, and it is
+  # what bootstraps and inspects Flux. Bootstrap is a controller-side action, so
+  # this is staged for the controller to fetch over the tunnel rather than
+  # pushed into GitLab — which is why it is bootstrap rather than transit.
+  #
+  # See plan/CONTROLLER.md: the controller's own dependencies are part of the
+  # artifact set, because a manifest that assumes a working controller cannot
+  # recover from losing one.
+  - name: flux-cli
+    phase: 6
+    retention: bootstrap
+    type: file
+    url: >-
+      https://github.com/fluxcd/flux2/releases/download/v2.9.4/flux_2.9.4_linux_amd64.tar.gz
+    sha256: c2c397a52930f52d2005c01d276116b059d062de379386d58e98115380a766a2
+    dest: flux/flux_2.9.4_linux_amd64.tar.gz
+
+  # --- Phase 6a: Sealed Secrets, the first Flux-managed component ---------
+  #
+  # v0.38.4, and the version choice here needed more care than "take the
+  # latest" or "avoid the latest", because both would have been wrong.
+  #
+  # v0.38.2, v0.38.3 and v0.38.4 were all cut within three hours on
+  # 2026-07-03, and the vendor's own release notes label v0.38.3 and v0.38.4
+  # "Incomplete release for credentials problems". Read cold, that says to fall
+  # back to v0.38.2 — the last release not carrying the warning.
+  #
+  # The registry says otherwise. Docker Hub has no 0.38.2 or 0.38.3 tag at all:
+  # the credentials problem was that the *image push* failed, so those two
+  # releases have GitHub assets and no container image. v0.38.4 is the release
+  # that finally pushed — its tag landed twenty seconds after the release was
+  # cut — and it is the only one of the three that can be deployed. Falling
+  # back would have produced an ImagePullBackOff that looked like a broken
+  # mirror rather than an absent upstream image.
+  #
+  # Checked against the vendor's compatibility statement rather than assumed:
+  # the project verifies its CI integration matrix against Kubernetes
+  # 1.33/1.34/1.35, and this cluster runs v1.35.7.
+  #
+  # Note the registry. This is docker.io/bitnami/, not the bitnamilegacy/
+  # namespace the Bitnami catalogue images moved to in August 2025 — Sealed
+  # Secrets is still published to the live bitnami org and is current there,
+  # while bitnamilegacy/sealed-secrets-controller stops at 0.31.0. The upstream
+  # to mirror is the live one.
+  #
+  # Transit: the cluster pulls it from the GitLab registry through the new
+  # docker.io/bitnami rewrite, and a copy on Apache after that is dead weight.
+  - name: sealed-secrets-controller
+    phase: 6
+    retention: transit
+    type: image
+    image: docker.io/bitnami/sealed-secrets-controller:0.38.4
+    digest: >-
+      sha256:ab8e4687a97fb097f30ca2f028222f779f231c224555ba05f43d172c61f84497
+    dest: sealed-secrets/sealed-secrets-controller-0.38.4.tar
+
+  # kubeseal, the client that encrypts a Secret against the controller's public
+  # key. It runs on the automation controller, not in the cluster, and it is the
+  # only way to produce a SealedSecret — which makes it part of the rebuild path
+  # in exactly the way the Flux CLI is: 6b seals the OpenBao unseal keys with
+  # it, and a controller that cannot run kubeseal cannot recover the vault.
+  #
+  # Bootstrap, and fetched from Apache rather than GitHub, for that reason. The
+  # checksum is the vendor's own, from sealed-secrets_0.38.4_checksums.txt.
+  #
+  # See plan/CONTROLLER.md.
+  - name: kubeseal-cli
+    phase: 6
+    retention: bootstrap
+    type: file
+    url: >-
+      https://github.com/bitnami/sealed-secrets/releases/download/v0.38.4/kubeseal-0.38.4-linux-amd64.tar.gz
+    sha256: ab5ae808b0efcb167a825b6cf7f3a7c0034bd99a6301d78db2012da651a8c0b9
+    dest: sealed-secrets/kubeseal-0.38.4-linux-amd64.tar.gz
+
+  # --- Phase 6b: Helm, the tool that moves charts into the registry -------
+  #
+  # Every component below arrives as a Helm chart, and a chart reaches the
+  # cluster the way an image does: staged here, pushed into GitLab, consumed
+  # from GitLab. Pushing is the step that needs a binary, so the binary is an
+  # artifact like everything else rather than something a rebuild curls.
+  #
+  # Helm 3 on a host where Helm 4 exists. This host never installs a chart, it
+  # pushes one, and Helm 3 is what every chart in this set is packaged and
+  # tested against. A media-type difference between the two majors on the push
+  # path would be invisible here and would surface inside the cluster as a
+  # chart the source-controller cannot read.
+  #
+  # Bootstrap: repo01 fetches it from its own Apache root, and a rebuild that
+  # cannot reach get.helm.sh still has it.
+  - name: helm-cli
+    phase: 6
+    retention: bootstrap
+    type: file
+    url: >-
+      https://get.helm.sh/helm-v3.21.4-linux-amd64.tar.gz
+    sha256: 61f88ab166748cb19604d7884cb100ae9ccb13804ddeb98e08af167eacbb6a14
+    dest: charts/helm-v3.21.4-linux-amd64.tar.gz
+
+  # --- Phase 6b: cert-manager ---------------------------------------------
+  #
+  # v1.21.1, chosen against the vendor's support table rather than by recency.
+  # cert-manager publishes the supported Kubernetes range per minor release:
+  # 1.21 covers 1.33 to 1.36 and 1.20 covers 1.32 to 1.35. This cluster runs
+  # v1.35.7, so both would work today and only 1.21 still will after the next
+  # cluster upgrade — and 1.20 reaches end of life at the release of 1.22.
+  #
+  # Four images, not five. The chart deploys the controller, the webhook and
+  # the cainjector, and runs startupapicheck as a Helm hook Job that fails the
+  # release if the webhook is not answering. acmesolver is deliberately absent:
+  # it is only ever pulled to solve an ACME HTTP-01 challenge, and this cluster
+  # issues from the FreeIPA CA, which has no challenge to solve. Mirroring it
+  # would stage 40 MB for a code path nothing here can reach.
+  - name: cert-manager-controller
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/jetstack/cert-manager-controller:v1.21.1
+    digest: >-
+      sha256:416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a
+
+  - name: cert-manager-webhook
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/jetstack/cert-manager-webhook:v1.21.1
+    digest: >-
+      sha256:d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42
+
+  - name: cert-manager-cainjector
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/jetstack/cert-manager-cainjector:v1.21.1
+    digest: >-
+      sha256:ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98
+
+  - name: cert-manager-startupapicheck
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/jetstack/cert-manager-startupapicheck:v1.21.1
+    digest: >-
+      sha256:d8ab6416e6e7303a86fa0a8daa82c94a8001f21c9d78eb2e7db20534e5d07ae8
+
+  # The chart. Note the version carries a leading v — that is cert-manager's
+  # own chart versioning, not a mistake, and it becomes the OCI tag verbatim.
+  - name: cert-manager-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://charts.jetstack.io/charts/cert-manager-v1.21.1.tgz
+    sha256: c27101f3f3e2349fb4a9e704316105bf7b52ad73b8c8257d3498ef7f2f6a4adc
+    dest: charts/cert-manager-v1.21.1.tgz
+
+  # kube-vip's cloud provider, which is what turns a LoadBalancer Service into
+  # an address on the internal network. The kube-vip image itself is already in
+  # the registry from Phase 4, where it holds the API VIP; this is the second
+  # half, and it shares the ghcr.io/kube-vip prefix so it needed no new rewrite
+  # rule and therefore no node restart.
+  #
+  # See the cluster-state repository for why kube-vip rather than the Cilium
+  # LB-IPAM the plan named.
+  - name: kube-vip-cloud-provider
+    phase: 6
+    retention: transit
+    type: mirror
+    image: ghcr.io/kube-vip/kube-vip-cloud-provider:v0.0.12
+    digest: >-
+      sha256:f8f4e3401f7637dd55faefb35571e731a477f65d5c3f062aef73dfd31a8da596
+
+  # --- Phase 6b: Longhorn --------------------------------------------------
+  #
+  # v1.11.3 rather than v1.12.1, and this is the one place in the phase where
+  # the newest stable release was passed over on purpose.
+  #
+  # Both test against Kubernetes 1.35. v1.12.1 was cut two days before this
+  # entry was written, and it is the second patch of a line whose headline
+  # change is the V2 data engine going GA. This is the layer that will hold
+  # OpenBao's Raft store, on storage already measured at 32-50 fsync/s, so the
+  # month-old patch release of the previous line is the better trade: a storage
+  # regression here is not a failed reconcile, it is data.
+  #
+  # Fourteen images, taken from the release's own longhorn-images.txt rather
+  # than from the chart's values, because the CSI sidecars are pinned by the
+  # release and not by the chart.
+  - name: longhorn-manager
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-manager:v1.11.3
+    digest: >-
+      sha256:4568b0a0ddedf434f9cfd4eae900676b8faafea0d87a98bb52e83c96e25286d1
+
+  - name: longhorn-engine
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-engine:v1.11.3
+    digest: >-
+      sha256:bb7a14ebbf8d5f73bd965d00ca133fa215e47d913c3547e0c05ecf6ce78c7d4b
+
+  - name: longhorn-instance-manager
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-instance-manager:v1.11.3
+    digest: >-
+      sha256:596f589b61ea42dc571c705295c2453fd258853c91921dba6ea685c8eb5f95d2
+
+  - name: longhorn-share-manager
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-share-manager:v1.11.3
+    digest: >-
+      sha256:9c4a440e80bbf12a6ffd1b4f727f1cdb8d289eab2fa1ac9fc1bf5839204335fe
+
+  - name: longhorn-ui
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-ui:v1.11.3
+    digest: >-
+      sha256:29eee303a01644d3a42a86c5888728c7be1789fdedfb39d34921f3f991ee1a22
+
+  - name: longhorn-cli
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/longhorn-cli:v1.11.3
+    digest: >-
+      sha256:d6c0b10a6df01ec70246546f6eeff48d4b9392d7997768805b67b71bbcd7cd8c
+
+  - name: longhorn-backing-image-manager
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/backing-image-manager:v1.11.3
+    digest: >-
+      sha256:67151dce3e7d219a8dfdd30f70b3a524efe3087921a0b5b909052311838feadb
+
+  - name: longhorn-csi-attacher
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/csi-attacher:v4.12.0
+    digest: >-
+      sha256:a814aa4784197116983ea13e376fc691e000a390de9d0b9fca2bc4a2fb7c4a1f
+
+  - name: longhorn-csi-provisioner
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/csi-provisioner:v6.3.0
+    digest: >-
+      sha256:2d2694540109d2e8887f62a0bc711aca8d3033e52dddf1c39bb5c65600d9c5af
+
+  - name: longhorn-csi-resizer
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/csi-resizer:v2.2.0
+    digest: >-
+      sha256:b778fae2f3bc65b6bcd45785dfc42931424855004c6703e1f17e2fdd451e7e8c
+
+  - name: longhorn-csi-snapshotter
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/csi-snapshotter:v8.6.0
+    digest: >-
+      sha256:2bca9ac55170efa61dc50e5cc8d9550373db2e3e5161d82d3fdaac5c25150360
+
+  - name: longhorn-csi-node-driver-registrar
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/csi-node-driver-registrar:v2.17.0
+    digest: >-
+      sha256:29f7cfd519008fe8f8dff5e79db43f70d65c43a89c08f1bafbb199ca90df79f0
+
+  - name: longhorn-livenessprobe
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/livenessprobe:v2.19.0
+    digest: >-
+      sha256:d0cb76b565ba9d36da0dc2b38e2b6a49a0ae4fe067b03086110682f32c600318
+
+  - name: longhorn-support-bundle-kit
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/longhornio/support-bundle-kit:v0.0.88
+    digest: >-
+      sha256:3362ee46d2a5bc4a373699fe3345a80389616f1b8bb21042c5e5eeeb3e0f9b18
+
+  - name: longhorn-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/longhorn/charts/releases/download/longhorn-1.11.3/longhorn-1.11.3.tgz
+    sha256: ab0682fe8ab2863c271bcfc230bc8c67a45dc0f2432cadbb917b3f52a23393d4
+    dest: charts/longhorn-1.11.3.tgz
+
+  # --- Phase 6b: External Secrets Operator ---------------------------------
+  #
+  # v2.9.0, one image and one chart. The chart version tracks the application
+  # version in this project, so both are 2.9.0 and the chart tag has no v while
+  # the image tag does — a difference that matters only because the two are
+  # written next to each other here.
+  - name: external-secrets
+    phase: 6
+    retention: transit
+    type: mirror
+    image: ghcr.io/external-secrets/external-secrets:v2.9.0
+    digest: >-
+      sha256:44eb290f1c7f5d8f4eec2168cea4a6cfbc72a955c6781eb835e1c40700475dbd
+
+  - name: external-secrets-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.9.0/external-secrets-2.9.0.tgz
+    sha256: da2d5c126a103b4c1b16a9dc1c168c4332a3687144e88ac070e594f81a0b6578
+    dest: charts/external-secrets-2.9.0.tgz
+
+  # --- Phase 6b: OpenBao ---------------------------------------------------
+  #
+  # v2.6.1, and the version is a decision rather than the newest number.
+  # plan/PHASE6_IMPLEMENTATION.md requires the seal to stay swappable toward
+  # PKCS#11, and PKCS#11 is compiled into OpenBao through the 2.6.x line and
+  # becomes a separately distributed plugin from 2.7.0. Staying on 2.6.x keeps
+  # the migration a configuration change; moving past it would make the
+  # migration also an artifact this air-gapped cluster has to already hold.
+  #
+  # Chart 0.29.1, the newest chart whose appVersion is v2.6.1 — the chart and
+  # the application version independently, because the chart line moves faster.
+  - name: openbao
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/openbao/openbao:2.6.1
+    digest: >-
+      sha256:5b2486ab0fb90bbc788cc345b0a08616dfb375873ee8be5df3a2fd4d378a67e0
+
+  # --- Phase 6b: Garage, the object store -----------------------------------
+  #
+  # v2.3.0. One image and no chart: Garage's chart is not published to a
+  # repository, and the deployment is a StatefulSet, a ConfigMap and two
+  # Services — small enough that vendoring the manifests into cluster-state is
+  # clearer than mirroring a chart to render three objects.
+  #
+  # Single node, with replication handled a layer down by Longhorn. Garage's
+  # own replication would put three copies on three nodes on top of Longhorn's
+  # two, which is six copies of every object on storage measured in fsyncs.
+  # Same trade the vault made, for the same reason.
+  - name: garage
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/dxflrs/garage:v2.3.0
+    digest: >-
+      sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+
+  # --- Phase 6b: Keycloak, the identity provider ----------------------------
+  #
+  # 26.7.1, and its database. Both are plain manifests in cluster-state rather
+  # than a chart: Keycloak publishes an Operator and a community chart, and for
+  # a single realm on a single instance the Operator is a controller to keep
+  # current for no gain, while the community chart is a third party in the
+  # authentication path.
+  #
+  # PostgreSQL is pinned to a patch release rather than a major tag. `17` moves
+  # under a rebuild's feet, and a database that silently changes minor version
+  # between builds is the kind of drift this manifest exists to stop.
+  - name: keycloak
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/keycloak/keycloak:26.7.1
+    digest: >-
+      sha256:f1f1f01e472c8a78df40d8f2a49a925274eda4d3d80d5f6edbb5c880ee3c01c6
+
+  # --- Phase 6b: the authenticating proxy for the Longhorn UI ---------------
+  #
+  # oauth2-proxy v7.15.3, and it is the only image single sign-on adds to this
+  # manifest. Every other service in the lab federates by being configured —
+  # Grafana, OpenBao and GitLab each speak OIDC natively — and Longhorn is the
+  # exception because it has no authentication of any kind to configure. There
+  # is nothing in Longhorn to point at Keycloak, so something has to stand in
+  # front of it.
+  #
+  # Deployed in the apps layer as `longhorn-auth`, in full reverse proxy mode
+  # rather than as a Traefik forwardAuth middleware; see
+  # apps/longhorn-auth/oauth2-proxy.yaml for why.
+  - name: oauth2-proxy
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    digest: >-
+      sha256:10a1165743a192e1940b4708fb9647027185ce11a681a1c5519b442ff7f1f561
+
+  - name: postgres
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/library/postgres:17.7-alpine
+    digest: >-
+      sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2
+
+  - name: openbao-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/openbao/openbao-helm/releases/download/openbao-0.29.1/openbao-0.29.1.tgz
+    sha256: 646d932f597632a7328bd300994e66c2cabaa1b6763372cbabb559cd84ff3f2f
+    dest: charts/openbao-0.29.1.tgz
+
+  # --- Phase 6c: observability ---------------------------------------------
+  #
+  # Eleven images and four charts, and the set is smaller than the plan's
+  # component list by one: there is no separate OpenTelemetry collector,
+  # because Grafana Alloy *is* an OpenTelemetry collector distribution.
+  # Running both would mean two collectors with overlapping receivers and no
+  # rule about which owns a pipeline.
+  #
+  # kube-prometheus-stack's admission webhook uses cert-manager rather than the
+  # chart's certgen Job, which removes another image and gets its certificate
+  # from the same authority as everything else in the cluster.
+  #
+  # registry.k8s.io is a new upstream host here, not just a new namespace, and
+  # it is the reason 6c needs its own rolling restart of the nodes.
+  - name: prometheus
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus/prometheus:v3.13.2-distroless
+    digest: >-
+      sha256:64f71bb84e03c855948418b0fc5dea53e9543d8e3fc9931598f583805507f05e
+
+  - name: alertmanager
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus/alertmanager:v0.33.1
+    digest: >-
+      sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d
+
+  - name: node-exporter
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus/node-exporter:v1.12.1-distroless
+    digest: >-
+      sha256:8c9bac11973b94b59be88d6e11fee4429aa743c8846cdc75d65b18db33f6a106
+
+  - name: prometheus-operator
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus-operator/prometheus-operator:v0.93.0
+    digest: >-
+      sha256:a001ed10a3823bbf2410ea347796d0e35ff8decd24fb98acbe7ab9e98d431c39
+
+  # Two versions of the config reloader, and both are needed. The chart pins
+  # v0.91.0 in its values; the operator ignores that for the Prometheus pods it
+  # creates and injects the reloader matching *its own* version. Mirroring only
+  # the one the chart names produces a Prometheus stuck in Init with a 404 from
+  # a mirror that is working perfectly.
+  - name: prometheus-config-reloader
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.91.0
+    digest: >-
+      sha256:7d9e4eea5f1139e602508871f422b0116c60e87c662f3dcd234d5ab60cd0d8c1
+
+  - name: prometheus-config-reloader-operator
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.93.0
+    digest: >-
+      sha256:0ccb22ca9f3f6fd9f76ce95585d18bd2e363d421c534dde710be4bd13caa551d
+
+  - name: kube-state-metrics
+    phase: 6
+    retention: transit
+    type: mirror
+    image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.19.1
+    digest: >-
+      sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1
+
+  - name: grafana
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/grafana/grafana:13.1.3
+    digest: >-
+      sha256:ab5cb380e3ff3172d6c8bd2e7cfd31cce977d2881b260e1f5bc089bf0b759b43
+
+  - name: grafana-sidecar
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/kiwigrid/k8s-sidecar:2.10.1
+    digest: >-
+      sha256:7eac5c4fed714a18d038fc9fea57d8744d113367935dac0ea4eb6a87cef704a3
+
+  # Two Loki patches, and the second is not redundancy. Chart 7.3.0 declares
+  # appVersion 3.6.12 and defaults its image tag to 3.6.11, so which one the
+  # cluster asks for depends on whether the release pins the tag — and a
+  # mirror that holds only one of them answers 404 for the other while working
+  # perfectly. The release pins 3.6.12; 3.6.11 is here so that a values file
+  # that forgets to is a slow deploy rather than a broken one.
+  - name: loki
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/grafana/loki:3.6.12
+    digest: >-
+      sha256:2483b71b28b15dee230f85512cae2b20c4b5f6e98a6eabe686cbccfa5ea3ba4a
+
+  - name: loki-chart-default
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/grafana/loki:3.6.11
+    digest: >-
+      sha256:44148ad243c07957113baea950ee5ba9b0c8eff8d7e38ff3cc1c0af705790945
+
+  - name: tempo
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/grafana/tempo:2.9.0
+    digest: >-
+      sha256:65a5789759435f1ef696f1953258b9bbdb18eb571d5ce711ff812d2e128288a4
+
+  - name: alloy
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/grafana/alloy:v1.18.1
+    digest: >-
+      sha256:0f4434c92b3e6cdac38bb129b344e1790c246f7b6e2eaffcc16a5fa363240e33
+
+  # The charts. Staged as files, pushed into the registry as OCI artifacts.
+  - name: kube-prometheus-stack-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-88.3.0/kube-prometheus-stack-88.3.0.tgz
+    sha256: 5609de52e7af33792e6c6678b9443cacaec0cd81feacc956f6da0209a7463cba
+    dest: charts/kube-prometheus-stack-88.3.0.tgz
+
+  - name: loki-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/grafana/helm-charts/releases/download/helm-loki-7.3.0/loki-7.3.0.tgz
+    sha256: 04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09
+    dest: charts/loki-7.3.0.tgz
+
+  - name: tempo-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/grafana/helm-charts/releases/download/tempo-1.24.4/tempo-1.24.4.tgz
+    sha256: f1f6e318d5bca3b5097cb676077796cdf8135beb2c1f71c4d14614ccf9b0081b
+    dest: charts/tempo-1.24.4.tgz
+
+  - name: alloy-chart
+    phase: 6
+    retention: transit
+    type: file
+    url: >-
+      https://github.com/grafana/helm-charts/releases/download/alloy-1.11.1/alloy-1.11.1.tgz
+    sha256: cc4cd48a885c070fe8b2929971552852375c11e92d95fc6337d0c3fa277ac575
+    dest: charts/alloy-1.11.1.tgz
+
+# --- Not yet in the manifest --------------------------------------------
+#
+# Container runtime and Compose (all phases)
+#   Delivered as Ubuntu packages (docker.io, docker-compose-v2) through the
+#   apt-cacher-ng proxy, not as Apache artifacts. They need no manifest entry;
+#   the runtime/ directory under the document root stays empty unless a
+#   host-level prerequisite appears that apt cannot supply.
+#
+# Phase 5
+#   Added only the Traefik image set above. The worker agent itself installs
+#   from the same binary and the same registry the control plane uses, so
+#   nothing else about a worker needs staging.
+#
+# Phase 6c (observability)
+#   Absent for the reason Phases 4 and 6b were until their versions were
+#   chosen: an artifact cannot be downloaded or checksummed before its version
+#   is selected, and 6c sizes its components against 30 GiB of worker memory
+#   before it picks them. Recording a guessed version here would produce a
+#   manifest that verifies against nothing.
+#
+#   This is Risk Gate 3 in plan/PHASE1_IMPLEMENTATION.md. Phase 1 delivers the
+#   staging mechanism and the phase 2-3 artifacts that gate the next phase;
+#   each later phase adds its entries here and re-runs playbooks/repo01.yml
+#   before its consuming hosts need them.

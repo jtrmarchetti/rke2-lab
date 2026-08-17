@@ -1,0 +1,116 @@
+---
+argument_specs:
+  main:
+    short_description: Install and reconcile the controller's own runtime
+    description:
+      - Installs the system packages, the pinned Ansible virtual environment
+        and collections, and the Pulumi CLI and project environment that every
+        other playbook in this repository depends on.
+      - Does not install Ansible on a bare host, because it is Ansible.
+        bootstrap/controller-bootstrap.sh creates the virtual environment from
+        the same pinned requirements file; this role owns it from then on.
+    options:
+      controller_runtime_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      controller_runtime_repo_dir:
+        type: str
+        required: true
+        description:
+          - Absolute path to this repository's root. The pinned requirements
+            files are read from it. No default, because the value depends on
+            where the repository was cloned.
+      controller_runtime_packages:
+        type: list
+        elements: str
+        description:
+          - System packages the controller needs. Declared here as well as in
+            the bootstrap script so that every run corrects them.
+      controller_runtime_venv:
+        type: str
+        description:
+          - Path to the Ansible virtual environment. Reads RKE2LAB_VENV, the
+            same variable the bootstrap script honours.
+      controller_runtime_venv_command:
+        type: str
+        default: /usr/bin/python3 -m venv
+        description: Command used to create a virtual environment.
+      controller_runtime_requirements:
+        type: str
+        default: bootstrap/requirements-controller.txt
+        description:
+          - Pinned pip requirements, relative to the repository root. Shared
+            with the bootstrap script so the two cannot disagree.
+      controller_runtime_ansible_version:
+        type: str
+        description:
+          - The Ansible version the requirements file pins. Asserted against
+            the virtual environment rather than assumed.
+      controller_runtime_collections_path:
+        type: str
+        description: The single path collections are installed into.
+      controller_runtime_collections_requirements:
+        type: str
+        default: ansible/requirements.yml
+        description:
+          - Pinned collection requirements, relative to the repository root.
+      controller_runtime_require_managed_venv:
+        type: bool
+        default: true
+        description:
+          - Fail unless the run is using the virtual environment this role
+            manages. Catches a controller that pins one environment while
+            running from another.
+      controller_runtime_pulumi_enabled:
+        type: bool
+        default: true
+        description: Whether Pulumi is installed and reconciled.
+      controller_runtime_pulumi_version:
+        type: str
+        description: The pinned Pulumi CLI version.
+      controller_runtime_pulumi_url:
+        type: str
+        description: Release tarball for the pinned version.
+      controller_runtime_pulumi_sha256:
+        type: str
+        description:
+          - Published SHA256 of the tarball. Verified on download, so a
+            tampered or truncated file never reaches the install.
+      controller_runtime_pulumi_home:
+        type: str
+        description: Pulumi's home directory; binaries land in its bin/.
+      controller_runtime_pulumi_project_dir:
+        type: str
+        default: infra/pulumi
+        description: The Pulumi project, relative to the repository root.
+      controller_runtime_pulumi_project_venv:
+        type: str
+        default: infra/pulumi/.venv
+        description:
+          - The project's virtual environment, relative to the repository root.
+      controller_runtime_pulumi_project_requirements:
+        type: str
+        default: infra/pulumi/requirements.txt
+        description:
+          - The project's pinned requirements, relative to the repository root.
+      controller_runtime_shell_enabled:
+        type: bool
+        default: true
+        description: Whether the shell environment file is written.
+      controller_runtime_config_dir:
+        type: str
+        description:
+          - Directory the environment file is written to. The same directory
+            holds env.sh, which this role never writes.
+      controller_runtime_env_file:
+        type: str
+        description:
+          - The environment file this role writes and the startup files
+            source.
+      controller_runtime_shell_rc_files:
+        type: list
+        elements: str
+        description:
+          - Startup files that source the environment file. Both ~/.bashrc and
+            ~/.profile, because neither alone is read by every kind of shell.

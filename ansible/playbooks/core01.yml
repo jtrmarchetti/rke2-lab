@@ -1,0 +1,135 @@
+---
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env:
+      - FREEIPA_ADMIN_PASSWORD
+      - FREEIPA_DIR_MANAGER_PASSWORD
+
+- name: Configure phase2 core01 services
+  hosts: core
+  gather_facts: true
+  become: true
+  tasks:
+    - name: core01 | Include base host role
+      tags:
+        - base_host
+      vars:
+        base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
+        base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
+        base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
+        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
+        base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
+      ansible.builtin.include_role:
+        name: base_host
+        apply:
+          tags:
+            - base_host
+
+    # Before FreeIPA: Kerberos rejects tickets across a clock skew, so the
+    # domain must be installed on a host whose time is already correct.
+    - name: core01 | Include time synchronization role
+      tags:
+        - time_sync
+      vars:
+        time_sync_allow_networks: "{{ inventory_time_sync_allow_networks }}"
+        time_sync_enabled: "{{ inventory_time_sync_enabled }}"
+        time_sync_local_stratum: "{{ inventory_time_sync_local_stratum }}"
+        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
+        time_sync_sources: "{{ inventory_time_sync_sources }}"
+      ansible.builtin.include_role:
+        name: time_sync
+        apply:
+          tags:
+            - time_sync
+
+    # Runs before FreeIPA for the same reason it does on repo01: the FreeIPA
+    # data directory lives on /data1, and if the data disk is not mounted
+    # first, the domain quietly installs onto the 32 GB OS disk instead.
+    - name: core01 | Include data volume role
+      tags:
+        - data_volume
+      ansible.builtin.include_role:
+        name: data_volume
+        apply:
+          tags:
+            - data_volume
+
+    # Between the data volume and FreeIPA, for the same reason it sits there on
+    # repo01: the container daemons default to /var/lib on the OS disk. core01
+    # carries the same fault at a tenth the scale, and fixing it here means a
+    # rebuilt core01 never acquires it.
+    - name: core01 | Include container storage role
+      tags:
+        - container_storage
+      vars:
+        container_storage_graceful_compose_dirs:
+          - "{{ inventory_freeipa_server_compose_dir }}"
+      ansible.builtin.include_role:
+        name: container_storage
+        apply:
+          tags:
+            - container_storage
+
+    - name: core01 | Include FreeIPA server role
+      tags:
+        - freeipa_server
+      vars:
+        freeipa_server_admin_password: >-
+          {{ inventory_freeipa_server_admin_password }}
+        freeipa_server_compose_dir: "{{ inventory_freeipa_server_compose_dir }}"
+        freeipa_server_container_image: >-
+          {{ inventory_freeipa_server_container_image }}
+        freeipa_server_container_name: >-
+          {{ inventory_freeipa_server_container_name }}
+        freeipa_server_data_dir: "{{ inventory_freeipa_server_data_dir }}"
+        freeipa_server_directory_manager_password: >-
+          {{ inventory_freeipa_server_directory_manager_password }}
+        freeipa_server_dns_forward_zones: >-
+          {{ inventory_freeipa_server_dns_forward_zones }}
+        freeipa_server_dns_records: "{{ inventory_freeipa_server_dns_records }}"
+        freeipa_server_dns_zones: "{{ inventory_freeipa_server_dns_zones }}"
+        freeipa_server_dnssec_validation: >-
+          {{ inventory_freeipa_server_dnssec_validation }}
+        freeipa_server_domain: "{{ inventory_freeipa_server_domain }}"
+        freeipa_server_enabled: "{{ inventory_freeipa_server_enabled }}"
+        freeipa_server_forwarders_enabled: >-
+          {{ inventory_freeipa_server_forwarders_enabled }}
+        freeipa_server_hostname: "{{ inventory_freeipa_server_hostname }}"
+        freeipa_server_image_tarball_checksum: >-
+          {{ inventory_freeipa_server_image_tarball_checksum }}
+        freeipa_server_image_tarball_url: >-
+          {{ inventory_freeipa_server_image_tarball_url }}
+        freeipa_server_ip_address: "{{ inventory_freeipa_server_ip_address }}"
+        freeipa_server_realm: "{{ inventory_freeipa_server_realm }}"
+        freeipa_server_setup_dns: "{{ inventory_freeipa_server_setup_dns }}"
+      ansible.builtin.include_role:
+        name: freeipa_server
+        apply:
+          tags:
+            - freeipa_server
+
+# Phase 2, step 8: point resolvers at core01. This runs after the play above has
+# proved the domain is serving, so repo01 is only pointed at an authority that
+# answers. It lives here rather than in repo01.yml because the dependency runs
+# that way: repo01 needs core01 for dev.lo, and core01 needs repo01 only for
+# time, which Phase 1 already established.
+- name: Point repository host resolvers at the identity domain
+  hosts: repo
+  gather_facts: true
+  become: true
+  tasks:
+    - name: core01 | Include split DNS role
+      tags:
+        - split_dns
+      vars:
+        split_dns_enabled: "{{ inventory_split_dns_enabled }}"
+        split_dns_forward_zones: "{{ inventory_split_dns_forward_zones }}"
+        split_dns_search_domain: "{{ inventory_split_dns_search_domain }}"
+        split_dns_upstream_servers: "{{ inventory_split_dns_upstream_servers }}"
+      ansible.builtin.include_role:
+        name: split_dns
+        apply:
+          tags:
+            - split_dns

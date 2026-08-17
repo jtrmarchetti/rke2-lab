@@ -1,0 +1,55 @@
+# Sealed Secrets
+
+The first component Flux deploys here, and it is deliberately the smallest
+useful one: it proves reconciliation end to end, and everything the secrets
+model does later depends on it existing.
+
+## Provenance
+
+`controller.yaml` is the vendor's release asset, unmodified:
+
+```text
+https://github.com/bitnami/sealed-secrets/releases/download/v0.38.4/controller.yaml
+sha256  8334764279b7dc3c758ce954c5e08cbf6d959bd977db49b872b2b722a123b202
+```
+
+It is vendored rather than pulled from a `HelmRepository` because the cluster
+has no route to the internet and no chart mirror yet, and because a file that
+matches the vendor's checksum byte for byte is auditable in a way a rendered
+chart is not. The cost is that upgrading means fetching the new asset rather
+than bumping a version field, and that cost is paid once per release.
+
+Nothing in this file is rewritten for the airgap. The image reference stays
+`docker.io/bitnami/sealed-secrets-controller:0.38.4` and the nodes resolve it
+to `registry.gitlab.dev.lo` through the containerd rewrite — the same property
+that let Flux itself bootstrap without `--registry`.
+
+## Version
+
+v0.38.4, and the choice needed care in both directions.
+
+v0.38.2, v0.38.3 and v0.38.4 were cut within three hours of each other on
+2026-07-03, and the vendor labels v0.38.3 and v0.38.4 "Incomplete release for
+credentials problems". That reads as a warning to fall back to v0.38.2.
+
+Docker Hub says otherwise: there is no `0.38.2` or `0.38.3` tag. The
+credentials problem was that the image push failed, so those releases have
+GitHub assets and no container image at all. v0.38.4 is the release that
+finally pushed. Falling back would have produced an `ImagePullBackOff` that
+looked like a broken mirror rather than an absent upstream image.
+
+## Namespace
+
+`kube-system`, which is the upstream default and where `kubeseal` looks
+without being told otherwise. Moving it to its own namespace would mean
+passing `--controller-namespace` on every seal, forever, and editing the
+vendored manifest — which would cost the checksum above.
+
+## The sealing key
+
+The controller generates its own key pair on first start and stores it as a
+Secret labelled `sealedsecrets.bitnami.com/sealed-secrets-key` in
+`kube-system`. **That key is the most valuable secret in the lab**: without it
+no SealedSecret in Git can be decrypted, including the OpenBao unseal keys 6b
+seals. It is backed up outside the cluster — see `plan/SECRETS.md` in the
+automation repository — and that backup is a risk gate, not a nicety.

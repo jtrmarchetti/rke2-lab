@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: ipa_service_cert
+  author: devops
+  description: >-
+    Issues service TLS certificates from the FreeIPA CA for a host that is not
+    enrolled in the domain. The key and CSR are generated locally; signing is
+    delegated to the IPA server, which is the only host holding the CA.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

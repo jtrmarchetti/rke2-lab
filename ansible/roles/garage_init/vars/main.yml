@@ -1,0 +1,12 @@
+---
+_var_garage_init_exec: >-
+  {{ garage_init_kubectl }} exec -n {{ garage_init_namespace }}
+  {{ garage_init_pod }} --
+
+# Parsed from `garage key create`, which prints the pair once and never again.
+_var_garage_init_access_id: >-
+  {{ _reg_garage_init_new_key['stdout'] | default('')
+     | regex_search('Key ID:\s+(\S+)', '\1') | first | default('') }}
+_var_garage_init_secret: >-
+  {{ _reg_garage_init_new_key['stdout'] | default('')
+     | regex_search('Secret key:\s+(\S+)', '\1') | first | default('') }}

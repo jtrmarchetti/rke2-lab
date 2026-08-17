@@ -1,0 +1,91 @@
+---
+kube_cli_controller_enabled: true
+
+# Where the operator's binaries and configuration land. The controller runs
+# automation as an unprivileged user, so everything here is user-level: no
+# sudo, nothing under /usr, nothing that a second person on this machine
+# inherits by accident.
+kube_cli_controller_bin_dir: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+kube_cli_controller_config_dir: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab
+
+# Both files, and not by accident. Ubuntu's ~/.bashrc returns at the top for a
+# non-interactive shell, so a block appended to it is never reached by
+# `ssh controller kubectl get nodes` or by anything run from cron — only
+# ~/.profile covers those. But a terminal opened by an editor or by tmux is
+# frequently interactive and non-login, and reads only ~/.bashrc. Neither file
+# alone covers both, and the snippet they source is safe to run twice.
+kube_cli_controller_shell_rc_files:
+  - "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+  - "{{ ansible_facts['env']['HOME'] }}/.profile"
+
+# The kubeconfig the rke2_server role writes back here. Points at the VIP by
+# name and is covered by the API certificate because tls-san lists it.
+kube_cli_controller_kubeconfig: >-
+  {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+# --- kubectl --------------------------------------------------------------
+#
+# Taken from the cluster's own node rather than downloaded. It is then exactly
+# the version the cluster runs, by construction, with no download, no checksum
+# to maintain, and no way for the two to drift. This is what Phase 4 did by
+# hand; the only difference is that it is written down now.
+kube_cli_controller_kubectl_enabled: true
+kube_cli_controller_kubectl_source_host: kubecp01
+kube_cli_controller_kubectl_source_path: /data1/rancher/rke2/bin/kubectl
+# The version the cluster runs, used to decide whether the local copy is stale.
+kube_cli_controller_kubectl_version: 1.35.7
+
+# --- k9s ------------------------------------------------------------------
+#
+# A terminal UI for the cluster, and the direct answer to "what is running".
+# Controller only: this host has internet access, so it needs no staging on
+# repo01, and the cluster nodes are better off with fewer binaries on them.
+#
+# Pinned and checksummed like every other artifact in this repository. The
+# checksum is the one k9s publishes in checksums.sha256 for this release.
+kube_cli_controller_k9s_enabled: true
+kube_cli_controller_k9s_version: v0.51.0
+kube_cli_controller_k9s_url: null
+kube_cli_controller_k9s_sha256: >-
+  c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7
+
+# --- shell integration ----------------------------------------------------
+#
+# The environment is written to its own file and sourced from the shell rc by a
+# single marked block. Writing export lines straight into a personal dotfile
+# makes them impossible to update or remove cleanly later, and this file is the
+# user's, not this repository's.
+kube_cli_controller_shell_enabled: true
+kube_cli_controller_alias: k
+
+# --- flux -----------------------------------------------------------------
+#
+# The GitOps CLI, and the thing that bootstraps the cluster. Unlike k9s it is
+# fetched from repo01's artifact host, not from upstream: it is part of the
+# rebuild path, and a rebuild must not depend on this host reaching GitHub.
+# Staged as a bootstrap artifact — see inventory/group_vars/repo/artifacts.yml.
+#
+# v2.9 is the first Flux line whose compatibility matrix lists Kubernetes
+# v1.35 (">= 1.35.0"); this cluster runs v1.35.7.
+kube_cli_controller_flux_enabled: true
+kube_cli_controller_flux_version: 2.9.4
+kube_cli_controller_flux_url: null
+kube_cli_controller_flux_sha256: >-
+  c2c397a52930f52d2005c01d276116b059d062de379386d58e98115380a766a2
+
+# --- kubeseal -------------------------------------------------------------
+#
+# The client half of Sealed Secrets. Fetched from repo01 for the same reason
+# the Flux CLI is: it is the only way to produce a SealedSecret, 6b seals the
+# OpenBao unseal keys with it, and the rebuild path must not assume this host
+# can reach GitHub.
+#
+# The version tracks the controller deployed in cluster-state. kubeseal and
+# the controller are tolerant of a version skew, but keeping them equal means
+# one number to check rather than a compatibility question to answer.
+kube_cli_controller_kubeseal_enabled: true
+kube_cli_controller_kubeseal_version: 0.38.4
+kube_cli_controller_kubeseal_url: null
+kube_cli_controller_kubeseal_sha256: >-
+  ab5ae808b0efcb167a825b6cf7f3a7c0034bd99a6301d78db2012da651a8c0b9

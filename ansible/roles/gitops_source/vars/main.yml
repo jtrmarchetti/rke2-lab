@@ -1,0 +1,230 @@
+---
+_var_gitops_source_api: "{{ gitops_source_gitlab_url }}/api/v4"
+
+_var_gitops_source_project_path: >-
+  {{ (gitops_source_group ~ '/' ~ gitops_source_project)
+     | replace('/', '%2F') }}
+_var_gitops_source_group_path: "{{ gitops_source_group | urlencode }}"
+
+# The clone URL the GitRepository carries. Derived rather than configured, so
+# it cannot drift from the project this role actually pushes to.
+_var_gitops_source_git_url: >-
+  {{ gitops_source_gitlab_url }}/{{ gitops_source_group }}/{{
+  gitops_source_project }}.git
+
+# Resolved lazily, so it is only valid after main.yml has minted the token.
+# Every task that uses it carries no_log, because it renders the token.
+_var_gitops_source_headers:
+  PRIVATE-TOKEN: "{{ _reg_gitops_source_pat['stdout'].split()[1] }}"
+
+# The push URL, with the same short-lived admin token as its credential. Kept
+# out of the remote's stored configuration — it is passed per command — so a
+# token that outlives the run is not written into the working clone's config.
+_var_gitops_source_push_url: >-
+  {{ gitops_source_gitlab_url
+     | regex_replace('^https://',
+                     'https://oauth2:'
+                     ~ _reg_gitops_source_pat['stdout'].split()[1] ~ '@')
+  }}/{{ gitops_source_group }}/{{ gitops_source_project }}.git
+
+# Same snippet, and the same reasoning, as rke2_publish uses: creating a
+# personal access token is the one GitLab operation with no REST equivalent,
+# because an API token is what the REST API needs first. Scoped to `api`,
+# expires in a day, and revoked in this role's `always` block.
+_var_gitops_source_pat_script: |
+  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
+  u = User.find_by_username("root")
+  t = u.personal_access_tokens.create!(
+    scopes: ["api"],
+    name: "gitops-source-#{Time.now.to_i}",
+    expires_at: 1.day.from_now)
+  puts "#{t.id} #{t.token}"
+  RUBY
+
+# Templates for this role live in ansible/files/gitops_source/ rather than
+# inside the role, so the tree that renders a host's configuration can
+# be read without opening the role.
+_var_gitops_source_files_dir: "{{ role_path | dirname | dirname }}/files/gitops_source"
+
+_var_gitops_source_template_root: "{{ _var_gitops_source_files_dir }}/cluster-state"
+# Rendered verbatim rather than templated: this half of the tree is the
+# vendored Flux component set, which upstream owns.
+_var_gitops_source_file_root: "{{ _var_gitops_source_files_dir }}/cluster-state-static"
+
+# The sealing certificate, extracted from the backed-up key pair.
+#
+# Newest first: the controller rotates every 30 days and keeps the old keys, so
+# a backup taken after a rotation holds several. It can decrypt with any of
+# them, but sealing with the newest is what the controller itself would do, and
+# it keeps a freshly restored cluster from depending on a key that is already a
+# month into its life.
+_var_gitops_source_sealing_keys: >-
+  {{ (lookup('file', gitops_source_sealing_key_file) | from_yaml)['items']
+     | sort(attribute='metadata.creationTimestamp') | reverse | list }}
+_var_gitops_source_sealing_cert: >-
+  {{ _var_gitops_source_sealing_keys[0]['data']['tls.crt'] | b64decode }}
+
+# The deploy token rke2_publish recorded, read from the GitLab host.
+_var_gitops_source_deploy_token: >-
+  {{ _reg_gitops_source_deploy_token_raw['content'] | b64decode | from_yaml }}
+
+# One Jinja expression rather than a YAML mapping, because the registry host is
+# the *key* here and Ansible does not template mapping keys in a vars file. As a
+# mapping this produced an auths entry literally named
+# "{{ gitops_source_registry_host }}", which is a perfectly valid docker config
+# that matches no registry — Flux would have pulled anonymously and failed with
+# a 401 that reads as a broken deploy token.
+_var_gitops_source_docker_config: >-
+  {{ {'auths': {gitops_source_registry_host: {
+       'username': _var_gitops_source_deploy_token['username'],
+       'password': _var_gitops_source_deploy_token['token'],
+       'auth': (_var_gitops_source_deploy_token['username'] ~ ':'
+                ~ _var_gitops_source_deploy_token['token']) | b64encode}}} }}
+
+# The threshold of shares, and no more. env.sh holds all five; the two the
+# cluster is not given are what keeps the Git copy able to unseal and unable to
+# rekey. See infrastructure/unsealer/keys.yaml for the whole argument.
+_var_gitops_source_unseal_shares: >-
+  {{ (gitops_source_openbao_unseal_keys | default('', true)).split(',')[:3] }}
+
+# Everything except the vault's keys, which are the one entry that cannot exist
+# on a first pass.
+#
+# The ordering is unavoidable rather than awkward: OpenBao is deployed by Flux
+# from this repository, so on a cold rebuild the tree has to be pushed before
+# the vault exists, and openbao_init cannot record unseal keys for something
+# that has not been created yet. So the first pass omits them, cluster_init.yml
+# initialises the vault and writes the keys to env.sh, and a second pass seals
+# them in. site.yml runs the playbook twice for exactly this reason.
+#
+# On every run after that the variable is set and nothing is omitted, so the
+# steady state has no special case in it.
+_var_gitops_source_sealed_secrets: >-
+  {{ (_var_gitops_source_sealed_secrets_all
+      | selectattr('optional', 'undefined') | list)
+     + ((_var_gitops_source_sealed_secrets_all
+         | selectattr('optional', 'defined') | list)
+        if (gitops_source_openbao_unseal_keys | default('', true) | length) > 0
+        else []) }}
+
+# --- Every SealedSecret in the tree ---------------------------------------
+#
+# The declaration is here; the ciphertext is nowhere. tasks/seal.yml renders
+# each entry into a plain Secret, pipes it through kubeseal, and writes the
+# result into the tree at `path` — which is why the kustomization.yaml files
+# alongside can go on naming files this repository does not contain.
+#
+# `comment` is prepended to the sealed output. kubeseal emits bare YAML, and a
+# generated file that lands in Git with no explanation of what it is or why it
+# was sealed is exactly the kind of artifact this whole change exists to stop.
+_var_gitops_source_sealed_secrets_all:
+  - path: infrastructure/controllers/registry/registry-credentials.yaml
+    name: gitlab-registry
+    namespace: flux-system
+    type: kubernetes.io/dockerconfigjson
+    comment: |
+      # The credential Flux pulls charts with.
+      #
+      # The same read-only, group-scoped deploy token the nodes pull images
+      # with, created and recorded by the rke2_publish role. It is read from
+      # that recording rather than from env.sh because GitLab returns a deploy
+      # token's value exactly once, so the file on the GitLab host is the only
+      # copy there is.
+    data:
+      .dockerconfigjson: >-
+        {{ _var_gitops_source_docker_config | to_json }}
+
+  - path: infrastructure/controllers/cert-manager/ca-keypair.yaml
+    name: k8s-ca
+    namespace: cert-manager
+    type: kubernetes.io/tls
+    comment: |
+      # The cluster's own certificate authority: an intermediate signed by the
+      # FreeIPA CA, whose key cert-manager signs every cluster certificate
+      # with.
+      #
+      # Sealed, because this is the one piece of bootstrap material the cluster
+      # genuinely cannot obtain for itself. The plaintext key exists in exactly
+      # two places — the controller's ~/.config/rke2lab/k8s-ca, at mode 0600,
+      # and this cluster's etcd once the controller decrypts it. It is produced
+      # by the ipa_sub_ca role; see ansible/roles/ipa_sub_ca for why the
+      # cluster gets an intermediate rather than a copy of the domain CA's key
+      # or a certificate per name from FreeIPA.
+      #
+      # What this key can do is worth stating: it can mint a trusted
+      # certificate for any name in dev.lo, because the domain trusts its
+      # issuer. What it cannot do is sign another CA — the profile constrains
+      # it to path length zero.
+    data:
+      # rstrip=false, because the file lookup strips trailing newlines by
+      # default and a PEM without its final newline is a different byte string
+      # from the one on disk. Left to the default this re-sealed the CA on
+      # every run and quietly shortened the key by one byte.
+      tls.crt: >-
+        {{ lookup('file', gitops_source_ca_dir ~ '/'
+                          ~ gitops_source_ca_common_name ~ '.crt',
+                  rstrip=false) }}
+      tls.key: >-
+        {{ lookup('file', gitops_source_ca_dir ~ '/'
+                          ~ gitops_source_ca_common_name ~ '.key',
+                  rstrip=false) }}
+
+  - path: infrastructure/unsealer/keys.yaml
+    name: openbao-unseal-keys
+    namespace: openbao
+    type: Opaque
+    # The one entry that may legitimately be absent - see the filter above.
+    optional: true
+    comment: |
+      # The OpenBao unseal keys, sealed into Git.
+      #
+      # This is the decision the phase turns on, and it is worth being explicit
+      # about what it costs. Anyone who can read the Sealed Secrets
+      # controller's private key — a cluster-admin, or anyone holding an etcd
+      # snapshot — can decrypt these and therefore everything OpenBao holds.
+      # Vault's design assumes unseal keys live away from the cluster; this
+      # deliberately does not.
+      #
+      # What it buys is the thing the rest of the lab is built on: the cluster
+      # recovers from nothing but its Git repository and its sealing key, with
+      # no operator in the loop. Given Flux already reconciles everything else
+      # from Git, the alternative was a cluster that self-heals except for the
+      # vault.
+      #
+      # The separation the other design would buy is largely illusory here
+      # anyway: every VM is root-only, Ansible connects as root from a
+      # controller that already holds every secret in the environment, and
+      # Proxmox can read every guest disk. An attacker at the level needed to
+      # take the cluster steps over a VM boundary.
+      #
+      # Three of the five shares, which is the threshold and no more. The other
+      # two exist only in the controller's env.sh, so the Git copy is exactly
+      # enough to unseal and not enough to rekey.
+      #
+      # And one thing not to over-trust: sealing protects the copy in Git, not
+      # the copy in the cluster. The controller decrypts this into an ordinary
+      # Secret, so plaintext unseal keys sit in etcd beside the data they
+      # protect. That is correct GitOps mechanics and the right way to get keys
+      # into Git. It is not additional protection at rest.
+    data:
+      key1: "{{ _var_gitops_source_unseal_shares[0] }}"
+      key2: "{{ _var_gitops_source_unseal_shares[1] }}"
+      key3: "{{ _var_gitops_source_unseal_shares[2] }}"
+
+# Three entries, and the list is meant to stay this short.
+#
+# Keycloak's credentials, Garage's cluster tokens and Grafana's administrator
+# were sealed here until 2026-08-16 and are now written into OpenBao by the
+# openbao_secrets role, read by an ExternalSecret in the same directory the
+# sealed file used to occupy. What remains is exactly the material that cannot
+# come from the vault, because each piece is needed before the vault can be
+# reached:
+#
+#   - the registry credential, which is how Flux pulls the charts that deploy
+#     OpenBao and ESO in the first place;
+#   - the CA key pair, which cert-manager needs before anything in the cluster
+#     has a certificate — including the vault's own ingress;
+#   - the vault's unseal keys, which are what make it readable at all.
+#
+# Anything outside that set belongs in OpenBao. A secret added here should come
+# with an argument for why it is in one of those three positions.

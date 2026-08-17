@@ -1,0 +1,6 @@
+---
+- name: Restart the RKE2 agent
+  when: _rke2_service_running | default(false) | bool
+  ansible.builtin.systemd_service:
+    name: rke2-agent
+    state: restarted

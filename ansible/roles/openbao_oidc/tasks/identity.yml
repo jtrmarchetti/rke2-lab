@@ -1,0 +1,222 @@
+---
+# The OIDC role, and the two external identity groups that turn a role in the
+# token into a policy in the vault.
+#
+# The chain is worth writing out once, because it crosses four systems and
+# every link is a place a login silently ends up with no policies:
+#
+#   FreeIPA group openbao-admins
+#     -> imported into Keycloak by the LDAP group mapper
+#     -> granted the client role `admin` by keycloak_clients
+#     -> written into the token's `roles` claim by that client's mapper
+#     -> read here as a group, because groups_claim names that claim
+#     -> matched to an external identity group by its alias
+#     -> which carries the policy.
+#
+# A login that produces a token with no `roles` claim authenticates perfectly
+# and gets nothing, which is the failure this arrangement is most likely to
+# produce and the hardest to read from the vault's side.
+
+- name: identity | Read the OIDC role as it currently stands
+  changed_when: false
+  # Absent before the first write.
+  failed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_role
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/auth/{{ openbao_oidc_mount }}/role/{{
+      openbao_oidc_role_name }}
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    status_code: [200, 404]
+
+# `user_claim: sub` rather than preferred_username, because sub is the only
+# claim Keycloak guarantees is stable and unique — a username can be reassigned
+# in the directory, and the vault's audit log would then attribute one
+# person's reads to another.
+#
+# No policies on the role itself. Everything an OIDC login can do arrives
+# through group membership, so a token issued to someone in no group carries no
+# policy at all, which is the correct answer to "authenticated, not authorised".
+- name: identity | Write the OIDC role
+  when: >-
+    (_reg_openbao_oidc_role['status'] | default(404)) != 200
+    or (_reg_openbao_oidc_role['json']['data']['groups_claim']
+        | default('')) != openbao_oidc_groups_claim
+    or (_reg_openbao_oidc_role['json']['data']['allowed_redirect_uris']
+        | default([]) | sort) != (_var_openbao_oidc_redirect_uris | sort)
+  changed_when: true
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/auth/{{ openbao_oidc_mount }}/role/{{
+      openbao_oidc_role_name }}
+    method: POST
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    body_format: json
+    body:
+      role_type: oidc
+      user_claim: sub
+      groups_claim: "{{ openbao_oidc_groups_claim }}"
+      allowed_redirect_uris: "{{ _var_openbao_oidc_redirect_uris }}"
+      oidc_scopes: ["openid", "profile", "email"]
+      token_ttl: "{{ openbao_oidc_token_ttl }}"
+      token_max_ttl: "{{ openbao_oidc_token_max_ttl }}"
+      token_policies: []
+    status_code: [200, 204]
+
+- name: identity | Re-read the authentication methods for the mount accessor
+  changed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_auth_final
+  ansible.builtin.uri:
+    url: "{{ openbao_oidc_url }}/v1/sys/auth"
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+
+- name: identity | Read the identity groups that already exist
+  changed_when: false
+  # Absent before the first group is created, and an empty identity store
+  # answers 404 rather than an empty list.
+  failed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_group_names
+  ansible.builtin.uri:
+    url: "{{ openbao_oidc_url }}/v1/identity/group/name?list=true"
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    status_code: [200, 404]
+
+# External, not internal. An internal group holds a member list, which would be
+# a third copy of "who is an administrator" after FreeIPA's and Keycloak's. An
+# external group holds none: it is matched by an alias whose name is the role
+# that arrived in the token, so the vault's answer is whatever the directory
+# said, one hop removed.
+- name: identity | Create the external identity groups
+  when: >-
+    _item_openbao_oidc_group['name'] not in
+    (_reg_openbao_oidc_group_names['json']['data']['keys'] | default([]))
+  changed_when: true
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  loop: "{{ _var_openbao_oidc_groups }}"
+  loop_control:
+    loop_var: _item_openbao_oidc_group
+    label: "{{ _item_openbao_oidc_group['name'] }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/identity/group/name/{{
+      _item_openbao_oidc_group['name'] }}
+    method: POST
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    body_format: json
+    body:
+      type: external
+      policies: "{{ _item_openbao_oidc_group['policies'] }}"
+    status_code: [200, 204]
+
+- name: identity | Read each group back for its identifier and policies
+  changed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_groups
+  loop: "{{ _var_openbao_oidc_groups }}"
+  loop_control:
+    loop_var: _item_openbao_oidc_group
+    label: "{{ _item_openbao_oidc_group['name'] }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/identity/group/name/{{
+      _item_openbao_oidc_group['name'] }}
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+
+- name: identity | Correct a group whose policies have drifted
+  when: >-
+    (_item_openbao_oidc_read[1]['json']['data']['policies'] | default([])
+     | sort) != (_item_openbao_oidc_read[0]['policies'] | sort)
+  changed_when: true
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  loop: >-
+    {{ _var_openbao_oidc_groups
+       | zip(_reg_openbao_oidc_groups['results']) | list }}
+  loop_control:
+    loop_var: _item_openbao_oidc_read
+    label: "{{ _item_openbao_oidc_read[0]['name'] }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/identity/group/name/{{
+      _item_openbao_oidc_read[0]['name'] }}
+    method: POST
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    body_format: json
+    body:
+      type: external
+      policies: "{{ _item_openbao_oidc_read[0]['policies'] }}"
+    status_code: [200, 204]
+
+# The alias is the join. Its name is the value that will appear in the token's
+# groups claim — `admin` or `user`, the client role keycloak_clients created —
+# and its mount accessor is this OIDC method. Without it the group exists,
+# carries a policy, and matches nobody.
+- name: identity | Read the aliases that already exist
+  changed_when: false
+  failed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_alias_ids
+  ansible.builtin.uri:
+    url: "{{ openbao_oidc_url }}/v1/identity/group-alias/id?list=true"
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    status_code: [200, 404]
+
+- name: identity | Read each existing alias
+  changed_when: false
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  register: _reg_openbao_oidc_aliases
+  loop: >-
+    {{ _reg_openbao_oidc_alias_ids['json']['data']['keys'] | default([]) }}
+  loop_control:
+    loop_var: _item_openbao_oidc_alias_id
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_oidc_url }}/v1/identity/group-alias/id/{{
+      _item_openbao_oidc_alias_id }}
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+
+- name: identity | Bind each group to the role name it is granted by
+  when: >-
+    _item_openbao_oidc_bind[0]['alias'] not in _openbao_oidc_bound
+  changed_when: true
+  no_log: "{{ openbao_oidc_no_log | bool }}"
+  loop: >-
+    {{ _var_openbao_oidc_groups
+       | zip(_reg_openbao_oidc_groups['results']) | list }}
+  loop_control:
+    loop_var: _item_openbao_oidc_bind
+    label: >-
+      {{ _item_openbao_oidc_bind[0]['alias'] }} ->
+      {{ _item_openbao_oidc_bind[0]['name'] }}
+  vars:
+    # Aliases already bound to this mount, by name. Scoped to the mount so an
+    # alias of the same name on another auth method is not mistaken for this
+    # one.
+    _openbao_oidc_bound: >-
+      {{ _reg_openbao_oidc_aliases['results'] | default([])
+         | map(attribute='json.data') | selectattr('mount_accessor',
+           'equalto', _var_openbao_oidc_accessor | trim)
+         | map(attribute='name') | list }}
+  ansible.builtin.uri:
+    url: "{{ openbao_oidc_url }}/v1/identity/group-alias"
+    method: POST
+    headers: "{{ _var_openbao_oidc_headers }}"
+    ca_path: "{{ openbao_oidc_ca_file }}"
+    body_format: json
+    body:
+      name: "{{ _item_openbao_oidc_bind[0]['alias'] }}"
+      mount_accessor: "{{ _var_openbao_oidc_accessor | trim }}"
+      canonical_id: "{{ _item_openbao_oidc_bind[1]['json']['data']['id'] }}"
+    status_code: [200, 204]

@@ -1,0 +1,77 @@
+---
+keycloak_ldap_enabled: true
+
+# --- the FreeIPA side ------------------------------------------------------
+keycloak_ldap_ipa_host: core01
+keycloak_ldap_ipa_container: freeipa-server
+keycloak_ldap_base_dn: dc=dev,dc=lo
+keycloak_ldap_users_dn: cn=users,cn=accounts,dc=dev,dc=lo
+# Where FreeIPA keeps user groups. The authorisation half of the federation:
+# ipa_sso_groups creates two groups per application under this subtree, and the
+# group mapper below is what makes them visible to Keycloak.
+keycloak_ldap_groups_dn: cn=groups,cn=accounts,dc=dev,dc=lo
+keycloak_ldap_bind_user: keycloak
+
+# Secrets, sourced from ~/.config/rke2lab/env.sh by the caller.
+# keycloak_ldap_dir_manager_password:
+# keycloak_ldap_bind_password:
+
+# --- the Keycloak side -----------------------------------------------------
+#
+# Set false to create and verify the bind account without touching Keycloak,
+# which is what a cluster whose Keycloak is not yet running needs.
+keycloak_ldap_configure_keycloak: true
+
+keycloak_ldap_url: null
+keycloak_ldap_ca_file: /etc/ssl/certs/ca-certificates.crt
+# The realm the federation is added to, created by keycloak_realm.
+#
+# No default, and specifically not `master`, which is what this was until the
+# realm role existed. Federating end users into master puts them in the realm
+# that administers every other realm and holds Keycloak's own break-glass
+# administrator. A default of `master` is worse than no default at all: a
+# caller that forgets to pass this would federate the domain into exactly the
+# place it must not go, and would do it silently.
+keycloak_ldap_realm: null
+keycloak_ldap_admin_user: admin
+# keycloak_ldap_admin_password:
+keycloak_ldap_provider_name: freeipa
+
+# LDAP rather than LDAPS, and this is a decision rather than an oversight: the
+# connection crosses the internal network between two hosts in the same domain,
+# and terminating it in FIPS strict mode would require Keycloak to hold a BCFKS
+# truststore — a second keystore format to generate and rotate for a hop that
+# never leaves 192.168.2.0/24. Revisit when the boundary changes.
+#
+# `core.dev.lo`, not `core01.dev.lo`. The inventory calls this host core01 and
+# the domain calls it core, and only the second is a name anything can resolve
+# — Keycloak answered the first attempt with `UnknownHost`, which is a DNS
+# failure wearing an LDAP error's clothes.
+keycloak_ldap_connection_url: null
+
+# Keycloak's generated mapper for the `rhds` vendor takes the first name from
+# cn, which in FreeIPA is the full name. givenName is where the given name
+# actually lives.
+keycloak_ldap_first_name_mapper: first name
+keycloak_ldap_first_name_attribute: givenName
+
+# The group mapper.
+#
+# Without it Keycloak knows who someone is and nothing about what they may do,
+# which is half a federation. With it, `ipa group-add-member grafana-users
+# --users alice` is the whole of granting Alice access to Grafana — the group
+# arrives in Keycloak, keycloak_clients has already bound it to a client role,
+# and every service reads the role out of the token.
+keycloak_ldap_group_mapper_enabled: true
+keycloak_ldap_group_mapper_name: freeipa-groups
+
+# Whether to ask the federation to import groups now rather than waiting.
+#
+# Keycloak imports groups on a synchronisation, not on the next login, so a
+# group created in FreeIPA a minute ago is invisible to a client that reads the
+# realm's groups — which is exactly what keycloak_clients does. Left to a
+# periodic sync, the first run after adding an application fails on a group
+# that plainly exists in the directory.
+keycloak_ldap_group_sync: true
+
+keycloak_ldap_no_log: true

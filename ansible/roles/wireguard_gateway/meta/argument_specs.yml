@@ -1,0 +1,48 @@
+---
+argument_specs:
+  main:
+    short_description: WireGuard gateway inputs.
+    options:
+      wireguard_gateway_enabled:
+        type: bool
+        required: false
+      wireguard_gateway_interface:
+        type: str
+        required: false
+      wireguard_gateway_address:
+        type: str
+        required: false
+      wireguard_gateway_listen_port:
+        type: int
+        required: false
+      wireguard_gateway_private_key:
+        type: str
+        required: false
+      wireguard_gateway_peer_public_key:
+        type: str
+        required: false
+      wireguard_gateway_peer_endpoint:
+        type: str
+        required: false
+      wireguard_gateway_peer_allowed_ips:
+        type: list
+        elements: str
+        required: false
+      wireguard_gateway_peer_persistent_keepalive:
+        type: int
+        required: false
+      wireguard_gateway_ip_forward_enabled:
+        type: bool
+        required: false
+      wireguard_gateway_manage_firewall_nat:
+        type: bool
+        required: false
+      wireguard_gateway_nat_source_cidr:
+        type: str
+        required: false
+      wireguard_gateway_nat_out_interface:
+        type: str
+        required: false
+      wireguard_gateway_internal_subnet:
+        type: str
+        required: false

@@ -1,0 +1,23 @@
+---
+helm_cli_enabled: true
+
+# Where the binary lands. repo01 is the only host that runs it, and it runs it
+# as root from Ansible, so /usr/local/bin rather than a user directory.
+helm_cli_bin_dir: /usr/local/bin
+
+# Helm 3, deliberately, on a host where Helm 4 is available.
+#
+# This host never installs a chart — it pulls one and pushes it into the GitLab
+# registry, and the cluster's helm-controller is what renders it. Helm 3 is what
+# every chart in the artifact set is packaged and tested against, and the push
+# path is the one place where a media-type difference between major versions
+# would be invisible here and only fail later, inside the cluster, as a chart
+# the source-controller cannot read.
+helm_cli_version: 3.21.4
+helm_cli_url: null
+helm_cli_sha256: >-
+  61f88ab166748cb19604d7884cb100ae9ccb13804ddeb98e08af167eacbb6a14
+
+# The archive nests the binary under a platform directory, so unpacking needs
+# to know the name rather than assuming the file is at the root.
+helm_cli_archive_member: linux-amd64/helm

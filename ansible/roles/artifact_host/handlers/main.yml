@@ -1,0 +1,10 @@
+---
+- name: Reload Apache
+  ansible.builtin.systemd:
+    name: "{{ _var_artifact_host_service }}"
+    state: reloaded
+
+- name: Restart Apache
+  ansible.builtin.systemd:
+    name: "{{ _var_artifact_host_service }}"
+    state: restarted

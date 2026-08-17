@@ -1,0 +1,17 @@
+---
+- name: images | Ensure the image export scratch directory exists
+  ansible.builtin.file:
+    path: "{{ artifact_stage_work_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: images | Publish each container image as a loadable tarball
+  loop: "{{ _var_artifact_stage_images }}"
+  loop_control:
+    loop_var: _item_artifact_stage_image
+    label: >-
+      {{ _item_artifact_stage_image['name'] }}
+      (phase {{ _item_artifact_stage_image['phase'] }})
+  ansible.builtin.include_tasks: image_publish.yml

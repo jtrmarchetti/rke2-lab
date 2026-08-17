@@ -1,0 +1,4 @@
+name: proxmox-lab
+runtime:
+  name: python
+description: Proxmox VM lifecycle for dev.lo lab phases

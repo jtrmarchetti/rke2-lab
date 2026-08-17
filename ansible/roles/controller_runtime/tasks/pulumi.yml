@@ -1,0 +1,98 @@
+---
+# The CLI that creates every VM in the environment, and the project virtual
+# environment that holds the Proxmox provider.
+#
+# Both were prose in plan/CONTROLLER.md's cold start until now, which made the
+# IaC half of a rebuild depend on someone remembering two commands — on the one
+# host whose loss makes everything else unrebuildable.
+
+- name: pulumi | Read the version already installed here
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  register: _reg_controller_runtime_pulumi
+  ansible.builtin.command:
+    cmd: "{{ _var_controller_runtime_pulumi_bin }}/pulumi version"
+
+- name: pulumi | Download and install the pinned release
+  when: >-
+    _reg_controller_runtime_pulumi['rc'] != 0
+    or controller_runtime_pulumi_version
+       not in _reg_controller_runtime_pulumi['stdout']
+  block:
+    - name: pulumi | Create a scratch directory for the download
+      register: _reg_controller_runtime_tmp
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: pulumi
+
+    # checksum: is the integrity control rather than a note — get_url fails the
+    # task when it does not match, so a tampered or truncated download never
+    # reaches the unpack below. The value is the one Pulumi publishes in
+    # pulumi-<version>-checksums.txt for this release.
+    - name: pulumi | Download the release tarball
+      ansible.builtin.get_url:
+        url: "{{ controller_runtime_pulumi_url | trim }}"
+        dest: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi.tar.gz"
+        checksum: "sha256:{{ controller_runtime_pulumi_sha256 | trim }}"
+        mode: "0644"
+
+    - name: pulumi | Unpack the release
+      ansible.builtin.unarchive:
+        src: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi.tar.gz"
+        dest: "{{ _reg_controller_runtime_tmp['path'] }}"
+        remote_src: true
+
+    - name: pulumi | Ensure the install directory exists
+      ansible.builtin.file:
+        path: "{{ _var_controller_runtime_pulumi_bin }}"
+        state: directory
+        mode: "0755"
+
+    # The tarball contains a single pulumi/ directory of binaries, and the
+    # conventional install is that directory as ~/.pulumi/bin — which is what
+    # Pulumi's own installer produces and what every Pulumi document assumes is
+    # on PATH. Copied rather than unpacked straight there so a failed or
+    # truncated extraction cannot leave a half-replaced CLI in place.
+    - name: pulumi | Install the binaries
+      ansible.builtin.copy:
+        src: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi/"
+        dest: "{{ _var_controller_runtime_pulumi_bin }}/"
+        remote_src: true
+        mode: "0755"
+  always:
+    - name: pulumi | Remove the scratch directory
+      when: >-
+        (_reg_controller_runtime_tmp['path'] | default('') | length) > 0
+      ansible.builtin.file:
+        path: "{{ _reg_controller_runtime_tmp['path'] | default('') }}"
+        state: absent
+
+# Separate from the automation virtual environment on purpose: this one tracks
+# the Proxmox provider and the Pulumi SDK, that one tracks Ansible, and pinning
+# them together would mean an Ansible upgrade forcing a provider upgrade.
+#
+# The provider plugin itself is not installed here. The CLI downloads it on
+# first use into its own plugin cache, which is the only path Pulumi supports.
+- name: pulumi | Ensure the project virtual environment has pinned packages
+  ansible.builtin.pip:
+    requirements: >-
+      {{ [controller_runtime_repo_dir,
+          controller_runtime_pulumi_project_requirements] | path_join }}
+    virtualenv: >-
+      {{ [controller_runtime_repo_dir,
+          controller_runtime_pulumi_project_venv] | path_join }}
+    virtualenv_command: "{{ controller_runtime_venv_command }}"
+
+# Proves the CLI runs, which the download alone does not: an architecture
+# mismatch or a missing loader shows up here rather than on the first `pulumi
+# up` of a rebuild.
+- name: pulumi | Prove the installed CLI reports the pinned version
+  when: not ansible_check_mode
+  changed_when: false
+  failed_when: >-
+    controller_runtime_pulumi_version
+    not in _reg_controller_runtime_pulumi_check['stdout']
+  register: _reg_controller_runtime_pulumi_check
+  ansible.builtin.command:
+    cmd: "{{ _var_controller_runtime_pulumi_bin }}/pulumi version"

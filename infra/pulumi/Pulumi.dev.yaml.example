@@ -1,0 +1,34 @@
+config:
+  proxmox:endpoint: https://192.168.1.16:8006/
+  proxmox:username: root@pam
+  proxmox:insecure: true
+
+  deployment:phaseLimit: 2
+  # Optional: if omitted, the stack downloads and imports Ubuntu 24.04 cloud image.
+  # deployment:templateVmId: 9000
+  deployment:templateNodeName: proxmox-kube
+  deployment:imageDatastoreId: local
+  deployment:datastoreId: local-lvm
+  deployment:cloudInitDatastoreId: local-lvm
+  # For lvmthin, leave unset (provider/proxmox defaults), or set to raw if needed.
+  # deployment:diskFileFormat: raw
+  deployment:externalBridge: vmbr0
+  deployment:internalBridge: vmbr1
+  deployment:manageInternalBridge: true
+  # Leave empty for an isolated internal-only bridge with no uplink ports.
+  # deployment:internalBridgePorts: []
+  # Optional temporary bootstrap override if vmbr1 is not ready yet.
+  # deployment:allowSharedBridge: true
+  deployment:vmUsername: devops
+  deployment:vmDomain: dev.lo
+
+  # Optional cloud image override when no templateVmId is set.
+  # deployment:baseImageUrl: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+  # deployment:baseImageFileName: noble-server-cloudimg-amd64.qcow2
+
+  # Either set deployment:vmSshPublicKey or VM_SSH_PUBLIC_KEY.
+  # deployment:vmSshPublicKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
+
+  # Optional explicit selection. If set, this overrides phaseLimit.
+  # deployment:selectedVmKeys:
+  #   - repo01

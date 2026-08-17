@@ -1,0 +1,65 @@
+---
+# From the cluster, not from the internet. The binary a node is running is by
+# definition the right version, needs no checksum maintained in this repository,
+# and cannot drift from the cluster the way a pinned download would.
+
+# `--client` so this does not need a reachable cluster to answer. Asking the
+# full version would make installing the client depend on the API being up,
+# which is backwards: the client is what you reach for when it is not.
+- name: kubectl | Read the version already installed here
+  changed_when: false
+  failed_when: false
+  register: _reg_kube_cli_controller_local
+  ansible.builtin.command:
+    cmd: "{{ kube_cli_controller_bin_dir }}/kubectl version --client"
+
+- name: kubectl | Copy the binary from the cluster node
+  when: >-
+    _reg_kube_cli_controller_local['rc'] != 0
+    or kube_cli_controller_kubectl_version
+       not in _reg_kube_cli_controller_local['stdout']
+  become: true
+  delegate_to: "{{ kube_cli_controller_kubectl_source_host }}"
+  ansible.builtin.fetch:
+    src: "{{ kube_cli_controller_kubectl_source_path }}"
+    dest: "{{ kube_cli_controller_bin_dir }}/kubectl"
+    flat: true
+
+# fetch does not set a mode, so a freshly copied binary arrives without its
+# execute bit and the next task to run it fails with "permission denied" on a
+# file that is plainly there.
+- name: kubectl | Ensure the binary is executable
+  ansible.builtin.file:
+    path: "{{ kube_cli_controller_bin_dir }}/kubectl"
+    mode: "0755"
+
+# Generated every run so it can never fall behind the binary, then copied into
+# place so the run only reports a change when the content actually differs.
+# Writing the redirect straight at the destination would make every run report
+# changed, and "a second run reports no changes" is a rule this repository
+# holds itself to — a role that always lies about changing something makes real
+# drift impossible to see.
+#
+# Via a file rather than a registered variable: copy's `content` is templated,
+# and 15 kB of generated bash is not something to hand to Jinja.
+- name: kubectl | Generate the shell completion
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: >-
+      {{ kube_cli_controller_bin_dir }}/kubectl completion bash
+      > {{ kube_cli_controller_config_dir }}/.kubectl-completion.new
+
+- name: kubectl | Install the completion only if it changed
+  ansible.builtin.copy:
+    src: "{{ kube_cli_controller_config_dir }}/.kubectl-completion.new"
+    dest: "{{ kube_cli_controller_config_dir }}/kubectl-completion.bash"
+    remote_src: true
+    mode: "0644"
+
+# changed_when: false because this removes a file this role created moments
+# ago, not anything describing the state of the host.
+- name: kubectl | Remove the generated scratch file
+  changed_when: false
+  ansible.builtin.file:
+    path: "{{ kube_cli_controller_config_dir }}/.kubectl-completion.new"
+    state: absent

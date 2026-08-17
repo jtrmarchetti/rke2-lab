@@ -1,0 +1,93 @@
+{{ ansible_managed | comment }}
+# The controller that hands out LoadBalancer addresses, and the pool it hands
+# them out from.
+#
+# The range is 192.168.2.40-52, thirteen addresses carved out of the internal
+# subnet below the node addresses and above nothing else: .4 is FreeIPA, .20 is
+# the API VIP, .21-.23 and .31-.33 are the nodes, .99 is repo01. Nothing else
+# on this network hands out addresses — there is no DHCP here — so the pool is
+# safe by construction rather than by reservation.
+#
+# Two addresses are spoken for by name, and both are requested explicitly by the
+# services that use them, because both are things something outside the cluster
+# is configured to reach:
+#
+#   192.168.2.40  the cluster's DNS, which FreeIPA forwards k8s.dev.lo to
+#   192.168.2.41  Traefik, which every ingress hostname resolves to
+#
+# The rest are allocated in order to whatever asks.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubevip
+  namespace: kube-system
+data:
+  range-global: {{ gitops_source_lb_range }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-vip-cloud-controller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:kube-vip-cloud-controller-role
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services", "services/status"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:kube-vip-cloud-controller-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-vip-cloud-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: kube-vip-cloud-controller
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-vip-cloud-provider
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-vip-cloud-provider
+  template:
+    metadata:
+      labels:
+        app: kube-vip-cloud-provider
+    spec:
+      serviceAccountName: kube-vip-cloud-controller
+      containers:
+        - name: kube-vip-cloud-provider
+          image: ghcr.io/kube-vip/kube-vip-cloud-provider:v0.0.12
+          imagePullPolicy: IfNotPresent
+          command:
+            - /kube-vip-cloud-provider
+            - --leader-elect-resource-name=kube-vip-cloud-controller
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

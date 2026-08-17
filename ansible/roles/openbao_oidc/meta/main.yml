@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: openbao_oidc
+  author: rke2lab
+  description: >-
+    Adds an OIDC login path to OpenBao against Keycloak, strictly beside the
+    root token rather than instead of it. Neither policy it writes can seal,
+    rekey, or change who may log in, so the vault stays openable on the day the
+    identity provider is the thing that is broken.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - openbao
+    - oidc
+    - sso
+
+dependencies: []

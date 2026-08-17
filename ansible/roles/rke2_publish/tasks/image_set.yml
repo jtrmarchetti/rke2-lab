@@ -1,0 +1,107 @@
+---
+# Publishes one image set — either an RKE2 release tarball described by its own
+# list file, or a single image staged on its own.
+
+- name: image_set | Read the release image list
+  when: _item_rke2_publish_set['list'] is defined
+  register: _reg_rke2_publish_set_list
+  ansible.builtin.slurp:
+    src: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}"
+
+# An entry with a list file publishes everything the release says that tarball
+# contains; an entry without one publishes the single image it names. Deriving
+# the set from `docker load` output instead would make the published set depend
+# on how the runtime happens to format its result.
+- name: image_set | Determine what this set should publish
+  ansible.builtin.set_fact:
+    _rke2_publish_set_sources: >-
+      {{ (_reg_rke2_publish_set_list['content'] | b64decode).splitlines()
+         | map('trim') | select | list
+         if _item_rke2_publish_set['list'] is defined
+         else [_item_rke2_publish_set['image']] }}
+
+- name: image_set | Assert every source image names its registry
+  loop: "{{ _rke2_publish_set_sources }}"
+  loop_control:
+    loop_var: _item_rke2_publish_source
+  ansible.builtin.assert:
+    that:
+      - (_item_rke2_publish_source.split('/') | length) > 2
+      - _item_rke2_publish_source.split('/')[0] is search('[.:]')
+      - (_item_rke2_publish_source.split('/') | last) is search(':')
+    fail_msg: >-
+      '{{ _item_rke2_publish_source }}' in set '{{ _item_rke2_publish_set['name'] }}' is not a fully
+      qualified image reference. The registry host is stripped to build the
+      GitLab path, and the containerd rewrite rule has to match what was
+      pushed, so a bare name here would publish to a path no node asks for.
+    quiet: true
+
+# The upstream reference minus its registry host, under the GitLab project path.
+# This is the same transformation the containerd rewrite rule in registries.yaml
+# performs, which is why the two must be changed together.
+- name: image_set | Determine what is missing from the registry
+  ansible.builtin.set_fact:
+    _rke2_publish_set_missing: >-
+      {{ _rke2_publish_set_sources
+         | zip(_rke2_publish_set_sources
+               | map('regex_replace', '^[^/]+/(.*)$',
+                     _var_rke2_publish_registry_prefix ~ '/\1')
+               | list)
+         | rejectattr(1, 'in', _var_rke2_publish_existing_refs)
+         | map(attribute=0) | list }}
+
+- name: image_set | Report this set
+  ansible.builtin.debug:
+    msg: >-
+      {{ _item_rke2_publish_set['name'] }}:
+      {{ _rke2_publish_set_missing | length }} of
+      {{ _rke2_publish_set_sources | length }} images to publish
+    verbosity: 0
+
+- name: image_set | Load and push the missing images
+  when: (_rke2_publish_set_missing | length) > 0
+  block:
+    - name: image_set | Log in to the registry with push rights
+      no_log: "{{ rke2_publish_no_log | bool }}"
+      community.docker.docker_login:
+        registry_url: "{{ rke2_publish_registry_host }}"
+        username: root
+        password: "{{ rke2_publish_root_password }}"
+
+    # Docker 23 and later read zstd-compressed archives directly, so the release
+    # tarball is loaded exactly as it was published rather than decompressed to
+    # a second copy on /data1 first.
+    - name: image_set | Load the staged tarball
+      register: _reg_rke2_publish_loaded
+      community.docker.docker_image_load:
+        path: >-
+          {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}
+
+    # Compared against the local name, not the reference in the list file.
+    # Docker drops the `docker.io/` prefix from an image's local name, so
+    # `docker.io/rancher/rke2-runtime:v1.35.7-rke2r1` loads and is thereafter
+    # called `rancher/rke2-runtime:v1.35.7-rke2r1`. A literal comparison against
+    # the release list reports every core image as missing from a tarball that
+    # does in fact contain all of them.
+    - name: image_set | Assert the tarball contained what the list promised
+      loop: "{{ _rke2_publish_set_missing }}"
+      loop_control:
+        loop_var: _item_rke2_publish_missing
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_item_rke2_publish_missing | regex_replace('^docker\.io/', ''))
+            in _reg_rke2_publish_loaded['image_names']
+        fail_msg: >-
+          {{ _item_rke2_publish_set['tarball'] }} does not contain '{{ _item_rke2_publish_missing }}',
+          which its own list file names. The tarball and the list come from the
+          same release and must agree; if they do not, one of them was staged
+          against a different version.
+        quiet: true
+
+    - name: image_set | Publish each missing image
+      loop: "{{ _rke2_publish_set_missing }}"
+      loop_control:
+        loop_var: _item_rke2_publish_image
+        label: "{{ _item_rke2_publish_image }}"
+      ansible.builtin.include_tasks: image_push.yml

@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: rke2_publish
+  author: rke2lab
+  description: >-
+    Publishes the staged RKE2 artifact set from the repo host into GitLab —
+    container images to the container registry, installer and binaries to the
+    generic package registry — and mints the read-only deploy token the cluster
+    nodes pull with.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - gitlab
+    - registry
+
+collections:
+  - community.docker
+
+dependencies: []

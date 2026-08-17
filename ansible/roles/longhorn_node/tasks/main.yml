@@ -1,0 +1,86 @@
+---
+# Host prerequisites for Longhorn, on the nodes that will run it.
+#
+# Longhorn is a CSI driver that builds block devices out of files on a local
+# filesystem and exports them over iSCSI, so the initiator is not an optional
+# extra — without a running iscsid the driver installs cleanly, the volumes
+# provision, and every attach fails. NFS is the same story for ReadWriteMany
+# volumes, which use an NFS share exported by the share-manager pod.
+#
+# The disk itself is not this role's business. `/var/lib/longhorn` is a
+# dedicated 100 GB virtual disk mounted by the data_volume role in Phase 5;
+# see plan/PHASE5_IMPLEMENTATION.md.
+
+- name: main | Ensure the storage prerequisites are installed
+  when: (longhorn_node_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ longhorn_node_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: main | Ensure the iSCSI initiator is running and enabled
+  when: (longhorn_node_enabled | bool)
+  ansible.builtin.systemd_service:
+    name: "{{ longhorn_node_iscsi_service }}"
+    state: started
+    enabled: true
+
+# multipathd claims any block device it finds, Longhorn's included, and the
+# result is a volume that attaches and then cannot be mounted because something
+# else already holds it. The upstream troubleshooting guide's first entry.
+# Blacklisting by device node rather than disabling the daemon, so a host that
+# genuinely has multipathed storage keeps it.
+# The directory, not just the file: multipath-tools is not installed here, so
+# nothing else creates it. Writing the drop-in anyway means a host that gains
+# multipathd later gains it already configured, rather than gaining a fault.
+- name: main | Ensure the multipath configuration directory exists
+  when:
+    - (longhorn_node_enabled | bool)
+    - (longhorn_node_multipath_blacklist | bool)
+  ansible.builtin.file:
+    path: "{{ longhorn_node_multipath_conf | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: main | Ensure multipath ignores Longhorn's devices
+  when:
+    - (longhorn_node_enabled | bool)
+    - (longhorn_node_multipath_blacklist | bool)
+  register: _reg_longhorn_node_multipath
+  notify: Restart multipathd
+  ansible.builtin.template:
+    src: "{{ _var_longhorn_node_files_dir }}/longhorn-blacklist.conf.j2"
+    dest: "{{ longhorn_node_multipath_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# The mount itself is Phase 5's work; proving it is this role's, because
+# Longhorn cannot tell the difference. Given a plain directory it provisions
+# happily and fills the OS disk, which is the failure OVERVIEW.md already
+# states as a rule.
+- name: main | Check the Longhorn data directory is a separate filesystem
+  when: (longhorn_node_enabled | bool)
+  changed_when: false
+  failed_when: false
+  register: _reg_longhorn_node_mount
+  ansible.builtin.command:
+    cmd: >-
+      findmnt --noheadings --output SOURCE
+      --target {{ longhorn_node_data_path }}
+
+- name: main | Assert the Longhorn data directory is on its own volume
+  when: (longhorn_node_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - _reg_longhorn_node_mount['rc'] == 0
+      - longhorn_node_root_device not in _reg_longhorn_node_mount['stdout']
+    fail_msg: >-
+      {{ longhorn_node_data_path }} is not on a separate filesystem — findmnt
+      reports '{{ _reg_longhorn_node_mount['stdout'] | trim }}'. Longhorn would
+      write replicas onto the OS disk, which is the failure plan/OVERVIEW.md
+      states as a rule: the OS disk is for the OS.
+    quiet: true

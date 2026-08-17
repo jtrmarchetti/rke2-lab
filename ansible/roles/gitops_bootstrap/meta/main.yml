@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: gitops_bootstrap
+  author: rke2lab
+  description: >-
+    Attaches the cluster to the cluster-state repository without the Flux CLI.
+    Creates a read-only project deploy token, restores the Sealed Secrets
+    sealing key, installs the vendored Flux components, writes the repository
+    credential into the cluster, and applies the GitRepository and root
+    Kustomization that gitops_source rendered.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - gitops
+    - flux
+    - gitlab
+    - kubernetes
+
+dependencies: []

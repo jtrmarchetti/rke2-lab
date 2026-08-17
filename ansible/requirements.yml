@@ -1,0 +1,37 @@
+---
+# Install with: ansible-galaxy collection install -r ansible/requirements.yml
+#
+# Or, more usefully, let something else do it: bootstrap/controller-bootstrap.sh
+# installs this file on a bare host, and the controller_runtime role reconciles
+# it on every run into the one path ANSIBLE_COLLECTIONS_PATH names.
+#
+# Pinned exactly rather than floored, as of 2026-08-16. A ">=" floor records
+# what was tested against nothing in particular: the version that installs on a
+# rebuild is then whatever Galaxy published most recently, which is the one
+# thing nobody has run this repository against. Upgrading is editing a line
+# here, which is a reviewable change with a date on it.
+collections:
+  # docker_image_pull / _tag / _export for staging image tarballs, and
+  # docker_compose_v2 for the containerized services.
+  - name: community.docker
+    version: "5.0.6"
+  # mount, for the persistent /data1 fstab entry.
+  - name: ansible.posix
+    version: "2.1.0"
+  # filesystem, for creating the data volume; apache2_module; and
+  # ansible_galaxy_install, which is how controller_runtime reconciles this
+  # very file.
+  - name: community.general
+    version: "12.4.0"
+  # openssl_privatekey / openssl_csr, for the intermediate CA the cluster's
+  # cert-manager signs with. Phase 6b: the key is generated on the controller
+  # and never leaves it in plaintext, so the generation has to happen here
+  # rather than on a managed host.
+  - name: community.crypto
+    version: "3.1.1"
+
+# kubernetes.core is deliberately absent. It was installed on this controller by
+# hand for something that never landed, and nothing under ansible/ imports it —
+# an undeclared collection is exactly the kind of undocumented dependency this
+# file exists to eliminate. A rebuilt controller will not have it, which is the
+# intended answer; a future phase that wants it declares it here first.

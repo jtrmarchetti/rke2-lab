@@ -1,0 +1,145 @@
+---
+rke2_publish_enabled: true
+
+# GitLab endpoints. Both names are served by the same container on repo01 and
+# selected on SNI; see the gitlab role.
+rke2_publish_gitlab_url: null
+rke2_publish_registry_host: null
+
+# Where the artifact set lands in GitLab. Container images go to one project and
+# generic packages to another, so the container registry's growth and the
+# package registry's growth are visible separately.
+rke2_publish_group: rke2
+rke2_publish_images_project: images
+rke2_publish_packages_project: packages
+# Phase 6b. Helm charts, pushed as OCI artifacts. A third project rather than a
+# folder inside images, so that chart traffic and image traffic are separately
+# visible and a chart can never collide with an image path a rewrite rule owns.
+rke2_publish_charts_project: charts
+
+# Admin credential used to create the group, the projects, and the deploy token,
+# and to push images. No default: a wrong or empty password here would fail
+# halfway through a push rather than at the start.
+# rke2_publish_root_password:
+
+# The read-only credential nodes pull with. Group-scoped and read-only, so a
+# node holds nothing that can write to GitLab.
+rke2_publish_deploy_token_name: rke2-nodes
+
+# Two separate permissions, and a node needs both: read_registry governs the
+# container registry, read_package_registry governs the generic package
+# registry, and a token missing the second gets a 404 on the installer rather
+# than a 403. Widening this list replaces the existing token on the next run.
+rke2_publish_deploy_token_scopes:
+  - read_registry
+  - read_package_registry
+
+# The API returns a deploy token's value exactly once, so it is recorded here
+# for later runs and for the consuming node role to read. Outside the repository
+# tree, on the data volume, mode 0600.
+rke2_publish_deploy_token_file: /data1/gitlab/rke2-deploy-token.yml
+
+# Set both to use an existing credential instead of minting one. Empty means
+# "mint and record". See plan/SECRETS.md.
+rke2_publish_deploy_token_username: ""
+rke2_publish_deploy_token_value: ""
+
+# The staged artifact directory this role reads from. Must be under the artifact
+# host document root, because artifact_stage put it there.
+rke2_publish_artifact_dir: /data1/artifacts/rke2
+
+# The artifact set this role publishes, and the root it was staged under. Both
+# describe work the artifact_stage role did, so the caller passes the same
+# values it gave that role; this role does not reach into its namespace to
+# read them. No default: publishing against a manifest this role guessed at
+# would push a set nobody staged.
+rke2_publish_manifest: null
+rke2_publish_artifact_root: null
+
+# Image sets to publish. Each entry pairs a saved tarball with the release's own
+# list of what that tarball contains; the list is what drives the retag and push
+# so the set is never inferred from runtime output.
+rke2_publish_image_sets:
+  - name: core
+    tarball: rke2-images-core.linux-amd64.tar.zst
+    list: rke2-images-core.linux-amd64.txt
+  - name: cilium
+    tarball: rke2-images-cilium.linux-amd64.tar.zst
+    list: rke2-images-cilium.linux-amd64.txt
+  # Phase 5. A separate release asset because Traefik is deliberately not in
+  # the core tarball, which is exactly the case the vendor calls out for
+  # air-gapped installs. One image, and it is a docker.io/rancher/* name, so the
+  # existing containerd rewrite already covers it.
+  - name: traefik
+    tarball: rke2-images-traefik.linux-amd64.tar.zst
+    list: rke2-images-traefik.linux-amd64.txt
+
+# Single images that are not part of an RKE2 release and therefore have no list
+# file. `image` must equal the tag inside the tarball.
+rke2_publish_extra_images:
+  - name: kube-vip
+    tarball: kube-vip-v1.2.2.tar
+    image: ghcr.io/kube-vip/kube-vip:v1.2.2
+
+# Images mirrored registry to registry with skopeo, never staged on this host.
+# Defaults to the mirror entries in the artifact manifest; see mirror.yml for
+# why this path exists alongside the tarball one.
+rke2_publish_mirror_images: "{{ _var_rke2_publish_manifest_mirrors }}"
+rke2_publish_skopeo_package: skopeo
+rke2_publish_skopeo_binary: /usr/bin/skopeo
+# Passed to skopeo. An internal link and a registry on the same host, so a
+# retry here covers a restarting GitLab rather than a flaky network.
+rke2_publish_mirror_retries: 3
+
+# Helm charts to publish, Phase 6b. Each entry names the chart as the registry
+# will hold it — `name` and `version` become the OCI repository and tag, and
+# must equal what the chart's own Chart.yaml declares, because helm derives the
+# push target from the tarball rather than from what it is told. `dest` is the
+# manifest path the chart was staged to.
+#
+# Empty by default: a cluster with no charts to mirror does no chart work.
+rke2_publish_chart_sets: []
+
+# The Helm binary, installed by the helm_cli role. Charts are pushed with helm
+# rather than with a generic OCI client because the media types a chart needs
+# are helm's own.
+rke2_publish_helm_binary: /usr/local/bin/helm
+
+# Generic package registry contents. The version is validated by GitLab as
+# semver, so the RKE2 release's `+rke2r1` is build metadata and the leading `v`
+# of the git tag is dropped.
+rke2_publish_package_name: rke2
+rke2_publish_package_version: 1.35.7+rke2r1
+rke2_publish_package_files:
+  - install.sh
+  - rke2.linux-amd64.tar.gz
+  - sha256sum-amd64.txt
+
+# Bounds a single image push rather than the run. The largest layer here is a
+# hardened Kubernetes image over an internal link, not a slow one.
+rke2_publish_push_timeout: 900
+
+# Whether a published transit artifact's local copy is removed from the Apache
+# document root. See the retention model in plan/OVERVIEW.md. False keeps the
+# old behaviour of staging everything and keeping it forever.
+rke2_publish_apply_retention: true
+
+# Suppresses task output that would expose the admin token, the deploy token
+# and the registry credentials. Set false only when debugging: a failure in
+# any of the API tasks below is otherwise reported with its body censored,
+# which hides the status code that says what went wrong.
+rke2_publish_no_log: true
+
+# How long a GitLab API call may take. The default of 30 seconds is not enough
+# for the registry: `registry/repositories?tags=true` enumerates the tags of
+# every repository in the project, which on a full RKE2 image set is around
+# seventy of them, and the call routinely runs past thirty seconds on a lab
+# host. Exceeding it fails the run with a connection timeout rather than an
+# HTTP status, so the cause reads as a network fault instead of a slow query.
+rke2_publish_api_timeout: 180
+
+# The registry read above is the one call worth retrying: it changes nothing,
+# it is the slowest in the role, and a single slow response should not fail a
+# publish that has nothing to do.
+rke2_publish_api_retries: 3
+rke2_publish_api_delay: 10

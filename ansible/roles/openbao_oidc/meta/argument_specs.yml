@@ -1,0 +1,117 @@
+---
+argument_specs:
+  main:
+    short_description: Add an OIDC login path to OpenBao beside the root token
+    description:
+      - Enables the OIDC auth method against a Keycloak realm, writes two
+        policies, and binds each to an external identity group matched on the
+        client role that arrives in the token.
+      - Additive by construction. The root token is never replaced, and neither
+        policy can seal, unseal, rekey, or alter an auth method or policy —
+        the vault holds Keycloak's own database password, so an OIDC-only vault
+        could not be opened on the day it is most needed.
+      - Asserts at the end that the root token still carries the root policy.
+    options:
+      openbao_oidc_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      openbao_oidc_url:
+        type: str
+        required: true
+        description: The vault's API, through its ingress.
+      openbao_oidc_ca_file:
+        type: str
+        description: CA bundle the vault's certificate is verified against.
+      openbao_oidc_root_token:
+        type: str
+        required: true
+        description:
+          - Root token, written to the controller environment by openbao_init.
+            Used, never replaced.
+      openbao_oidc_issuer:
+        type: str
+        required: true
+        description:
+          - Keycloak realm issuer URL, as a browser sees it. Must match the
+            `iss` claim; the in-cluster service address would not.
+      openbao_oidc_client_id:
+        type: str
+        default: openbao
+        description: The client id keycloak_clients created.
+      openbao_oidc_client_secret:
+        type: str
+        required: true
+        description: That client's authored secret, from env.sh.
+      openbao_oidc_discovery_ca_file:
+        type: str
+        required: true
+        description:
+          - Path on the controller to the domain CA, handed to the vault as
+            oidc_discovery_ca_pem. The OpenBao container's trust store does not
+            hold it, and without it the write fails with
+            `error checking oidc discovery URL` — an error that mentions no
+            certificate.
+      openbao_oidc_groups_claim:
+        type: str
+        default: roles
+        description:
+          - Token claim the client roles arrive in. Must equal
+            keycloak_clients_roles_claim.
+      openbao_oidc_redirect_uris:
+        type: list
+        elements: str
+        description:
+          - Callback paths on the vault itself, relative to its URL.
+      openbao_oidc_cli_redirect_uri:
+        type: str
+        description:
+          - Absolute callback for `bao login -method=oidc`, which listens on
+            the operator's own machine. Without it the vault can be reached
+            from the UI and not from a terminal.
+      openbao_oidc_mount:
+        type: str
+        default: oidc
+        description: Path the auth method is mounted at.
+      openbao_oidc_role_name:
+        type: str
+        default: default
+        description: The OIDC role a login uses.
+      openbao_oidc_admin_role:
+        type: str
+        default: admin
+        description:
+          - Client role that grants the administrator policy. Matches
+            keycloak_clients_admin_role.
+      openbao_oidc_user_role:
+        type: str
+        default: user
+        description: Client role that grants the read-only policy.
+      openbao_oidc_admin_policy:
+        type: str
+        default: sso-admins
+        description: Name of the administrator policy.
+      openbao_oidc_user_policy:
+        type: str
+        default: sso-users
+        description: Name of the read-only policy.
+      openbao_oidc_kv_path:
+        type: str
+        default: kv
+        description:
+          - Mount path of the KV engine the policies are written against. Must
+            equal openbao_config_kv_path.
+      openbao_oidc_token_ttl:
+        type: str
+        default: 1h
+        description: Lifetime of a token issued by an OIDC login.
+      openbao_oidc_token_max_ttl:
+        type: str
+        default: 8h
+        description: Longest that token can be renewed to.
+      openbao_oidc_no_log:
+        type: bool
+        default: true
+        description:
+          - Set false only when debugging; it prints the root token and the
+            client secret.

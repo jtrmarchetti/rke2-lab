@@ -1,0 +1,94 @@
+---
+- name: main | Ensure chrony is installed
+  when: (time_sync_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ time_sync_packages }}"
+    state: present
+
+# Installing chrony displaces systemd-timesyncd on Ubuntu — the two conflict, and
+# chrony's packaging removes the unit and masks the name. Acting on it by name
+# then fails, because a masked name with no unit file cannot be loaded.
+#
+# The unit file on disk is the honest test. service_facts is not: it lists the
+# masked name, so a check against it passes and the next task still fails.
+- name: main | Check whether systemd-timesyncd is installed
+  when:
+    - (time_sync_enabled | bool)
+    - (time_sync_manage_timesyncd | bool)
+  register: _reg_time_sync_timesyncd
+  ansible.builtin.stat:
+    path: "{{ _var_time_sync_timesyncd_unit }}"
+
+# One time daemon per host. timesyncd is a client only, so leaving it running
+# beside chrony means two things adjusting the same clock.
+- name: main | Ensure systemd-timesyncd is not running
+  when:
+    - (time_sync_enabled | bool)
+    - (time_sync_manage_timesyncd | bool)
+    - (_reg_time_sync_timesyncd.stat.exists | default(false))
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    state: stopped
+    enabled: false
+    masked: true
+
+- name: main | Ensure the chrony configuration is present
+  when: (time_sync_enabled | bool)
+  notify: Restart chrony
+  ansible.builtin.template:
+    src: "{{ _var_time_sync_files_dir }}/chrony.conf.j2"
+    dest: "{{ _var_time_sync_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Ensure chrony is running and enabled
+  when:
+    - (time_sync_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_time_sync_service_name }}"
+    state: started
+    enabled: true
+
+- name: main | Flush handlers so the check below tests the current configuration
+  ansible.builtin.meta: flush_handlers
+
+# A running chronyd that reaches none of its sources keeps the host's clock
+# wrong, and clock skew breaks Kerberos before it breaks anything else. Poll
+# until a source is actually selected rather than trusting that the unit
+# started.
+- name: main | Wait for a time source to be reachable
+  when:
+    - (time_sync_enabled | bool)
+    - (time_sync_sources | length) > 0
+    - not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  register: _reg_time_sync_sources_state
+  until: >-
+    ('^*' in (_reg_time_sync_sources_state.stdout | default('')))
+    or ('^+' in (_reg_time_sync_sources_state.stdout | default('')))
+    or (not (time_sync_require_source | bool))
+  retries: "{{ time_sync_ready_retries }}"
+  delay: "{{ time_sync_ready_delay }}"
+  ansible.builtin.command:
+    cmd: chronyc -n sources
+
+- name: main | Assert a time source was selected
+  when:
+    - (time_sync_enabled | bool)
+    - (time_sync_require_source | bool)
+    - (time_sync_sources | length) > 0
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('^*' in (_reg_time_sync_sources_state.stdout | default('')))
+        or ('^+' in (_reg_time_sync_sources_state.stdout | default('')))
+    fail_msg: >-
+      chronyd is running but selected no time source. Clock skew breaks Kerberos
+      authentication before anything else shows a symptom. Sources configured:
+      {{ time_sync_sources | join(', ') }}. Inspect with: chronyc -n sources -v
+    quiet: true

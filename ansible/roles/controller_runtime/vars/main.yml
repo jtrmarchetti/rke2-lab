@@ -1,0 +1,13 @@
+---
+# Internal constants only.
+
+# Where the release tarball's contents end up. Pulumi ships a single `pulumi/`
+# directory of binaries, and the conventional install is that directory as
+# ~/.pulumi/bin — which is also what the CLI's own installer produces and what
+# every Pulumi document assumes is on PATH.
+_var_controller_runtime_pulumi_bin: "{{ controller_runtime_pulumi_home }}/bin"
+
+# Templates for this role live in ansible/files/controller_runtime/ rather than
+# inside the role, so the tree that renders a host's configuration can
+# be read without opening the role.
+_var_controller_runtime_files_dir: "{{ role_path | dirname | dirname }}/files/controller_runtime"

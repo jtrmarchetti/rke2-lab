@@ -1,0 +1,114 @@
+---
+argument_specs:
+  main:
+    short_description: Set up the controller to operate the cluster
+    description:
+      - Installs kubectl by copying it from a cluster node, so the client is
+        exactly the cluster's version with nothing pinned in this repository.
+      - Installs k9s from a pinned, checksummed release.
+      - Writes a shell environment that exports KUBECONFIG and sources it from
+        the user's shell profile through a single marked block.
+      - Proves kubectl reaches the cluster before reporting success.
+    options:
+      kube_cli_controller_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      kube_cli_controller_bin_dir:
+        type: str
+        description: User-level directory the binaries are installed into.
+      kube_cli_controller_config_dir:
+        type: str
+        description: Directory for the generated environment and completion.
+      kube_cli_controller_shell_rc_files:
+        type: list
+        elements: str
+        description:
+          - Shell startup files the environment is sourced from. More than one,
+            because no single file is read by every kind of shell.
+      kube_cli_controller_kubeconfig:
+        type: str
+        description:
+          - Kubeconfig exported as KUBECONFIG. Written by the rke2_server role.
+      kube_cli_controller_kubectl_enabled:
+        type: bool
+        default: true
+        description: Whether kubectl is installed.
+      kube_cli_controller_kubectl_source_host:
+        type: str
+        default: kubecp01
+        description: Inventory host the kubectl binary is copied from.
+      kube_cli_controller_kubectl_source_path:
+        type: str
+        description: Path to kubectl on that host.
+      kube_cli_controller_kubectl_version:
+        type: str
+        description:
+          - Version expected locally. A mismatch replaces the binary, so this
+            is what makes an upgrade happen.
+      kube_cli_controller_k9s_enabled:
+        type: bool
+        default: true
+        description: Whether k9s is installed.
+      kube_cli_controller_k9s_version:
+        type: str
+        description: Release tag, also used to detect a stale local copy.
+      kube_cli_controller_k9s_url:
+        type: str
+        description: Release tarball URL.
+      kube_cli_controller_k9s_sha256:
+        type: str
+        description:
+          - Expected SHA256 of the tarball. The integrity control, verified by
+            get_url before anything is unpacked.
+      kube_cli_controller_shell_enabled:
+        type: bool
+        default: true
+        description: Whether the shell environment is written.
+      kube_cli_controller_alias:
+        type: str
+        default: k
+        description: Alias for kubectl, with completion bound to it.
+      kube_cli_controller_flux_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether the Flux CLI is installed on the controller.
+      kube_cli_controller_flux_version:
+        type: str
+        required: false
+        default: "2.9.4"
+        description: >-
+          Flux CLI version. Used to decide whether the local copy is stale.
+      kube_cli_controller_flux_url:
+        type: str
+        required: false
+        description: >-
+          Where the Flux release tarball is fetched from. The artifact host on
+          repo01, not upstream, because this is part of the rebuild path.
+      kube_cli_controller_flux_sha256:
+        type: str
+        required: false
+        description: Expected SHA256 of the Flux release tarball.
+      kube_cli_controller_kubeseal_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether kubeseal is installed on the controller.
+      kube_cli_controller_kubeseal_version:
+        type: str
+        required: false
+        default: "0.38.4"
+        description: >-
+          kubeseal version. Used to decide whether the local copy is stale, and
+          tracks the controller version deployed in cluster-state.
+      kube_cli_controller_kubeseal_url:
+        type: str
+        required: false
+        description: >-
+          Where the kubeseal release tarball is fetched from. The artifact host
+          on repo01, not upstream, because this is part of the rebuild path.
+      kube_cli_controller_kubeseal_sha256:
+        type: str
+        required: false
+        description: Expected SHA256 of the kubeseal release tarball.

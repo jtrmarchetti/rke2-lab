@@ -1,0 +1,87 @@
+---
+argument_specs:
+  main:
+    short_description: FreeIPA-issued service certificate inputs.
+    options:
+      ipa_service_cert_enabled:
+        type: bool
+        required: false
+        default: false
+        description: Whether the role issues certificates on this host.
+      ipa_service_cert_names:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description: >-
+          Service names to issue for. Each entry takes a name key and an
+          optional service key defaulting to HTTP.
+        options:
+          name:
+            type: str
+            required: true
+            description: DNS name for the certificate CN and SAN.
+          service:
+            type: str
+            required: false
+            default: HTTP
+            description: Service prefix of the IPA principal.
+      ipa_service_cert_ipa_host:
+        type: str
+        required: false
+        description: >-
+          Inventory host name of the FreeIPA server that signs the request.
+      ipa_service_cert_ipa_container:
+        type: str
+        required: false
+        default: freeipa-server
+        description: Container name FreeIPA runs under on the signing host.
+      ipa_service_cert_admin_user:
+        type: str
+        required: false
+        default: admin
+        description: IPA account used to obtain a Kerberos ticket.
+      ipa_service_cert_admin_password:
+        type: str
+        required: false
+        description: Password for the IPA account. Sourced from the environment.
+      ipa_service_cert_dir:
+        type: path
+        required: false
+        description: Directory the issued material is written to.
+      ipa_service_cert_ca_file:
+        type: path
+        required: false
+        description: Path the CA certificate is written to.
+      ipa_service_cert_ca_publish_path:
+        type: path
+        required: false
+        description: >-
+          Optional path under the artifact root to publish the CA to, so
+          consuming nodes can fetch it over Tier 1. Empty disables publishing.
+      ipa_service_cert_trust_ca:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Whether the domain CA is installed into the host trust store.
+      ipa_service_cert_trust_ca_path:
+        type: path
+        required: false
+        description: Path the CA is installed to for update-ca-certificates.
+      ipa_service_cert_key_size:
+        type: int
+        required: false
+        default: 2048
+        description: RSA key size for generated private keys.
+      ipa_service_cert_renew_before_days:
+        type: int
+        required: false
+        default: 30
+        description: >-
+          Reissue when the existing certificate expires within this many days.
+      ipa_service_cert_no_log:
+        type: bool
+        required: false
+        default: true
+        description: Suppress task output that would expose the password.

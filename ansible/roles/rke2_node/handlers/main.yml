@@ -1,0 +1,14 @@
+---
+- name: Update the system trust store
+  changed_when: true
+  ansible.builtin.command:
+    cmd: update-ca-certificates
+
+# Shared with the rke2_server role, which decides whether a restart is
+# meaningful: before the first start there is no service to restart, and
+# restarting mid-bootstrap looks like a crash rather than like automation.
+- name: Restart RKE2
+  when: _rke2_service_running | default(false) | bool
+  ansible.builtin.systemd_service:
+    name: "rke2-{{ rke2_node_type }}"
+    state: restarted

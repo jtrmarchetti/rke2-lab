@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: gitlab
+  author: devops
+  description: >-
+    Deploys GitLab CE as a containerized workload providing Git, the container
+    registry, and the package registry for the dev.lo environment. The image is
+    loaded from the Tier 1 artifact host; nothing is pulled from a registry.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

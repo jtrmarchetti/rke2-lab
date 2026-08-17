@@ -1,0 +1,118 @@
+---
+# The GitOps source of truth, rendered from this repository and pushed into
+# GitLab.
+#
+# The problem this role exists for: the cluster-state repository in GitLab held
+# the only copy of every manifest the cluster runs on. `OVERVIEW.md` states that
+# the whole internal environment can be rebuilt from this repository alone, and
+# `repo01` — the GitLab — is one of the things that gets rebuilt. State that
+# lived only there did not survive that, which made the rebuild claim true of
+# every layer except the one that describes what the cluster actually runs.
+#
+# So the direction is now one-way. The tree under `templates/cluster-state` is
+# the source; GitLab is a rendering of it. A file edited in GitLab survives
+# until the next run of this role and is then overwritten, because the render
+# wipes the working tree before writing it. That is the point rather than a
+# side effect: a repository that can absorb edits from both ends has two
+# sources of truth and therefore none.
+#
+# Three things arrive here from outside the template tree, and each is read
+# from wherever Ansible already put it rather than pasted:
+#
+#   - the domain CA, from this host's trust store (controller_trust)
+#   - the intermediate CA key pair, from ~/.config/rke2lab/k8s-ca (ipa_sub_ca)
+#   - the registry deploy token, from the GitLab host (rke2_publish)
+#
+# See plan/PHASE6_IMPLEMENTATION.md.
+
+- name: main | Assert the inputs this role cannot invent are present
+  when: (gitops_source_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (gitops_source_gitlab_host | length) > 0
+    fail_msg: >-
+      gitops_source needs the GitLab host it mints its admin token on.
+    quiet: true
+
+# Sealing is what makes this role's output reproducible without the cluster, so
+# a missing sealing key has to fail here rather than 40 tasks later inside a
+# kubeseal invocation whose error is about stdin.
+- name: main | Assert the material the render reads from disk is present
+  when: (gitops_source_enabled | bool)
+  failed_when: not _reg_gitops_source_inputs['stat']['exists']
+  register: _reg_gitops_source_inputs
+  loop:
+    - "{{ gitops_source_sealing_key_file }}"
+    - "{{ gitops_source_domain_ca_file }}"
+    - "{{ gitops_source_ca_dir }}/{{ gitops_source_ca_common_name }}.crt"
+    - "{{ gitops_source_ca_dir }}/{{ gitops_source_ca_common_name }}.key"
+    - "{{ gitops_source_bin_dir }}/kubeseal"
+  loop_control:
+    loop_var: _item_gitops_source_input
+    label: "{{ _item_gitops_source_input }}"
+  ansible.builtin.stat:
+    path: "{{ _item_gitops_source_input }}"
+    get_checksum: false
+
+- name: main | Render the cluster state and push it into GitLab
+  when:
+    - (gitops_source_enabled | bool)
+    # Same gate rke2_publish uses. Everything below either mints a credential
+    # or writes to a remote, and neither has a meaningful dry run.
+    - not ansible_check_mode
+  block:
+    # Minted here and revoked in `always`, so nothing long-lived is left
+    # behind. Reported unchanged even though it plainly changes something,
+    # because the pair leaves no state — a role that could never report a clean
+    # second run would hide the one signal that says the tree is in sync.
+    #
+    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
+    # through a heredoc, which is shell syntax with no command equivalent.
+    - name: main | Mint an admin API token # noqa: command-instead-of-shell
+      changed_when: false
+      delegate_to: "{{ gitops_source_gitlab_host }}"
+      no_log: "{{ gitops_source_no_log | bool }}"
+      register: _reg_gitops_source_pat
+      ansible.builtin.shell:
+        cmd: "{{ _var_gitops_source_pat_script }}"
+
+    # From the GitLab host rather than from env.sh, because GitLab returns a
+    # deploy token's value once and rke2_publish's recording of it is the only
+    # copy. Same file, and the same slurp, that cluster_services.yml already
+    # reads to build each node's registries.yaml.
+    - name: main | Read the registry deploy token from the GitLab host
+      delegate_to: "{{ gitops_source_gitlab_host }}"
+      no_log: "{{ gitops_source_no_log | bool }}"
+      register: _reg_gitops_source_deploy_token_raw
+      ansible.builtin.slurp:
+        src: "{{ gitops_source_deploy_token_file }}"
+
+    - name: main | Ensure the cluster-state project exists
+      ansible.builtin.include_tasks: project.yml
+
+    - name: main | Take a working clone of the repository
+      ansible.builtin.include_tasks: clone.yml
+
+    - name: main | Render the template tree into the clone
+      ansible.builtin.include_tasks: render.yml
+
+    - name: main | Seal every secret into the clone
+      ansible.builtin.include_tasks: seal.yml
+
+    - name: main | Commit and push whatever changed
+      ansible.builtin.include_tasks: commit.yml
+  always:
+    - name: main | Revoke the admin API token
+      when:
+        - _reg_gitops_source_pat is defined
+        - "'stdout' in _reg_gitops_source_pat"
+      changed_when: false
+      no_log: "{{ gitops_source_no_log | bool }}"
+      ansible.builtin.uri:
+        ca_path: "{{ gitops_source_ca_file }}"
+        url: >-
+          {{ _var_gitops_source_api }}/personal_access_tokens/{{
+          _reg_gitops_source_pat['stdout'].split()[0] }}
+        method: DELETE
+        headers: "{{ _var_gitops_source_headers }}"
+        status_code: [204, 404]

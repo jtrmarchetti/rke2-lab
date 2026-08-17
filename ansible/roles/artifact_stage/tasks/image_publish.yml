@@ -1,0 +1,109 @@
+---
+# Publishes one manifest image entry as a `docker load`-able tarball.
+#
+# Internal nodes have no registry to pull from until Phase 3, and no internet
+# route at all, so an image reaches them only as a file served by Apache.
+#
+# The tarball is exported under the manifest's tag, not its digest: the
+# consuming host loads the tarball and then runs that exact tag, so a tarball
+# built from a differently tagged image would load under the wrong name and the
+# consumer would fall back to pulling from a registry it cannot reach.
+- name: image_publish | Stage one container image
+  vars:
+    _artifact_stage_tarball: >-
+      {{ artifact_stage_root }}/{{ _item_artifact_stage_image['dest'] }}
+    _artifact_stage_digest_file: >-
+      {{ artifact_stage_root }}/{{ _item_artifact_stage_image['dest'] }}{{
+      _var_artifact_stage_digest_suffix }}
+    _artifact_stage_scratch: >-
+      {{ artifact_stage_work_dir }}/{{
+      _item_artifact_stage_image['dest'] | basename }}
+  block:
+    - name: image_publish | Check whether the tarball is already published
+      register: _reg_artifact_stage_tarball_stat
+      ansible.builtin.stat:
+        path: "{{ _artifact_stage_tarball }}"
+        get_checksum: false
+
+    - name: image_publish | Check for the published digest marker
+      register: _reg_artifact_stage_marker_stat
+      ansible.builtin.stat:
+        path: "{{ _artifact_stage_digest_file }}"
+        get_checksum: false
+
+    - name: image_publish | Read the digest the published tarball was built from
+      when: _reg_artifact_stage_marker_stat['stat']['exists']
+      register: _reg_artifact_stage_marker
+      ansible.builtin.slurp:
+        src: "{{ _artifact_stage_digest_file }}"
+
+    # Re-export when the tarball is missing, when no marker records what it was
+    # built from, or when the manifest has been repinned to a new digest.
+    # Otherwise this entry is already correctly published and every task below
+    # is skipped, which is what makes a second run report no change.
+    - name: image_publish | Stage the image when it is missing or repinned
+      when:
+        - (_artifact_stage_needs_export | bool)
+        - not ansible_check_mode
+      vars:
+        _artifact_stage_published_digest: >-
+          {{ (_reg_artifact_stage_marker['content'] | default('') | b64decode)
+             | trim }}
+        _artifact_stage_needs_export: >-
+          {{ not _reg_artifact_stage_tarball_stat['stat']['exists']
+             or not _reg_artifact_stage_marker_stat['stat']['exists']
+             or _artifact_stage_published_digest
+                != _item_artifact_stage_image['digest'] }}
+      block:
+        # Pulled by digest rather than by tag so the bytes are pinned. A tag can
+        # be moved upstream; a digest cannot.
+        - name: image_publish | Pull the image by its pinned digest
+          register: _reg_artifact_stage_pull
+          community.docker.docker_image_pull:
+            name: >-
+              {{ _item_artifact_stage_image['image'] | regex_replace(':[^:/]+$', '')
+              }}@{{ _item_artifact_stage_image['digest'] }}
+            pull: not_present
+
+        - name: image_publish | Tag the pulled image with the manifest tag
+          community.docker.docker_image_tag:
+            name: >-
+              {{ _item_artifact_stage_image['image']
+                 | regex_replace(':[^:/]+$', '') }}@{{
+              _item_artifact_stage_image['digest'] }}
+            repository:
+              - "{{ _item_artifact_stage_image['image'] }}"
+
+        # Exported to scratch first, then moved into place. A partial export
+        # left under the document root would be served to an internal node as a
+        # complete artifact.
+        - name: image_publish | Export the image to a tarball
+          community.docker.docker_image_export:
+            names:
+              - "{{ _item_artifact_stage_image['image'] }}"
+            path: "{{ _artifact_stage_scratch }}"
+            force: true
+
+        - name: image_publish | Publish the exported tarball
+          ansible.builtin.copy:
+            src: "{{ _artifact_stage_scratch }}"
+            dest: "{{ _artifact_stage_tarball }}"
+            remote_src: true
+            owner: "{{ artifact_stage_owner }}"
+            group: "{{ artifact_stage_group }}"
+            mode: "{{ artifact_stage_file_mode }}"
+
+        - name: image_publish | Remove the scratch copy
+          ansible.builtin.file:
+            path: "{{ _artifact_stage_scratch }}"
+            state: absent
+
+        # Written last, so an interrupted run leaves no marker and the next run
+        # re-exports rather than trusting a tarball it did not finish writing.
+        - name: image_publish | Record the digest the tarball was built from
+          ansible.builtin.copy:
+            content: "{{ _item_artifact_stage_image['digest'] }}\n"
+            dest: "{{ _artifact_stage_digest_file }}"
+            owner: "{{ artifact_stage_owner }}"
+            group: "{{ artifact_stage_group }}"
+            mode: "{{ artifact_stage_file_mode }}"

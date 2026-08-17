@@ -1,0 +1,110 @@
+---
+# Prove the domain is actually serving before any caller depends on it.
+#
+# `ipactl status` is not enough on its own: it reports what systemd last knew
+# about each unit, so a directory server that died after startup — a killed
+# database coming back with "BDB0060 PANIC" is the case seen here — still reads
+# as "Directory Service: RUNNING" while every authentication against it fails.
+# The phases run back to back, so a false ready here becomes a Phase 3 failure
+# with no obvious cause.
+#
+# Each check below is something a consumer actually needs: the directory
+# answering on the wire, Kerberos issuing a ticket, and the API accepting an
+# authenticated login. They are ordered cheapest first so a failure points at
+# the lowest broken layer rather than at the last symptom.
+
+- name: readiness | Wait for the directory server to accept connections
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  loop:
+    - 389
+    - 443
+    - 88
+  loop_control:
+    loop_var: _item_freeipa_server_port
+    label: "port {{ _item_freeipa_server_port }}"
+  ansible.builtin.wait_for:
+    host: "{{ freeipa_server_ip_address }}"
+    port: "{{ _item_freeipa_server_port }}"
+    timeout: "{{ freeipa_server_ready_timeout }}"
+    state: started
+
+- name: readiness | Wait for the domain to answer authoritatively for its zone
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  register: _reg_freeipa_server_soa
+  until: >-
+    freeipa_server_hostname in (_reg_freeipa_server_soa.stdout | default(''))
+  retries: "{{ freeipa_server_ready_retries }}"
+  delay: "{{ freeipa_server_ready_delay }}"
+  community.docker.docker_container_exec:
+    container: "{{ freeipa_server_container_name }}"
+    command: >-
+      dig +short +time=5 SOA {{ freeipa_server_domain }} @127.0.0.1
+
+# The first check that needs a working directory behind it: the KDC validates
+# credentials against LDAP, so this fails whenever the database is unavailable
+# no matter what ipactl claims.
+- name: readiness | Wait for Kerberos to issue a ticket for admin
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  no_log: "{{ freeipa_server_no_log | default(true) }}"
+  register: _reg_freeipa_server_kinit
+  until: (_reg_freeipa_server_kinit.rc | default(1)) == 0
+  retries: "{{ freeipa_server_ready_retries }}"
+  delay: "{{ freeipa_server_ready_delay }}"
+  community.docker.docker_container_exec:
+    container: "{{ freeipa_server_container_name }}"
+    command: kinit admin
+    stdin: "{{ freeipa_server_admin_password }}"
+    stdin_add_newline: true
+
+# The exact path every Ansible module and Phase 3 consumer takes. IPA rejects a
+# login without a Referer header, so this sends the one it requires.
+- name: readiness | Wait for the IPA API to accept an authenticated login
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  failed_when: false
+  no_log: "{{ freeipa_server_no_log | default(true) }}"
+  register: _reg_freeipa_server_api_login
+  until: (_reg_freeipa_server_api_login.status | default(0)) == 200
+  retries: "{{ freeipa_server_ready_retries }}"
+  delay: "{{ freeipa_server_ready_delay }}"
+  ansible.builtin.uri:
+    url: "https://{{ freeipa_server_hostname }}/ipa/session/login_password"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      user: admin
+      password: "{{ freeipa_server_admin_password }}"
+    headers:
+      Referer: "https://{{ freeipa_server_hostname }}/ipa"
+    validate_certs: false
+    status_code:
+      - 200
+
+- name: readiness | Assert the domain is fully serving
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - (_reg_freeipa_server_kinit.rc | default(1)) == 0
+      - (_reg_freeipa_server_api_login.status | default(0)) == 200
+    fail_msg: >-
+      FreeIPA started but is not serving. Kerberos ticket rc=
+      {{ _reg_freeipa_server_kinit.rc | default('n/a') }}, API login status=
+      {{ _reg_freeipa_server_api_login.status | default('n/a') }}. A directory
+      server that failed after startup is the usual cause and still reports
+      RUNNING; check
+      docker exec {{ freeipa_server_container_name }}
+      tail /var/log/dirsrv/slapd-*/errors
+    quiet: true

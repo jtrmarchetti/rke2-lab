@@ -1,0 +1,242 @@
+---
+# Phase 4 — the RKE2 control plane.
+#
+# Two plays, and the order between them is the whole point. Nothing on a cluster
+# node can be installed until GitLab actually holds the RKE2 artifact set,
+# because the nodes have no other source: no internet route, and no image
+# tarball on local disk. Publishing runs first, against repo01, and the node
+# play only starts once it has succeeded.
+#
+# See plan/PHASE4_IMPLEMENTATION.md.
+
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env:
+      - GITLAB_ROOT_PASSWORD
+      - RKE2_TOKEN
+
+- name: Publish the RKE2 artifact set from the repo host into GitLab
+  hosts: repo
+  gather_facts: true
+  become: true
+  force_handlers: true
+  tasks:
+    # Re-runs the manifest so the phase 4 entries are staged before anything
+    # tries to publish them. A run where the artifacts are already present is a
+    # no-op; a run on a rebuilt repo01 downloads them first.
+    - name: kubecp | Include artifact staging role
+      tags:
+        - artifact_stage
+      vars:
+        artifact_stage_enabled: "{{ inventory_artifact_stage_enabled }}"
+        artifact_stage_manifest: "{{ inventory_artifact_stage_manifest }}"
+        artifact_stage_root: "{{ inventory_artifact_stage_root }}"
+      ansible.builtin.include_role:
+        name: artifact_stage
+        apply:
+          tags:
+            - artifact_stage
+
+    - name: kubecp | Include RKE2 publishing role
+      tags:
+        - rke2_publish
+      vars:
+        rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
+        rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
+        rke2_publish_chart_sets: "{{ inventory_rke2_publish_chart_sets }}"
+        rke2_publish_deploy_token_username: >-
+          {{ inventory_rke2_publish_deploy_token_username }}
+        rke2_publish_deploy_token_value: >-
+          {{ inventory_rke2_publish_deploy_token_value }}
+        rke2_publish_enabled: "{{ inventory_rke2_publish_enabled }}"
+        rke2_publish_extra_images: "{{ inventory_rke2_publish_extra_images }}"
+        rke2_publish_gitlab_url: "{{ inventory_rke2_publish_gitlab_url }}"
+        rke2_publish_group: "{{ inventory_rke2_publish_group }}"
+        rke2_publish_images_project: "{{ inventory_rke2_publish_images_project }}"
+        rke2_publish_manifest: "{{ inventory_artifact_stage_manifest }}"
+        rke2_publish_package_version: >-
+          {{ inventory_rke2_publish_package_version }}
+        rke2_publish_packages_project: >-
+          {{ inventory_rke2_publish_packages_project }}
+        rke2_publish_registry_host: "{{ inventory_rke2_publish_registry_host }}"
+        rke2_publish_root_password: "{{ inventory_rke2_publish_root_password }}"
+      ansible.builtin.include_role:
+        name: rke2_publish
+        apply:
+          tags:
+            - rke2_publish
+
+# serial: 1, because the first server has to be answering before the second one
+# is told to join it, and because a rolling restart of a three-member etcd is
+# the only safe kind. RKE2's own client-side load balancer makes the cluster
+# tolerant of a server being down once it is formed; it does not make forming
+# one in parallel a good idea.
+- name: Form the RKE2 control plane
+  hosts: kubecp
+  gather_facts: true
+  become: true
+  # One at a time, because the first server has to be answering before the
+  # second is told to join it, and because a rolling restart of a three-member
+  # etcd is the only safe kind. RKE2's client-side load balancer makes a formed
+  # cluster tolerant of a server being down; it does not make forming one in
+  # parallel a good idea.
+  #
+  # Overridable for one case that the default gets wrong: an even-sized etcd.
+  # A two-member cluster has a quorum of two, so restarting it one node at a
+  # time can never succeed — the first node waits for a peer that this play will
+  # not start until the first node is ready. Recovering from that state needs
+  # `-e kubecp_serial=3`, and it is the only time that flag is correct.
+  serial: "{{ kubecp_serial | default(1) }}"
+  force_handlers: true
+  tasks:
+    # Which host started the cluster is inventory data, not something to infer
+    # from play order. Deriving it from the first host in the play looks
+    # equivalent and is not: under `--limit kubecp02:kubecp03` the first host in
+    # the play is kubecp02, which would then be handed no `server:` address and
+    # would quietly start a second, separate cluster rather than joining the
+    # existing one.
+    - name: kubecp | Assert the bootstrap server is named explicitly
+      tags:
+        - always
+      ansible.builtin.assert:
+        that:
+          - inventory_kubecp_bootstrap_host in groups['kubecp']
+        fail_msg: >-
+          inventory_kubecp_bootstrap_host must name a host in the kubecp group. It
+          decides which server starts the cluster and which servers join it.
+        quiet: true
+
+    - name: kubecp | Include base host role
+      tags:
+        - base_host
+      vars:
+        base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
+        base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
+        base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
+        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
+        base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
+      ansible.builtin.include_role:
+        name: base_host
+        apply:
+          tags:
+            - base_host
+
+    # Before rke2_node, always. RKE2's data directory is on this volume, and a
+    # role that runs before the mount exists writes to the mount point on the
+    # OS disk instead — silently, and only visibly once the disk fills.
+    - name: kubecp | Include data volume role
+      tags:
+        - data_volume
+      vars:
+        data_volume_device: "{{ inventory_data_volume_device }}"
+        data_volume_enabled: "{{ inventory_data_volume_enabled }}"
+        data_volume_filesystem: "{{ inventory_data_volume_filesystem }}"
+        data_volume_label: "{{ inventory_data_volume_label }}"
+        data_volume_mount_path: "{{ inventory_data_volume_mount_path }}"
+      ansible.builtin.include_role:
+        name: data_volume
+        apply:
+          tags:
+            - data_volume
+
+    - name: kubecp | Include time synchronization role
+      tags:
+        - time_sync
+      vars:
+        time_sync_enabled: "{{ inventory_time_sync_enabled }}"
+        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
+        time_sync_sources: "{{ inventory_time_sync_sources }}"
+      ansible.builtin.include_role:
+        name: time_sync
+        apply:
+          tags:
+            - time_sync
+
+    # The deploy token exists in exactly one place: the file rke2_publish wrote
+    # on the repo host. Reading it here keeps it out of inventory and out of
+    # this repository, and means rotating it is one file on one host.
+    - name: kubecp | Read the registry deploy token from the repository host
+      delegate_to: "{{ groups['repo'] | first }}"
+      no_log: true
+      register: _reg_kubecp_deploy_token
+      tags:
+        - always
+      ansible.builtin.slurp:
+        src: /data1/gitlab/rke2-deploy-token.yml
+
+    - name: kubecp | Include RKE2 node preparation role
+      tags:
+        - rke2_node
+      vars:
+        rke2_node_ca_rke2_path: "{{ inventory_rke2_node_ca_rke2_path }}"
+        rke2_node_ca_system_path: "{{ inventory_rke2_node_ca_system_path }}"
+        rke2_node_ca_url: "{{ inventory_rke2_node_ca_url }}"
+        rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
+        rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
+        rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
+        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
+        rke2_node_registry_username: >-
+          {{ (_reg_kubecp_deploy_token['content'] | b64decode
+              | from_yaml)['username'] }}
+        rke2_node_type: "{{ inventory_rke2_node_type }}"
+        rke2_node_version: "{{ inventory_rke2_node_version }}"
+        rke2_node_registry_password: >-
+          {{ (_reg_kubecp_deploy_token['content'] | b64decode
+              | from_yaml)['token'] }}
+      ansible.builtin.include_role:
+        name: rke2_node
+        apply:
+          tags:
+            - rke2_node
+
+    - name: kubecp | Include RKE2 server role
+      tags:
+        - rke2_server
+      vars:
+        rke2_server_api_address: "{{ inventory_rke2_server_api_address }}"
+        rke2_server_api_name: "{{ inventory_rke2_server_api_name }}"
+        rke2_server_api_port: "{{ inventory_rke2_server_api_port }}"
+        # Written only from the bootstrap host, and only once.
+        rke2_server_bootstrap: >-
+          {{ inventory_hostname == inventory_kubecp_bootstrap_host }}
+        rke2_server_cni: "{{ inventory_rke2_server_cni }}"
+        rke2_server_data_dir: "{{ inventory_rke2_server_data_dir }}"
+        rke2_server_disable: "{{ inventory_rke2_server_disable }}"
+        rke2_server_enabled: "{{ inventory_rke2_server_enabled }}"
+        rke2_server_ingress_address: "{{ inventory_rke2_server_ingress_address }}"
+        rke2_server_ingress_controller: >-
+          {{ inventory_rke2_server_ingress_controller }}
+        rke2_server_kube_vip_enabled: >-
+          {{ inventory_rke2_server_kube_vip_enabled }}
+        rke2_server_kube_vip_image: "{{ inventory_rke2_server_kube_vip_image }}"
+        rke2_server_kube_vip_interface: >-
+          {{ inventory_rke2_server_kube_vip_interface }}
+        rke2_server_node_ip: "{{ inventory_rke2_server_node_ip }}"
+        rke2_server_node_taints: "{{ inventory_rke2_server_node_taints }}"
+        rke2_server_supervisor_port: "{{ inventory_rke2_server_supervisor_port }}"
+        rke2_server_tls_san: "{{ inventory_rke2_server_tls_san }}"
+        rke2_server_token: "{{ inventory_rke2_server_token }}"
+        rke2_server_kubeconfig_dest: >-
+          {{ lookup('env', 'HOME') }}/.kube/dev-lo.config
+      ansible.builtin.include_role:
+        name: rke2_server
+        apply:
+          tags:
+            - rke2_server
+
+    # After rke2_server, because it links binaries that the installer puts in
+    # place and reads a kubeconfig that only exists once the server has run.
+    - name: kubecp | Include the node CLI role
+      tags:
+        - kube_cli
+      vars:
+        kube_cli_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
+      ansible.builtin.include_role:
+        name: kube_cli_node
+        apply:
+          tags:
+            - kube_cli

@@ -1,0 +1,55 @@
+---
+# Forward zones: parts of the domain this server is deliberately not
+# authoritative for.
+#
+# Phase 6b gives the cluster its own subdomain. Names under it are created and
+# destroyed by whatever is declared in the cluster-state repository, and the
+# cluster's own DNS answers for them — so the domain forwards the whole zone
+# rather than holding records inside it. A name that GitOps creates should not
+# need a second, manual step here to resolve.
+#
+# forward_policy is `only`, not `first`. With `first` a query that the cluster
+# cannot answer falls through to this server's own resolution, which for a zone
+# it does not hold means an upstream lookup for an internal name — a slow
+# NXDOMAIN at best, and a wrong answer if anything upstream ever claims the
+# name. `only` makes the delegation total, which is what a delegation is.
+#
+# There is no ipa_dnsforwardzone module in community.general, so this goes
+# through the CLI in the container, in the same one-session shape the rest of
+# the IPA work here uses.
+
+- name: dns_forwarders | Ensure each forward zone exists and points at its server
+  # Matched on the whole last line, not with `in`: the no-op branch prints
+  # "unchanged", which contains "changed" and made every run report a change.
+  changed_when: >-
+    (_reg_freeipa_server_forward['stdout_lines'] | default(['']) | last | trim)
+    == 'changed'
+  no_log: "{{ freeipa_server_no_log | default(true) }}"
+  register: _reg_freeipa_server_forward
+  loop: "{{ freeipa_server_dns_forward_zones }}"
+  loop_control:
+    loop_var: _item_freeipa_server_forward
+    label: "{{ _item_freeipa_server_forward['name'] }} -> {{ _item_freeipa_server_forward['forwarder'] }}"
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -i {{ freeipa_server_container_name }} bash -c '
+        set -e
+        echo "{{ freeipa_server_admin_password | b64encode }}" |
+          base64 -d | kinit admin >/dev/null
+        want="{{ _item_freeipa_server_forward["forwarder"] }}"
+        if ipa dnsforwardzone-show {{ _item_freeipa_server_forward["name"] }} >/dev/null 2>&1; then
+          have=$(ipa dnsforwardzone-show {{ _item_freeipa_server_forward["name"] }} \
+            --raw 2>/dev/null | awk "/idnsforwarders:/ {print \$2}")
+          if [ "${have}" = "${want}" ]; then
+            echo "unchanged"
+            exit 0
+          fi
+          ipa dnsforwardzone-mod {{ _item_freeipa_server_forward["name"] }} \
+            --forwarder="${want}" \
+            --forward-policy={{ _item_freeipa_server_forward["policy"] | default("only") }} >/dev/null
+        else
+          ipa dnsforwardzone-add {{ _item_freeipa_server_forward["name"] }} \
+            --forwarder="${want}" \
+            --forward-policy={{ _item_freeipa_server_forward["policy"] | default("only") }} >/dev/null
+        fi
+        echo "changed"'

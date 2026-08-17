@@ -1,0 +1,86 @@
+---
+argument_specs:
+  main:
+    short_description: Issue an intermediate CA for the cluster from FreeIPA
+    description:
+      - Imports a subordinate-CA certificate profile into FreeIPA, since
+        FreeIPA ships none, and scopes it with a CA ACL naming one profile,
+        one CA, and one host.
+      - Generates the intermediate's private key on the controller and has the
+        domain CA sign the request. The key never leaves this host.
+      - Asserts that what came back really is a CA at path length zero, rather
+        than trusting that the profile applied.
+    options:
+      ipa_sub_ca_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      ipa_sub_ca_ipa_host:
+        type: str
+        required: true
+        description:
+          - Inventory name of the FreeIPA server the request is signed on.
+      ipa_sub_ca_ipa_container:
+        type: str
+        default: freeipa-server
+        description: Container the IPA CLI runs in on that host.
+      ipa_sub_ca_admin_user:
+        type: str
+        default: admin
+        description: IPA principal the session authenticates as.
+      ipa_sub_ca_admin_password:
+        type: str
+        required: true
+        description:
+          - Password for that principal. Comes from FREEIPA_ADMIN_PASSWORD in
+            the environment; see plan/SECRETS.md.
+      ipa_sub_ca_common_name:
+        type: str
+        description:
+          - Common name of the intermediate, and the host entry created to own
+            it. FreeIPA requires the CN to match a subject principal.
+      ipa_sub_ca_profile_id:
+        type: str
+        default: subCA
+        description: Identifier of the imported certificate profile.
+      ipa_sub_ca_profile_description:
+        type: str
+        description: Description recorded on the profile.
+      ipa_sub_ca_acl_name:
+        type: str
+        default: subca-k8s
+        description: CA ACL permitting the profile for the subject host.
+      ipa_sub_ca_ca:
+        type: str
+        default: ipa
+        description: The issuing CA within FreeIPA.
+      ipa_sub_ca_validity_days:
+        type: int
+        default: 1825
+        description: Lifetime of the intermediate.
+      ipa_sub_ca_renew_before_days:
+        type: int
+        default: 90
+        description:
+          - Reissue when the certificate expires inside this window, so a rerun
+            renews rather than reporting success on an expiring CA.
+      ipa_sub_ca_key_size:
+        type: int
+        default: 4096
+        description: RSA key size of the intermediate.
+      ipa_sub_ca_realm:
+        type: str
+        description: Organisation the profile builds the subject DN with.
+      ipa_sub_ca_ocsp_url:
+        type: str
+        description: OCSP responder recorded in issued certificates.
+      ipa_sub_ca_crl_url:
+        type: str
+        description: CRL distribution point recorded in issued certificates.
+      ipa_sub_ca_output_dir:
+        type: str
+        description: Directory the key, request and certificate are written to.
+      ipa_sub_ca_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it exposes the password.

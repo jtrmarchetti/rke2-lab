@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - secrets.yaml
+  - keycloak.yaml
+# components:
+#   - components/fips
+#
+# Deliberately not enabled here. dev-lo is outside the FIPS boundary;
+# production enables the component above. Left commented rather than absent so
+# the choice is visible in the environment that made it.

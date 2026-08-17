@@ -1,0 +1,100 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare a host to run RKE2 against the GitLab registries
+    description:
+      - Installs the dev.lo certificate authority into the system trust store
+        and at the path the containerd registry configuration names.
+      - Writes /etc/rancher/rke2/registries.yaml so containerd pulls every image
+        from the GitLab container registry, rewriting upstream repository paths
+        to where the rke2_publish role pushed them.
+      - Installs the RKE2 binary using the release installer, both fetched from
+        the GitLab generic package registry.
+      - Deliberately does not place an air-gap image tarball on the node; see
+        plan/PHASE4_IMPLEMENTATION.md for why that would hide a broken mirror.
+    options:
+      rke2_node_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      rke2_node_type:
+        type: str
+        default: server
+        choices:
+          - server
+          - agent
+        description: Which RKE2 node type to install.
+      rke2_node_version:
+        type: str
+        default: 1.35.7+rke2r1
+        description:
+          - RKE2 release to install. Must equal the version rke2_publish
+            uploaded to the package registry.
+      rke2_node_data_dir:
+        type: str
+        default: /data1/rancher/rke2
+        description:
+          - RKE2 data directory. Kept on the data volume because the containerd
+            image store grows with every image the cluster pulls.
+      rke2_node_install_dir:
+        type: str
+        default: /data1/rke2-install
+        description: Scratch directory the release installer runs against.
+      rke2_node_ca_url:
+        type: str
+        description:
+          - Where the domain CA is fetched from. Plain HTTP over Tier 1 is the
+            only path that does not already require the trust it delivers.
+      rke2_node_ca_system_path:
+        type: str
+        description: Where the CA is installed for the system trust store.
+      rke2_node_ca_rke2_path:
+        type: str
+        description: Where the CA is installed for containerd to read.
+      rke2_node_gitlab_url:
+        type: str
+        description: Base URL of the GitLab instance.
+      rke2_node_registry_host:
+        type: str
+        description: Host name of the GitLab container registry.
+      rke2_node_package_project:
+        type: str
+        default: rke2/packages
+        description: Project path holding the generic packages.
+      rke2_node_package_name:
+        type: str
+        default: rke2
+        description: Generic package name.
+      rke2_node_registry_mirrors:
+        type: list
+        elements: dict
+        description:
+          - Upstream registries to mirror, and how to rewrite their repository
+            paths into the GitLab project.
+        options:
+          upstream:
+            type: str
+            required: true
+            description: Upstream registry host being mirrored.
+          pattern:
+            type: str
+            required: true
+            description: Regular expression matched against the repository path.
+          replacement:
+            type: str
+            required: true
+            description: Replacement repository path inside the mirror.
+      rke2_node_registry_username:
+        type: str
+        required: true
+        description:
+          - Read-only registry credential, the deploy token minted by the
+            rke2_publish role.
+      rke2_node_registry_password:
+        type: str
+        required: true
+        description: The matching deploy token value.
+      rke2_node_download_timeout:
+        type: int
+        default: 600
+        description: Bound on a single download, in seconds.

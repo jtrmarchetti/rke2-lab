@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+#
+# So crictl finds RKE2's containerd without --runtime-endpoint on every call.
+# RKE2 puts the socket under /run/k3s, which is not a path crictl guesses.
+---
+runtime-endpoint: {{ kube_cli_node_containerd_sock }}
+image-endpoint: {{ kube_cli_node_containerd_sock }}
+timeout: 10
+debug: false

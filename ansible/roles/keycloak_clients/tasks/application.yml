@@ -1,0 +1,120 @@
+---
+# One application: its client, its roles, the mapper that puts those roles in
+# the token, and the group mappings that grant them.
+#
+# Included in a loop from main.yml, so `_item_keycloak_clients_application` is
+# the entry being configured throughout, and every `_var_keycloak_clients_*`
+# expression in vars/main.yml resolves against it.
+
+# A fresh token per application. See token.yml: master issues 60 second access
+# tokens, and this file makes about a dozen calls.
+- name: application | Obtain a fresh admin token
+  ansible.builtin.include_tasks: token.yml
+
+- name: application | Read the client as it currently stands
+  changed_when: false
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  register: _reg_keycloak_clients_existing
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/clients?clientId={{
+      _var_keycloak_clients_slug | trim }}
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+
+- name: application | Create the client
+  when: not (_var_keycloak_clients_present | bool)
+  changed_when: true
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  ansible.builtin.uri:
+    url: "{{ _var_keycloak_clients_admin_api }}/clients"
+    method: POST
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+    body_format: json
+    body: "{{ _var_keycloak_clients_definition }}"
+    status_code: [201]
+
+# Update in place rather than create-only, for the reason keycloak_ldap
+# documents at length: a client created on a run whose redirect URI was wrong
+# is a client every later run finds by name and leaves alone, so the fix sits
+# committed, applied, and not in effect.
+- name: application | Update the existing client to match this definition
+  when:
+    - (_var_keycloak_clients_present | bool)
+    - _keycloak_clients_have != _keycloak_clients_want
+  changed_when: true
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  vars:
+    _keycloak_clients_want: >-
+      {{ _var_keycloak_clients_compared
+         | map('extract', _var_keycloak_clients_definition)
+         | map('default', '') | map('string') | list }}
+    _keycloak_clients_have: >-
+      {{ _var_keycloak_clients_compared
+         | map('extract', _var_keycloak_clients_current)
+         | map('default', '') | map('string') | list }}
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/clients/{{
+      _var_keycloak_clients_existing_id | trim }}
+    method: PUT
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+    body_format: json
+    body: >-
+      {{ _var_keycloak_clients_definition
+         | combine({'id': _var_keycloak_clients_existing_id | trim}) }}
+    status_code: [204]
+
+- name: application | Re-read the client so its identifier is known
+  changed_when: false
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  register: _reg_keycloak_clients_final
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/clients?clientId={{
+      _var_keycloak_clients_slug | trim }}
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+
+# The secret has its own endpoint and its own comparison, because it is the one
+# field of a client a GET never discloses. Compared rather than written
+# unconditionally: a PUT on every run would report a change forever, and the
+# signal that says the realm matches env.sh would be gone.
+- name: application | Read the secret the client currently holds
+  changed_when: false
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  register: _reg_keycloak_clients_secret
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/clients/{{
+      _var_keycloak_clients_uuid | trim }}/client-secret
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+
+- name: application | Set the client secret to the authored value
+  when: >-
+    (_reg_keycloak_clients_secret['json']['value'] | default(''))
+    != _item_keycloak_clients_application['client_secret']
+  changed_when: true
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/clients/{{
+      _var_keycloak_clients_uuid | trim }}
+    method: PUT
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+    body_format: json
+    body:
+      id: "{{ _var_keycloak_clients_uuid | trim }}"
+      clientId: "{{ _var_keycloak_clients_slug | trim }}"
+      secret: "{{ _item_keycloak_clients_application['client_secret'] }}"
+    status_code: [204]
+
+- name: application | Ensure the client roles and the roles claim exist
+  ansible.builtin.include_tasks: roles.yml
+
+- name: application | Ensure each directory group grants its role
+  ansible.builtin.include_tasks: groups.yml

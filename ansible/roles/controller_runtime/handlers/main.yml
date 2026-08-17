@@ -1,0 +1,7 @@
+---
+# No handlers. Nothing this role manages is a service: the virtual
+# environments, the CLI and the shell files take effect the next time something
+# reads them, and the one service on this host that does need restarting —
+# WireGuard — belongs to playbooks/tunnel_controller_access.yml. The file
+# exists because plan/ANSIBLE_STANDARDS.md requires the role layout to be
+# complete.

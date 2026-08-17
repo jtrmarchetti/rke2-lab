@@ -1,0 +1,55 @@
+---
+# An intermediate CA for the cluster, signed by the FreeIPA CA.
+#
+# The cluster needs to mint certificates continuously and without asking anyone
+# — for every ingress hostname under the cluster's own subdomain, and for
+# whatever service mesh or webhook wants one next. Three ways to do that were
+# available and two of them are worse:
+#
+#   - Ask FreeIPA per certificate. FreeIPA issues only for names it holds as
+#     host or service principals, so every ingress hostname would have to be
+#     created in the domain first. The cluster's subdomain is managed by the
+#     cluster; putting each of its names into FreeIPA by hand is the exact
+#     coupling the subdomain exists to remove.
+#   - Export the domain CA's key into the cluster. FreeIPA will not do it, and
+#     a lab that copied a root key into etcd would have a chain in name only.
+#   - Have FreeIPA sign an intermediate whose key the cluster generates and
+#     holds. The chain is real, the root key never moves, and cert-manager can
+#     issue for any name under the cluster's subdomain without a round trip.
+#
+# The third is this role. FreeIPA does not ship a subordinate-CA profile, so
+# one is imported here: a copy of caIPAserviceCert with basic constraints
+# asserting CA:TRUE at path length zero, key usage changed to certificate and
+# CRL signing, and the extensions that only make sense on a leaf removed.
+#
+# Path length zero is deliberate and load-bearing: this intermediate can sign
+# leaf certificates and cannot sign another CA.
+#
+# The key is generated here, on the controller, and never leaves it in
+# plaintext — the same property the Sealed Secrets workflow has. What reaches
+# the cluster is a SealedSecret.
+
+- name: main | Assert the signing host and credentials are available
+  ansible.builtin.assert:
+    that:
+      - (ipa_sub_ca_ipa_host | length) > 0
+      - (ipa_sub_ca_admin_password | length) >= 8
+      - (ipa_sub_ca_common_name | length) > 0
+    fail_msg: >-
+      ipa_sub_ca needs the inventory name of the FreeIPA server, the IPA admin
+      password, and the common name of the intermediate. The password comes
+      from ~/.config/rke2lab/env.sh; run `source ~/.config/rke2lab/env.sh`
+      first.
+    quiet: true
+
+- name: main | Ensure the output directory exists
+  ansible.builtin.file:
+    path: "{{ ipa_sub_ca_output_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: main | Ensure the subordinate CA profile and access rule exist
+  ansible.builtin.include_tasks: profile.yml
+
+- name: main | Issue the intermediate certificate
+  ansible.builtin.include_tasks: issue.yml

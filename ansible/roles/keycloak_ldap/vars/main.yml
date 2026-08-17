@@ -1,0 +1,128 @@
+---
+_var_keycloak_ldap_bind_dn: >-
+  uid={{ keycloak_ldap_bind_user }},cn=sysaccounts,cn=etc,{{
+  keycloak_ldap_base_dn }}
+
+_var_keycloak_ldap_headers:
+  Authorization: >-
+    Bearer {{ _reg_keycloak_ldap_token['json']['access_token'] | default('') }}
+
+# The realm's internal id, which a component must carry as its parent.
+_var_keycloak_ldap_realm_id: >-
+  {{ _reg_keycloak_ldap_realm_info['json']['id'] | default('') }}
+
+_var_keycloak_ldap_matching: >-
+  {{ _reg_keycloak_ldap_components['json'] | default([])
+     | selectattr('name', 'equalto', keycloak_ldap_provider_name) | list }}
+_var_keycloak_ldap_present: "{{ (_var_keycloak_ldap_matching | length) > 0 }}"
+_var_keycloak_ldap_existing_id: >-
+  {{ (_var_keycloak_ldap_matching | first)['id'] | default('') }}
+
+_var_keycloak_ldap_mapper_type: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+
+# The provider's id after it has been created or updated, read back from the
+# realm rather than remembered from whichever branch ran.
+_var_keycloak_ldap_provider_id: >-
+  {{ (_reg_keycloak_ldap_final['json'] | default([])
+      | selectattr('name', 'equalto', keycloak_ldap_provider_name)
+      | list | first)['id'] | default('') }}
+
+# The provider definition.
+#
+# vendor `rhds` because FreeIPA's directory is 389 Directory Server, and the
+# vendor field is what tells Keycloak which quirks to expect — most visibly
+# which attribute is a stable unique identifier. For FreeIPA that is
+# ipaUniqueID, not entryUUID: get it wrong and every user is re-imported under
+# a new internal id the first time the directory is rebuilt.
+#
+# READ_ONLY, deliberately. FreeIPA is the authority for identity; a Keycloak
+# that can write back is a Keycloak that can disagree with it. Password changes
+# and account creation belong in the domain.
+_var_keycloak_ldap_component:
+  name: "{{ keycloak_ldap_provider_name }}"
+  providerId: ldap
+  providerType: org.keycloak.storage.UserStorageProvider
+  config:
+    enabled: ["true"]
+    vendor: ["rhds"]
+    connectionUrl: ["{{ keycloak_ldap_connection_url }}"]
+    bindDn: ["{{ _var_keycloak_ldap_bind_dn }}"]
+    bindCredential: ["{{ keycloak_ldap_bind_password }}"]
+    authType: ["simple"]
+    editMode: ["READ_ONLY"]
+    usersDn: ["{{ keycloak_ldap_users_dn }}"]
+    usernameLDAPAttribute: ["uid"]
+    rdnLDAPAttribute: ["uid"]
+    uuidLDAPAttribute: ["ipaUniqueID"]
+    userObjectClasses: ["inetOrgPerson, organizationalPerson"]
+    # Only enabled accounts. FreeIPA marks a disabled account with
+    # nsAccountLock, and without this filter a disabled user keeps working
+    # through Keycloak after being locked out of everything else.
+    customUserSearchFilter: ["(!(nsAccountLock=TRUE))"]
+    searchScope: ["1"]
+    # Imported and cached rather than read on every request, so an identity
+    # provider outage is not also a directory outage. The directory stays the
+    # authority: the import is refreshed, never written back.
+    importEnabled: ["true"]
+    syncRegistrations: ["false"]
+    cachePolicy: ["DEFAULT"]
+    useTruststoreSpi: ["always"]
+    connectionTimeout: ["10000"]
+    readTimeout: ["10000"]
+    pagination: ["true"]
+
+# The group mapper, which turns FreeIPA's user groups into Keycloak groups.
+#
+# `mode: READ_ONLY` for the same reason the provider is: FreeIPA owns
+# membership. In this mode Keycloak reads a user's groups from the directory
+# and never writes one back, while the *role* each group grants is stored in
+# Keycloak — which is the only arrangement that works, because FreeIPA has no
+# concept of a Keycloak client role and Keycloak has no business deciding who
+# is in a group. LDAP_ONLY would try to write role mappings into the directory
+# and fail against a read-only provider.
+#
+# FreeIPA specifics, and each of these is a way to get an empty group list:
+#
+#   - groups live under cn=groups,cn=accounts, not beside the users;
+#   - a FreeIPA group is a `groupOfNames`, and its members are full DNs in
+#     `member` — hence membership.attribute.type DN rather than UID;
+#   - `preserve.group.inheritance` true, because FreeIPA nests groups by
+#     putting a group's DN in another group's `member`, and flattening that
+#     would silently drop the indirect memberships an administrator was relying
+#     on;
+#   - LOAD_GROUPS_BY_MEMBER_ATTRIBUTE, which asks the directory which groups
+#     hold this user rather than reading an attribute off the user — FreeIPA
+#     does not publish memberOf to a plain bind account by default.
+#
+# drop.non.existing.groups.during.sync is false: this mapper is not the
+# authority on which groups Keycloak holds, and a sync that removed everything
+# it did not see would delete groups belonging to any other federation.
+_var_keycloak_ldap_group_mapper:
+  name: "{{ keycloak_ldap_group_mapper_name }}"
+  providerId: group-ldap-mapper
+  providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+  parentId: "{{ _var_keycloak_ldap_provider_id | trim }}"
+  config:
+    groups.dn: ["{{ keycloak_ldap_groups_dn }}"]
+    group.name.ldap.attribute: ["cn"]
+    group.object.classes: ["groupOfNames"]
+    membership.ldap.attribute: ["member"]
+    membership.attribute.type: ["DN"]
+    membership.user.ldap.attribute: ["uid"]
+    # `groups.ldap.filter` is deliberately absent rather than set to an empty
+    # string. Keycloak discards config keys whose value is empty, so a mapper
+    # declaring one can never read back matching what was written — the
+    # comparison below sees a difference on every run, rewrites the mapper, and
+    # the role reports changed forever with nothing actually changing. An
+    # absent filter is the default and means the same thing.
+    mode: ["READ_ONLY"]
+    user.roles.retrieve.strategy: ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"]
+    preserve.group.inheritance: ["true"]
+    ignore.missing.groups: ["false"]
+    memberof.ldap.attribute: ["memberOf"]
+    drop.non.existing.groups.during.sync: ["false"]
+
+_var_keycloak_ldap_group_mapper_matching: >-
+  {{ _reg_keycloak_ldap_mappers['json'] | default([])
+     | selectattr('name', 'equalto', keycloak_ldap_group_mapper_name)
+     | list }}

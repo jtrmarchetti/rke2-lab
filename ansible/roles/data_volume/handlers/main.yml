@@ -1,0 +1,4 @@
+---
+# The role mounts the volume directly through ansible.posix.mount, so no
+# handler is required. This file exists to satisfy the role layout in
+# plan/ANSIBLE_STANDARDS.md.

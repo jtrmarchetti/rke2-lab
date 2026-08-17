@@ -1,0 +1,40 @@
+---
+time_sync_enabled: true
+
+# Sources this host synchronizes from, in chrony syntax without the directive:
+#   - "ntp.ubuntu.com iburst"      (a pool)
+#   - "192.168.2.99 iburst"        (a single server)
+# Which directive each becomes is set by time_sync_source_directive.
+time_sync_sources: []
+
+# `pool` for names that resolve to several addresses, `server` for one address.
+# A single internal server declared as a pool logs warnings on every poll.
+time_sync_source_directive: server
+
+# Networks allowed to synchronize from this host. Empty means serve nobody,
+# which is right for a plain client.
+time_sync_allow_networks: []
+
+# Serve time even when this host has no upstream of its own. Only for a host
+# that must remain a time source on an isolated network; it lets clients keep a
+# common clock rather than drifting apart when the upstream is unreachable.
+time_sync_local_stratum: 0
+
+# Ubuntu ships systemd-timesyncd, which is a client only and conflicts with
+# chrony over the same job. One time daemon per host.
+time_sync_manage_timesyncd: true
+
+# Step the clock instead of slewing it when the offset is large and the host has
+# just started. An identity domain fails on clock skew before it fails on
+# anything else, so converging fast at boot matters more than smoothness.
+time_sync_makestep: "1.0 3"
+
+# Fail if chronyd selects no source. A host whose clock is wrong fails Kerberos
+# authentication with errors that point anywhere but at the clock, so this is
+# worth catching at configuration time.
+time_sync_require_source: true
+time_sync_ready_retries: 30
+time_sync_ready_delay: 10
+
+time_sync_packages:
+  - chrony

@@ -1,0 +1,22 @@
+logoutput: syslog
+
+internal: {{ socks5_proxy_listen_address }} port = {{ socks5_proxy_listen_port }}
+external: {{ socks5_proxy_external_interface }}
+
+socksmethod: none
+clientmethod: none
+user.privileged: root
+user.unprivileged: nobody
+
+{% for _item_socks5_proxy_network in socks5_proxy_allowed_client_networks %}
+client pass {
+  from: {{ _item_socks5_proxy_network }} to: 0.0.0.0/0
+  log: connect disconnect error
+}
+{% endfor %}
+
+socks pass {
+  from: 0.0.0.0/0 to: 0.0.0.0/0
+  command: bind connect udpassociate
+  log: connect disconnect error
+}

@@ -1,0 +1,3 @@
+---
+# No handlers. Nothing this role changes is a running service: the push is the
+# effect, and Flux decides when to act on it.

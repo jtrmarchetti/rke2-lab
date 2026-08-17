@@ -1,0 +1,12 @@
+/* {{ ansible_managed }}
+ *
+ * User customization for BIND named, included by /etc/named.conf and left
+ * alone by IPA upgrades. Options settings only; anything else belongs in
+ * ipa-ext.conf.
+ */
+
+/* turns on IPv6 for port 53, IPv4 is on by default for all ifaces */
+listen-on-v6 { any; };
+
+/* dnssec-enable is obsolete and 'yes' by default */
+dnssec-validation {{ 'yes' if (freeipa_server_dnssec_validation | bool) else 'no' }};

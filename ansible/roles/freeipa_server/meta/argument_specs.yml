@@ -1,0 +1,172 @@
+---
+argument_specs:
+  main:
+    short_description: Containerized FreeIPA server for an isolated network.
+    description:
+      - Deploys FreeIPA as a container on a host with no internet access.
+      - The image is delivered as a tarball from the repo01 artifact host.
+      - DNS is installed without forwarders; the domain is authoritative for
+        itself and resolves nothing else.
+    options:
+      freeipa_server_enabled:
+        type: bool
+        required: false
+      freeipa_server_domain:
+        type: str
+        required: false
+      freeipa_server_realm:
+        type: str
+        required: false
+      freeipa_server_hostname:
+        type: str
+        required: false
+      freeipa_server_ip_address:
+        type: str
+        required: false
+      freeipa_server_admin_password:
+        description: IPA admin password, sourced from the environment.
+        type: str
+        required: false
+      freeipa_server_directory_manager_password:
+        description: Directory manager password. Sourced from the environment.
+        type: str
+        required: false
+      freeipa_server_setup_dns:
+        type: bool
+        required: false
+      freeipa_server_ready_retries:
+        description: Polling attempts for each readiness check.
+        type: int
+        required: false
+      freeipa_server_ready_delay:
+        description: Seconds between readiness polling attempts.
+        type: int
+        required: false
+      freeipa_server_ready_timeout:
+        description: Seconds to wait for each service port to open.
+        type: int
+        required: false
+      freeipa_server_dns_zones:
+        description: DNS zones to ensure exist. Each entry needs a name.
+        type: list
+        elements: dict
+        required: false
+      freeipa_server_dns_records:
+        description: >-
+          Service records to publish in the domain. Each entry needs name and
+          value; type defaults to A and zone to freeipa_server_domain.
+        type: list
+        elements: dict
+        required: false
+      freeipa_server_no_log:
+        description: >-
+          Set false only when debugging record tasks; it exposes the admin
+          password in output.
+        type: bool
+        required: false
+      freeipa_server_settle_timeout:
+        description: >-
+          Seconds to let the container settle before checking whether it is
+          crash-looping.
+        type: int
+        required: false
+      freeipa_server_manage_resolver:
+        description: >-
+          Stop and mask systemd-resolved and point /etc/resolv.conf at
+          127.0.0.1, so FreeIPA's named can own port 53 and the host resolves
+          through its own domain.
+        type: bool
+        required: false
+      freeipa_server_forwarders_enabled:
+        description: Leave false; there is no upstream resolver to forward to.
+        type: bool
+        required: false
+      freeipa_server_forwarders:
+        type: list
+        elements: str
+        required: false
+      freeipa_server_allow_zone_overlap:
+        type: bool
+        required: false
+      freeipa_server_setup_reverse_zone:
+        type: bool
+        required: false
+      freeipa_server_no_host_dns:
+        description: Skip the installer pre-flight DNS check during bootstrap.
+        type: bool
+        required: false
+      freeipa_server_ntp:
+        type: bool
+        required: false
+      freeipa_server_ntp_servers:
+        type: list
+        elements: str
+        required: false
+      freeipa_server_container_name:
+        type: str
+        required: false
+      freeipa_server_container_image:
+        type: str
+        required: false
+      freeipa_server_compose_dir:
+        type: str
+        required: false
+      freeipa_server_data_dir:
+        type: str
+        required: false
+      freeipa_server_image_tarball_url:
+        description: Apache artifact host URL for the saved image tarball.
+        type: str
+        required: false
+      freeipa_server_image_tarball_checksum:
+        description: Checksum in get_url form, for example "sha256:abc...".
+        type: str
+        required: false
+      freeipa_server_image_tarball_path:
+        type: str
+        required: false
+      freeipa_server_runtime_packages:
+        type: list
+        elements: str
+        required: false
+      freeipa_server_install_timeout:
+        description: Seconds allowed for the first-run domain bootstrap.
+        type: int
+        required: false
+      freeipa_server_dns_forward_zones:
+        type: list
+        elements: dict
+        required: false
+        description:
+          - Zones this server delegates rather than holds. Each entry names the
+            zone, the forwarder to send it to, and optionally the policy.
+        options:
+          name:
+            type: str
+            required: true
+            description: Zone to delegate.
+          forwarder:
+            type: str
+            required: true
+            description: Address of the authoritative server for that zone.
+          policy:
+            type: str
+            required: false
+            default: only
+            description: >-
+              "only" makes the delegation total. "first" falls back to this
+              server's own resolution, which for a zone it does not hold means
+              an upstream lookup for an internal name.
+      freeipa_server_dnssec_validation:
+        type: bool
+        default: true
+        description:
+          - Whether BIND validates DNSSEC. Must be false to delegate a
+            subdomain of a private zone; see tasks/named_options.yml.
+      freeipa_server_named_options_path:
+        type: str
+        description: Path of the BIND options file IPA leaves alone.
+      freeipa_server_named_config_group:
+        type: str
+        default: floppy
+        description: Group IPA gives its named configuration files.

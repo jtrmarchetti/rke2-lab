@@ -1,0 +1,24 @@
+---
+argument_specs:
+  main:
+    short_description: SOCKS5 proxy role inputs.
+    options:
+      socks5_proxy_enabled:
+        type: bool
+        required: false
+      socks5_proxy_listen_address:
+        type: str
+        required: false
+      socks5_proxy_listen_port:
+        type: int
+        required: false
+      socks5_proxy_internal_interface:
+        type: str
+        required: false
+      socks5_proxy_external_interface:
+        type: str
+        required: false
+      socks5_proxy_allowed_client_networks:
+        type: list
+        elements: str
+        required: false

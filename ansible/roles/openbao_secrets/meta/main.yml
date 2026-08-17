@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: openbao_secrets
+  author: rke2lab
+  description: >-
+    Writes the cluster's runtime secrets into the OpenBao KV v2 engine, which
+    is where every workload reads them from through External Secrets. Reads
+    each entry before writing it, so a run that changes nothing writes nothing
+    and creates no new secret version.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - openbao
+    - secrets
+
+dependencies: []

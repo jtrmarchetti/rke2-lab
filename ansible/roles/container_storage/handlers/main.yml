@@ -1,0 +1,6 @@
+---
+# The role restarts the daemons inline rather than through handlers, because a
+# migration has to stop them, copy data, and start them again within a single
+# ordered block. A handler runs at the end of the play, which is after the copy
+# would already have happened against a running daemon. This file exists to
+# satisfy the role layout in plan/ANSIBLE_STANDARDS.md.

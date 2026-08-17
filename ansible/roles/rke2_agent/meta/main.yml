@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: rke2_agent
+  author: rke2lab
+  description: >-
+    Configures and starts an RKE2 agent so a worker joins an existing cluster
+    through the API virtual address, and gates on the node reaching Ready as
+    seen from a control plane host rather than on the service being active.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - kubernetes
+    - worker
+
+dependencies: []

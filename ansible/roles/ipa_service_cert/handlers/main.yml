@@ -1,0 +1,3 @@
+---
+# No handlers. Certificate material is consumed by the roles that mount it, and
+# those own their own restart triggers.

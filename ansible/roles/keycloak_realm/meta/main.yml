@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: keycloak_realm
+  author: rke2lab
+  description: >-
+    Creates the realm that federated applications and federated users live in,
+    which is deliberately not master. Master administers every other realm and
+    holds Keycloak's local break-glass administrator; nothing else belongs
+    there.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - keycloak
+    - sso
+
+dependencies: []

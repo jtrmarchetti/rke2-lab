@@ -1,0 +1,82 @@
+---
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env:
+      - WIREGUARD_CONTROLLER_PRIVATE_KEY
+      - WIREGUARD_REPO_PRIVATE_KEY
+
+- name: Configure controller WireGuard endpoint
+  hosts: controller
+  gather_facts: true
+  become: true
+  tasks:
+    - name: tunnel_controller_access | Ensure wireguard tooling is installed
+      when: (inventory_controller_wireguard_enabled | bool)
+      ansible.builtin.apt:
+        name: wireguard-tools
+        state: present
+
+    - name: tunnel_controller_access | Ensure wireguard config directory exists
+      when: (inventory_controller_wireguard_enabled | bool)
+      ansible.builtin.file:
+        path: /etc/wireguard
+        state: directory
+        mode: "0700"
+
+    - name: tunnel_controller_access | Render controller WireGuard config
+      when: (inventory_controller_wireguard_enabled | bool)
+      notify:
+        - Restart controller WireGuard
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../files/tunnel_controller_access/wg_controller.conf.j2"
+        dest: "/etc/wireguard/{{ inventory_controller_wireguard_interface }}.conf"
+        mode: "0600"
+
+    - name: tunnel_controller_access | Ensure controller WireGuard interface service is enabled and started
+      when: (inventory_controller_wireguard_enabled | bool)
+      ansible.builtin.systemd:
+        name: "wg-quick@{{ inventory_controller_wireguard_interface }}"
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart controller WireGuard
+      ansible.builtin.systemd:
+        name: "wg-quick@{{ inventory_controller_wireguard_interface }}"
+        state: restarted
+
+- name: Configure repo WireGuard gateway endpoint
+  hosts: repo
+  gather_facts: true
+  become: true
+  tasks:
+    - name: tunnel_controller_access | Include wireguard gateway role
+      vars:
+        wireguard_gateway_address: "{{ inventory_wireguard_gateway_address }}"
+        wireguard_gateway_enabled: "{{ inventory_wireguard_gateway_enabled }}"
+        wireguard_gateway_interface: "{{ inventory_wireguard_gateway_interface }}"
+        wireguard_gateway_internal_subnet: >-
+          {{ inventory_wireguard_gateway_internal_subnet }}
+        wireguard_gateway_ip_forward_enabled: >-
+          {{ inventory_wireguard_gateway_ip_forward_enabled }}
+        wireguard_gateway_listen_port: >-
+          {{ inventory_wireguard_gateway_listen_port }}
+        wireguard_gateway_manage_firewall_nat: >-
+          {{ inventory_wireguard_gateway_manage_firewall_nat }}
+        wireguard_gateway_nat_out_interface: >-
+          {{ inventory_wireguard_gateway_nat_out_interface }}
+        wireguard_gateway_nat_source_cidr: >-
+          {{ inventory_wireguard_gateway_nat_source_cidr }}
+        wireguard_gateway_peer_allowed_ips: >-
+          {{ inventory_wireguard_gateway_peer_allowed_ips }}
+        wireguard_gateway_peer_endpoint: >-
+          {{ inventory_wireguard_gateway_peer_endpoint }}
+        wireguard_gateway_peer_persistent_keepalive: >-
+          {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
+        wireguard_gateway_peer_public_key: >-
+          {{ inventory_wireguard_gateway_peer_public_key }}
+        wireguard_gateway_private_key: >-
+          {{ inventory_wireguard_gateway_private_key }}
+      ansible.builtin.include_role:
+        name: wireguard_gateway

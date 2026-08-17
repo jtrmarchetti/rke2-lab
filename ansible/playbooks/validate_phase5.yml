@@ -1,0 +1,366 @@
+---
+# Phase 5 validation. Mirrors the Test section of
+# plan/PHASE5_IMPLEMENTATION.md: the workers join, the air gap still holds on
+# them, the ingress controller is the one Phase 5 chose, and the control plane
+# carries the taint that keeps work off it.
+#
+# Every check is a transaction, for the reason Phase 4's validation states: a
+# service that is active and a file that exists are both true of a node that
+# cannot pull an image, and the next phase is where that surfaces.
+#
+# None of the jsonpath expressions below contain a space or a double quote. The
+# command module applies shell-like quoting to its argument, so an expression
+# containing either arrives at kubectl mangled and fails whatever the cluster is
+# actually doing. That cost Phase 4 a full retry budget.
+
+- name: Validate the RKE2 workers
+  hosts: kubewk
+  gather_facts: true
+  become: true
+  tasks:
+    # --- The disks --------------------------------------------------------
+    #
+    # Both of them, and before anything else. A worker whose /data1 is missing
+    # is filling its 32 GB OS disk with containerd's image store, and a worker
+    # whose CSI disk is missing will fail Phase 6 rather than this phase.
+
+    - name: validate_phase5 | Validate both data volumes are mounted
+      vars:
+        _validate_mounted: >-
+          {{ ansible_facts['mounts'] | map(attribute='mount') | list }}
+      ansible.builtin.assert:
+        that:
+          - inventory_data_volume_mount_path in _validate_mounted
+          - inventory_kubewk_csi_volume_mount_path in _validate_mounted
+        fail_msg: >-
+          Expected {{ inventory_data_volume_mount_path }} and
+          {{ inventory_kubewk_csi_volume_mount_path }} to be mounted, found
+          {{ _validate_mounted }}. RKE2's data directory belongs on the first
+          and Longhorn's on the second; on the OS disk either one fills a 32 GB
+          volume silently.
+        quiet: true
+
+    # --- The air gap ------------------------------------------------------
+    #
+    # The same two checks the servers get, because a worker is the more likely
+    # place for the air gap to be quietly broken: it is the node someone would
+    # be tempted to seed a tarball onto to get a join working.
+
+    - name: validate_phase5 | Validate no air-gap image tarball was seeded on the worker
+      register: _reg_validate_seeded
+      ansible.builtin.find:
+        paths: "{{ inventory_rke2_node_data_dir }}/agent/images"
+        patterns: "rke2-images*"
+
+    - name: validate_phase5 | Assert the images came from the registry, not from a tarball
+      ansible.builtin.assert:
+        that:
+          - _reg_validate_seeded['matched'] == 0
+        fail_msg: >-
+          {{ inventory_rke2_node_data_dir }}/agent/images holds
+          {{ _reg_validate_seeded['matched'] }} image tarballs. containerd would find
+          every image locally and never contact the mirror, so a broken registry
+          path would pass here and fail in Phase 6.
+        quiet: true
+
+    # Pulling by the upstream name is the point: it succeeds only if the
+    # rewrite, the deploy token and the CA trust are all correct, and given the
+    # negative test below it can only have been served by GitLab.
+    - name: validate_phase5 | Pull an image by its upstream name through the mirror
+      changed_when: false
+      register: _reg_validate_pull
+      ansible.builtin.command:
+        cmd: >-
+          {{ inventory_rke2_node_data_dir }}/bin/crictl
+          --runtime-endpoint unix:///run/k3s/containerd/containerd.sock
+          pull docker.io/rancher/mirrored-pause:3.10.2
+
+    - name: validate_phase5 | Validate the pull succeeded through the mirror
+      ansible.builtin.assert:
+        that:
+          - _reg_validate_pull['rc'] == 0
+        fail_msg: >-
+          Pulling docker.io/rancher/mirrored-pause:3.10.2 failed on this worker.
+          With no route upstream this is the mirror, its rewrite rule, the
+          deploy token, or the CA trust — check
+          /etc/rancher/rke2/registries.yaml.
+        quiet: true
+
+    - name: validate_phase5 | Attempt a direct upstream fetch, which must fail
+      changed_when: false
+      failed_when: false
+      register: _reg_validate_upstream
+      ansible.builtin.uri:
+        url: https://registry-1.docker.io/v2/
+        timeout: 10
+        status_code: -1
+
+    - name: validate_phase5 | Validate the worker has no route to an upstream registry
+      ansible.builtin.assert:
+        that:
+          - _reg_validate_upstream is failed or _reg_validate_upstream['status'] | int < 0
+        fail_msg: >-
+          This worker reached registry-1.docker.io. An internal node with a
+          route to the internet breaks the premise every phase is built on.
+        quiet: true
+
+# Cluster-level checks, asked once from a host that can see the API.
+- name: Validate the cluster the workers joined
+  hosts: kubecp
+  gather_facts: false
+  become: true
+  vars:
+    _validate_kubectl: >-
+      /data1/rancher/rke2/bin/kubectl
+      --kubeconfig /etc/rancher/rke2/rke2.yaml
+    _validate_worker_label: node-role.kubernetes.io/worker=true
+    _validate_test_namespace: phase5-validate
+    # rke2-traefik, not traefik. The packaged chart names its workload after
+    # itself, so the upstream chart's selector finds nothing here and the check
+    # reports Traefik running nowhere while three replicas are running fine.
+    _validate_traefik_label: app.kubernetes.io/name=rke2-traefik
+  tasks:
+    - name: validate_phase5 | Ask the cluster-level questions from one server
+      # Asked once, from whichever server the play reaches first. Every check
+      # below is a question about the cluster rather than about a node, so
+      # the answer does not depend on which server is asked.
+      run_once: true
+      block:
+        # --- Membership -------------------------------------------------------
+
+        - name: validate_phase5 | Wait for every node to report Ready
+          changed_when: false
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} wait --for=condition=Ready
+              nodes --all --timeout=60s
+
+        - name: validate_phase5 | Read the registered node names
+          changed_when: false
+          register: _reg_validate_nodes
+          ansible.builtin.command:
+            cmd: "{{ _validate_kubectl }} get nodes -o name"
+
+        - name: validate_phase5 | Validate the cluster has every server and every worker
+          vars:
+            _validate_total: >-
+              {{ (groups['kubecp'] | length) + (groups['kubewk'] | length) }}
+          ansible.builtin.assert:
+            that:
+              - >-
+                _reg_validate_nodes['stdout_lines'] | select | list | length
+                == (groups['kubecp'] | length) + (groups['kubewk'] | length)
+            fail_msg: >-
+              Expected {{ _validate_total }} nodes, found
+              {{ _reg_validate_nodes['stdout_lines'] | select | list }}.
+            quiet: true
+
+        - name: validate_phase5 | Read the nodes carrying the worker role label
+          changed_when: false
+          register: _reg_validate_labelled
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} get nodes
+              -l {{ _validate_worker_label }} -o name
+
+        - name: validate_phase5 | Validate every worker carries the worker role label
+          ansible.builtin.assert:
+            that:
+              - >-
+                _reg_validate_labelled['stdout_lines'] | select | list | length
+                == groups['kubewk'] | length
+            fail_msg: >-
+              {{ _reg_validate_labelled['stdout_lines'] | select | list | length }}
+              nodes carry {{ _validate_worker_label }}, expected
+              {{ groups['kubewk'] | length }}. The kubelet cannot set this label
+              itself — NodeRestriction forbids it — so it comes from
+              playbooks/kubewk.yml and its absence means that play did not run.
+            quiet: true
+
+        # etcd is a control plane concern and adding agents must not have touched
+        # it. Checked here because a Phase 5 change that damaged etcd would
+        # otherwise be found in Phase 6.
+        - name: validate_phase5 | Read the etcd member health
+          changed_when: false
+          register: _reg_validate_etcd
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} get pods -n kube-system
+              -l component=etcd --no-headers
+
+        - name: validate_phase5 | Validate etcd still has one running member per server
+          ansible.builtin.assert:
+            that:
+              - >-
+                _reg_validate_etcd['stdout_lines'] | select('search', ' Running ')
+                | list | length == groups['kubecp'] | length
+            fail_msg: >-
+              etcd does not have a member running on every server:
+              {{ _reg_validate_etcd['stdout_lines'] }}.
+            quiet: true
+
+        # --- The taint --------------------------------------------------------
+
+        - name: validate_phase5 | Read the taints on the control plane
+          changed_when: false
+          register: _reg_validate_cp_taints
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} get nodes
+              -l node-role.kubernetes.io/control-plane=true
+              -o jsonpath={.items[*].spec.taints[*].key}
+
+        - name: validate_phase5 | Validate every server carries the CriticalAddonsOnly taint
+          ansible.builtin.assert:
+            that:
+              - >-
+                _reg_validate_cp_taints['stdout'].split() | select('equalto',
+                'CriticalAddonsOnly') | list | length == groups['kubecp'] | length
+            fail_msg: >-
+              Expected CriticalAddonsOnly on all {{ groups['kubecp'] | length }}
+              servers, found taints {{ _reg_validate_cp_taints['stdout'] }}. Without it
+              workloads schedule onto the 2 vCPU nodes running etcd.
+            quiet: true
+
+        - name: validate_phase5 | Read the taints on the workers
+          changed_when: false
+          register: _reg_validate_wk_taints
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} get nodes -l {{ _validate_worker_label }}
+              -o jsonpath={.items[*].spec.taints[*].key}
+
+        - name: validate_phase5 | Validate the workers carry no taints
+          ansible.builtin.assert:
+            that:
+              - _reg_validate_wk_taints['stdout'] | trim | length == 0
+            fail_msg: >-
+              The workers carry taints ({{ _reg_validate_wk_taints['stdout'] }}), so
+              nothing will schedule anywhere. The taint belongs on the control
+              plane only.
+            quiet: true
+
+        # --- Ingress ----------------------------------------------------------
+
+        - name: validate_phase5 | Read the ingress classes
+          changed_when: false
+          register: _reg_validate_ingressclass
+          ansible.builtin.command:
+            cmd: "{{ _validate_kubectl }} get ingressclass -o name"
+
+        - name: validate_phase5 | Validate Traefik is the ingress controller and nginx is not
+          ansible.builtin.assert:
+            that:
+              - _reg_validate_ingressclass['stdout'] is search('traefik')
+              - _reg_validate_ingressclass['stdout'] is not search('nginx')
+            fail_msg: >-
+              Expected a traefik IngressClass and no nginx one, found
+              {{ _reg_validate_ingressclass['stdout_lines'] }}. ingress-nginx reached
+              end
+              of life in March 2026; if it is present here, ingress-controller in
+              the server config did not take effect.
+            quiet: true
+
+        - name: validate_phase5 | Read where the Traefik pods are running
+          changed_when: false
+          register: _reg_validate_traefik_nodes
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} get pods -n kube-system
+              -l {{ _validate_traefik_label }}
+              -o jsonpath={.items[*].spec.nodeName}
+
+        - name: validate_phase5 | Validate Traefik runs on workers only
+          vars:
+            _validate_worker_names: >-
+              {{ groups['kubewk'] | map('regex_replace', '$', '.dev.lo') | list }}
+          ansible.builtin.assert:
+            that:
+              - _reg_validate_traefik_nodes['stdout'] | trim | length > 0
+              - >-
+                _reg_validate_traefik_nodes['stdout'].split()
+                | reject('in', _validate_worker_names) | list | length == 0
+            fail_msg: >-
+              Traefik is running on {{ _reg_validate_traefik_nodes['stdout'] }}, which
+              is
+              not the workers. Ingress belongs on the workers; check the
+              HelmChartConfig node selector and the control plane taint.
+            quiet: true
+
+        # --- A real workload --------------------------------------------------
+        #
+        # The one check that proves the phase rather than its parts: a pod that is
+        # scheduled by the scheduler, placed by the taint, and whose image came
+        # through the mirror. Created and removed here, because a validation run
+        # should leave the cluster as it found it.
+
+        - name: validate_phase5 | Create the validation namespace
+          changed_when: _reg_validate_ns['rc'] == 0
+          failed_when:
+            - _reg_validate_ns['rc'] != 0
+            - "'AlreadyExists' not in _reg_validate_ns['stderr']"
+          register: _reg_validate_ns
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} create namespace {{ _validate_test_namespace
+              }}
+
+        - name: validate_phase5 | Run a test workload that must pull through the mirror
+          changed_when: _reg_validate_deploy['rc'] == 0
+          failed_when:
+            - _reg_validate_deploy['rc'] != 0
+            - "'AlreadyExists' not in _reg_validate_deploy['stderr']"
+          register: _reg_validate_deploy
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} -n {{ _validate_test_namespace }}
+              create deployment phase5 --replicas=3
+              --image=docker.io/rancher/mirrored-pause:3.10.2
+
+        - name: validate_phase5 | Wait for the test workload to become available
+          changed_when: false
+          failed_when: false
+          register: _reg_validate_available
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} -n {{ _validate_test_namespace }}
+              wait --for=condition=Available deployment/phase5 --timeout=180s
+
+        - name: validate_phase5 | Read where the test workload was scheduled
+          changed_when: false
+          register: _reg_validate_placement
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} -n {{ _validate_test_namespace }}
+              get pods -o jsonpath={.items[*].spec.nodeName}
+
+        # Removed before the assertion, so a failed check still cleans up after
+        # itself rather than leaving a namespace behind for the next run to trip
+        # on.
+        - name: validate_phase5 | Remove the validation namespace
+          changed_when: true
+          ansible.builtin.command:
+            cmd: >-
+              {{ _validate_kubectl }} delete namespace {{ _validate_test_namespace
+              }}
+              --wait=false
+
+        - name: validate_phase5 | Validate the workload ran, and ran only on workers
+          vars:
+            _validate_worker_names: >-
+              {{ groups['kubewk'] | map('regex_replace', '$', '.dev.lo') | list }}
+          ansible.builtin.assert:
+            that:
+              - _reg_validate_available['rc'] == 0
+              - _reg_validate_placement['stdout'] | trim | length > 0
+              - >-
+                _reg_validate_placement['stdout'].split()
+                | reject('in', _validate_worker_names) | list | length == 0
+            fail_msg: >-
+              The test workload did not become available on workers only. It was
+              placed on {{ _reg_validate_placement['stdout'] }}. If it never started,
+              the
+              image did not pull through the mirror; if it started on a server,
+              the
+              control plane taint is not doing its job.
+            quiet: true

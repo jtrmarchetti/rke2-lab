@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: rke2_server
+  author: rke2lab
+  description: >-
+    Configures and starts an RKE2 server, deploys kube-vip to hold the API
+    virtual address on the bootstrap node, and gates on the API answering and
+    the node reaching Ready rather than on the service being active.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - kubernetes
+    - etcd
+
+dependencies: []

@@ -1,0 +1,158 @@
+{{ ansible_managed | comment }}
+---
+services:
+  gitlab:
+    image: {{ gitlab_container_image }}
+    container_name: {{ gitlab_container_name }}
+    restart: unless-stopped
+    # Omnibus derives the node name from the container hostname. Without this
+    # it becomes the random container ID, which changes on every recreate and
+    # leaves stale entries behind in the application.
+    hostname: {{ gitlab_external_hostname }}
+
+    # PostgreSQL, Redis, and Gitaly all shut down when this container stops,
+    # and every configuration change here is a stop. Docker's 10 second default
+    # SIGKILLs the database mid-write; the FreeIPA deployment in Phase 2 lost a
+    # database to exactly that. Five minutes covers an omnibus shutdown.
+    stop_grace_period: 5m
+
+    shm_size: '{{ gitlab_shm_size }}'
+
+    env_file:
+      - {{ _var_gitlab_env_file }}
+
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '{{ gitlab_external_url }}'
+{% if gitlab_registry_enabled | bool %}
+        registry_external_url '{{ gitlab_registry_external_url }}'
+        gitlab_rails['registry_enabled'] = true
+{% else %}
+        gitlab_rails['registry_enabled'] = false
+{% endif %}
+
+        # Certificates are issued by the FreeIPA CA and mounted read-only from
+        # the host. Nothing on this network can reach an ACME endpoint, so the
+        # automatic path must be off or reconfigure fails trying to use it.
+        letsencrypt['enable'] = {{ gitlab_letsencrypt_enabled | bool | lower }}
+        nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.crt"
+        nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.key"
+{% if gitlab_registry_enabled | bool %}
+        registry_nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_registry_hostname }}.crt"
+        registry_nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_registry_hostname }}.key"
+{% endif %}
+
+        # Port 80 is not published, because Apache owns it on this host. A
+        # redirect listener there would bind nothing and only confuse the
+        # generated configuration.
+        nginx['redirect_http_to_https'] = false
+        nginx['listen_port'] = 443
+        nginx['listen_https'] = true
+
+        # Must match the published host port or GitLab prints clone URLs
+        # pointing at the host's own sshd on 22.
+        gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
+
+        # No mail transport on this network. Left enabled, every notification
+        # attempt blocks a Sidekiq worker until it times out.
+        gitlab_rails['gitlab_email_enabled'] = false
+
+        # Memory-constrained settings, per GitLab's guidance for small
+        # installs. The monitoring group is worth roughly 300 MB and nothing
+        # in this lab reads it; KAS serves the Kubernetes agent, unused here.
+        puma['worker_processes'] = {{ gitlab_puma_worker_processes }}
+        sidekiq['concurrency'] = {{ gitlab_sidekiq_concurrency }}
+        prometheus_monitoring['enable'] = {{ gitlab_monitoring_enabled | bool | lower }}
+        gitlab_rails['monitoring_whitelist'] = {{ gitlab_monitoring_allowed_networks | to_json }}
+        gitlab_kas['enable'] = {{ gitlab_kas_enabled | bool | lower }}
+        gitlab_rails['env'] = { 'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000' }
+        gitlab_rails['packages_enabled'] = {{ gitlab_package_registry_enabled | bool | lower }}
+
+        # Backups land on the data disk, which is bind-mounted, so they survive
+        # the container and do not consume the OS disk.
+        gitlab_rails['backup_path'] = '/var/opt/gitlab/backups'
+{% if gitlab_oidc_enabled | bool %}
+
+        # --- Single sign-on against Keycloak ---------------------------------
+        #
+        # Additive, and every line below is arranged to keep it that way.
+        # GitLab is upstream of the cluster that runs Keycloak: Flux reads the
+        # cluster-state repository from here and every image the cluster pulls
+        # comes out of this registry. A GitLab reachable only through Keycloak
+        # could not be administered on the day the cluster is what is broken.
+        #
+        # So the root account keeps its password and the local sign-in form
+        # stays on the page. `omniauth_auto_sign_in_with_provider` is
+        # deliberately absent when auto sign-in is off — setting it redirects
+        # the login page straight to Keycloak, leaving the local form reachable
+        # only by someone who knows to append ?auto_sign_in=false, and a
+        # break-glass path that depends on remembering a query parameter is not
+        # one.
+        gitlab_rails['omniauth_enabled'] = true
+        gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+        gitlab_rails['omniauth_block_auto_created_users'] = {{ gitlab_oidc_block_auto_created_users | bool | lower }}
+        # Links a Keycloak identity to an existing GitLab account with the same
+        # verified email rather than creating a second one. Both sides read the
+        # address from FreeIPA, so they agree by construction.
+        gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
+{% if gitlab_oidc_auto_sign_in | bool %}
+        gitlab_rails['omniauth_auto_sign_in_with_provider'] = 'openid_connect'
+{% endif %}
+        gitlab_rails['omniauth_providers'] = [
+          {
+            name: 'openid_connect',
+            label: '{{ gitlab_oidc_label }}',
+            args: {
+              name: 'openid_connect',
+              scope: ['openid', 'profile', 'email'],
+              # Discovery, so the endpoints come from Keycloak rather than
+              # being six more strings to keep in step with the realm. It is
+              # fetched on a sign-in attempt and not at start-up, so a Keycloak
+              # that is down costs a failed button press rather than a GitLab
+              # that will not boot.
+              response_type: 'code',
+              issuer: '{{ gitlab_oidc_issuer }}',
+              discovery: true,
+              client_auth_method: 'basic',
+              uid_field: 'preferred_username',
+              # Proof key for code exchange. The authorization code is bound to
+              # the exchange that requested it, so a code intercepted in the
+              # redirect cannot be redeemed by anyone else.
+              pkce: true,
+              client_options: {
+                identifier: '{{ gitlab_oidc_client_id }}',
+                secret: '{{ gitlab_oidc_client_secret }}',
+                redirect_uri: '{{ gitlab_external_url }}/users/auth/openid_connect/callback'
+              }
+            }
+          }
+        ]
+        gitlab_rails['omniauth_sync_profile_from_provider'] = ['openid_connect']
+        gitlab_rails['omniauth_sync_profile_attributes'] = ['email']
+
+        # One limitation, stated here rather than discovered: GitLab **CE
+        # cannot map an OIDC claim to administrator**. Group-to-admin sync is
+        # an EE feature, and this is Community Edition for the same licensing
+        # reason OpenBao is here rather than Vault.
+        #
+        # So `gitlab-admins` is real in FreeIPA and real in Keycloak — a member
+        # gets the `admin` client role in the token, exactly like every other
+        # service — and GitLab is the one consumer that ignores it. Making
+        # somebody a GitLab administrator is still done in GitLab, by root.
+        #
+        # The group is kept anyway, and not as decoration: it keeps one naming
+        # convention across every service, it is the list to consult when
+        # deciding who should be an administrator here, and it is what an
+        # upgrade to EE — or a future CE release that gains the feature —
+        # would start consuming with no change to the directory.
+{% endif %}
+
+    ports:
+      - "{{ gitlab_https_port }}:443"
+      - "{{ gitlab_ssh_port }}:22"
+
+    volumes:
+      - {{ gitlab_data_root }}/config:/etc/gitlab
+      - {{ gitlab_data_root }}/logs:/var/log/gitlab
+      - {{ gitlab_data_root }}/data:/var/opt/gitlab
+      - {{ gitlab_ssl_source_dir }}:{{ _var_gitlab_container_ssl_dir }}:ro

@@ -1,0 +1,146 @@
+---
+# The authorisation half of single sign-on, created where identity already
+# lives.
+#
+# Keycloak federates FreeIPA read-only, so it can tell you who someone is and
+# nothing about what they may do. That second question has to be answered
+# somewhere, and the choice is between answering it in the domain — as group
+# membership, next to the accounts — or in Keycloak, as realm state that exists
+# only in Keycloak's database. This role takes the first, for the same reason
+# keycloak_ldap made the provider READ_ONLY: the domain is the authority, and a
+# second store that can disagree with it is a second store that eventually
+# does.
+#
+# So the model is: two groups per application, `<app>-admins` and
+# `<app>-users`, held in FreeIPA. Keycloak imports them through the group
+# mapper, keycloak_clients maps each to a client role, and every service reads
+# the role out of the token. Granting someone access to Grafana is
+# `ipa group-add-member grafana-users --users alice` and nothing else — no
+# Keycloak console, no per-service user list.
+#
+# Groups only. This role never adds a member: who belongs in `grafana-admins`
+# is a decision about people, and automation that asserted it would fight with
+# every membership change made in the domain.
+
+- name: main | Assert the required inputs are present
+  when: (ipa_sso_groups_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (ipa_sso_groups_ipa_host | length) > 0
+      - (ipa_sso_groups_ipa_container | length) > 0
+      - (ipa_sso_groups_admin_password | length) >= 8
+      - (ipa_sso_groups_applications | length) > 0
+    fail_msg: >-
+      ipa_sso_groups needs the identity host, the container the directory
+      tools run in, the IPA admin password (FREEIPA_ADMIN_PASSWORD from
+      ~/.config/rke2lab/env.sh) and at least one application to create groups
+      for. See plan/SECRETS.md.
+    quiet: true
+
+# One invocation per application rather than one per group, so the pair is
+# created or not created together — a directory holding `grafana-admins` and
+# not `grafana-users` is a state no reader would expect and Keycloak would
+# report as a group mapping pointing at nothing.
+#
+# shell, not command: this is a kinit followed by conditional creations, which
+# is control flow inside the container and has no module equivalent. The
+# `changed=N` marker is what makes it honest about idempotence — `ipa
+# group-add` fails on an existing group, so the guard is the check rather than
+# the error being swallowed. Same shape as ipa_sub_ca's profile task.
+#
+# The password crosses on stdin, base64 encoded so that a value containing a
+# quote cannot end the shell string. No process list on core01 ever holds it.
+#
+# noqa on the pipe rule, and the pipe is genuinely guarded: the only pipeline
+# here is inside the `bash -c` script, where `set -o pipefail` below covers it.
+# ansible-lint reads the outer command string, which is a single docker exec.
+- name: main | Ensure each application has an administrator and a user group # noqa: risky-shell-pipe
+  when: (ipa_sso_groups_enabled | bool)
+  changed_when: "'changed=0' not in _reg_ipa_sso_groups_result['stdout']"
+  delegate_to: "{{ ipa_sso_groups_ipa_host }}"
+  no_log: "{{ ipa_sso_groups_no_log | bool }}"
+  register: _reg_ipa_sso_groups_result
+  loop: "{{ ipa_sso_groups_applications }}"
+  loop_control:
+    loop_var: _item_ipa_sso_groups_application
+    label: "{{ _item_ipa_sso_groups_application['name'] }}"
+  vars:
+    _ipa_sso_groups_admin_group: >-
+      {{ _item_ipa_sso_groups_application['name'] }}-{{
+      ipa_sso_groups_admin_suffix }}
+    _ipa_sso_groups_user_group: >-
+      {{ _item_ipa_sso_groups_application['name'] }}-{{
+      ipa_sso_groups_user_suffix }}
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -i {{ ipa_sso_groups_ipa_container }} bash -c '
+        set -e -o pipefail
+        cat | base64 -d | kinit {{ ipa_sso_groups_admin_user }} >/dev/null
+        changed=0
+        if ! ipa group-show {{ _ipa_sso_groups_admin_group | trim }} \
+             >/dev/null 2>&1
+        then
+          ipa group-add {{ _ipa_sso_groups_admin_group | trim }} \
+            --desc "Administrators of {{
+              _item_ipa_sso_groups_application['description'] }}" >/dev/null
+          changed=1
+        fi
+        if ! ipa group-show {{ _ipa_sso_groups_user_group | trim }} \
+             >/dev/null 2>&1
+        then
+          ipa group-add {{ _ipa_sso_groups_user_group | trim }} \
+            --desc "Users of {{
+              _item_ipa_sso_groups_application['description'] }}" >/dev/null
+          changed=1
+        fi
+        echo "changed=${changed}"'
+    stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
+
+# Read back rather than trusted, because the failure this catches is silent at
+# every other layer: a group that does not exist appears in Keycloak as an
+# absent group mapping, and in the service as a user who authenticates
+# successfully and is then refused, which reads as a broken client.
+- name: main | Read every group back from the directory # noqa: risky-shell-pipe
+  when:
+    - (ipa_sso_groups_enabled | bool)
+    - not ansible_check_mode
+  changed_when: false
+  delegate_to: "{{ ipa_sso_groups_ipa_host }}"
+  no_log: "{{ ipa_sso_groups_no_log | bool }}"
+  register: _reg_ipa_sso_groups_present
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -i {{ ipa_sso_groups_ipa_container }} bash -c '
+        set -e -o pipefail
+        cat | base64 -d | kinit {{ ipa_sso_groups_admin_user }} >/dev/null
+        ipa group-find --sizelimit 0 --raw | \
+          awk "/^  cn:/ {print \$2}"'
+    stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
+
+- name: main | Assert every group this role declares exists
+  when:
+    - (ipa_sso_groups_enabled | bool)
+    - not ansible_check_mode
+  vars:
+    _ipa_sso_groups_found: >-
+      {{ _reg_ipa_sso_groups_present['stdout_lines'] | map('trim') | list }}
+    _ipa_sso_groups_missing: >-
+      {{ _var_ipa_sso_groups_all | reject('in', _ipa_sso_groups_found) | list }}
+  ansible.builtin.assert:
+    that:
+      - (_ipa_sso_groups_missing | length) == 0
+    fail_msg: >-
+      These groups are declared by ipa_sso_groups and absent from the
+      directory: {{ _ipa_sso_groups_missing | join(', ') }}. A user in an
+      absent group authenticates and is then refused, which presents as a
+      broken Keycloak client rather than as a missing group.
+    quiet: true
+
+- name: main | Report the groups the domain now holds
+  when: (ipa_sso_groups_enabled | bool)
+  ansible.builtin.debug:
+    msg: >-
+      {{ ipa_sso_groups_applications | length }} applications,
+      {{ _var_ipa_sso_groups_all | length }} groups:
+      {{ _var_ipa_sso_groups_all | join(', ') }}
+    verbosity: 0

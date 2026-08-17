@@ -1,0 +1,33 @@
+{{ ansible_managed | comment }}
+#
+# Cluster access for the dev.lo RKE2 lab. Sourced from the shell profile by a
+# marked block; edit the template in roles/kube_cli_controller, not this file.
+
+# The single thing whose absence made a working cluster look broken: kubectl
+# was on PATH, nothing set this, so every command fell back to ~/.kube/config —
+# which does not exist — and failed as though the cluster were unreachable.
+KUBECONFIG="{{ kube_cli_controller_kubeconfig }}"
+export KUBECONFIG
+
+# Where this role puts kubectl and k9s. Prepended only if it is not already
+# there, so re-sourcing the file does not grow PATH without bound.
+case ":${PATH}:" in
+    *":{{ kube_cli_controller_bin_dir }}:"*) ;;
+    *) PATH="{{ kube_cli_controller_bin_dir }}:${PATH}" ; export PATH ;;
+esac
+
+# Interactive shells only. $- contains 'i' exactly when this is one.
+case $- in
+    *i*)
+{% if kube_cli_controller_alias | length > 0 %}
+        alias {{ kube_cli_controller_alias }}=kubectl
+{% endif %}
+        if [ -r "{{ kube_cli_controller_config_dir }}/kubectl-completion.bash" ]; then
+            . "{{ kube_cli_controller_config_dir }}/kubectl-completion.bash"
+{% if kube_cli_controller_alias | length > 0 %}
+            complete -o default -F __start_kubectl {{ kube_cli_controller_alias }}
+{% endif %}
+        fi
+        ;;
+    *) ;;
+esac

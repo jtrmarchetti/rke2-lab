@@ -1,0 +1,57 @@
+---
+- name: main | Ensure apt proxy config is present for internal hosts
+  when:
+    - (base_host_apt_proxy_enabled | bool)
+    - (base_host_apt_proxy_url | length > 0)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99repo-proxy
+    content: |
+      Acquire::http::Proxy "{{ base_host_apt_proxy_url }}";
+      Acquire::https::Proxy "{{ base_host_apt_proxy_url }}";
+      Acquire::ftp::Proxy "{{ base_host_apt_proxy_url }}";
+    mode: "0644"
+
+- name: main | Ensure apt proxy config is absent when the host reaches upstream directly
+  when: not (base_host_apt_proxy_enabled | bool)
+  ansible.builtin.file:
+    path: /etc/apt/apt.conf.d/99repo-proxy
+    state: absent
+
+- name: main | Ensure split DNS netplan drop-in is present
+  when:
+    - (base_host_split_dns_enabled | bool)
+    - (base_host_split_dns_interface | length > 0)
+    - (base_host_split_dns_servers | length > 0)
+  notify:
+    - Apply netplan configuration
+  ansible.builtin.template:
+    src: "{{ _var_base_host_files_dir }}/split_dns_netplan.j2"
+    dest: "{{ _var_base_host_split_dns_netplan_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: main | Ensure split DNS netplan drop-in is absent when disabled
+  when: not (base_host_split_dns_enabled | bool)
+  notify:
+    - Apply netplan configuration
+  ansible.builtin.file:
+    path: "{{ _var_base_host_split_dns_netplan_path }}"
+    state: absent
+
+- name: main | Ensure apt cache is updated
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ _var_base_host_apt_cache_valid_time }}"
+
+- name: main | Ensure base packages are installed
+  ansible.builtin.apt:
+    name: "{{ base_host_packages }}"
+    state: present
+
+- name: main | Ensure target hostname is configured
+  when:
+    - (base_host_manage_hostname | bool)
+    - (base_host_target_hostname | length > 0)
+  ansible.builtin.hostname:
+    name: "{{ base_host_target_hostname }}"

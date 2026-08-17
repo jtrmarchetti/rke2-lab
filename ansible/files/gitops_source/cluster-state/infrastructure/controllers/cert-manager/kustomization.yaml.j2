@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - release.yaml
+  # The signing key lives with the controller rather than with the issuer that
+  # names it: the Secret has to exist in the cert-manager namespace, and this
+  # is the layer that creates that namespace.
+  - ca-keypair.yaml

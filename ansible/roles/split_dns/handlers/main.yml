@@ -1,0 +1,6 @@
+---
+- name: Restart dnsmasq
+  when: not ansible_check_mode
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: restarted

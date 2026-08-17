@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: openbao_config
+  author: rke2lab
+  description: >-
+    Configures OpenBao for External Secrets Operator: a KV v2 engine, a
+    read-only policy, and the Kubernetes auth method bound to one
+    ServiceAccount in one namespace, so there is no static credential to store
+    or rotate anywhere.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - openbao
+    - secrets
+
+dependencies: []

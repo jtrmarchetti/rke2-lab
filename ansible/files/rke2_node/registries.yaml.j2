@@ -1,0 +1,38 @@
+{{ ansible_managed | comment }}
+#
+# Points containerd at the GitLab container registry for every image RKE2 pulls.
+# Images keep their upstream names locally — `crictl image ls` shows
+# docker.io/rancher/... — because the rewrite happens inside containerd. That is
+# what lets RKE2's packaged Helm charts reference upstream names unmodified, and
+# in Phase 6 it is what lets Flux be installed air-gapped without passing
+# --registry and rewriting every image reference committed to Git.
+#
+# The rewrite replacements must stay equal to where the rke2_publish role pushed
+# the images. See plan/PHASE4_IMPLEMENTATION.md.
+#
+# Grouped by upstream registry, because `mirrors` is a map keyed on it. Emitting
+# one block per configured rewrite produced two ghcr.io keys when Phase 6 added
+# Flux beside kube-vip; containerd kept the first and silently dropped the
+# second, so the image resolved to an unrewritten path and failed with
+# `insufficient_scope` — an authorization error for what was really a routing
+# bug.
+mirrors:
+{% for _item_rke2_node_upstream, _item_rke2_node_rules in rke2_node_registry_mirrors | groupby('upstream') %}
+  {{ _item_rke2_node_upstream }}:
+    endpoint:
+      - "https://{{ rke2_node_registry_host }}"
+    rewrite:
+{% for _item_rke2_node_rule in _item_rke2_node_rules %}
+      "{{ _item_rke2_node_rule['pattern'] }}": "{{ _item_rke2_node_rule['replacement'] }}"
+{% endfor %}
+{% endfor %}
+
+configs:
+  "{{ rke2_node_registry_host }}":
+    auth:
+      # A group-scoped deploy token limited to read_registry. A node holds
+      # nothing that can write to GitLab.
+      username: "{{ rke2_node_registry_username }}"
+      password: "{{ rke2_node_registry_password }}"
+    tls:
+      ca_file: {{ rke2_node_ca_rke2_path }}

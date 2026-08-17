@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: time_sync
+  author: devops
+  description: Time synchronization with chrony, as client or internal server.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

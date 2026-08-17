@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: openbao_init
+  author: rke2lab
+  description: >-
+    Initialises OpenBao once and records the unseal keys and root token in the
+    controller's secret environment. Reads the vault's state first and does
+    nothing if it is already initialised, because init returns its keys exactly
+    once and a second run against an initialised vault is an error.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - openbao
+    - secrets
+
+dependencies: []

@@ -1,0 +1,51 @@
+---
+# One mode per directory, not one mode for both. The configuration directory
+# is shared with controller_runtime and holds env.sh, the Flux deploy token and
+# the cluster CA, so it is 0700 — and this task used to reset it to 0755 on
+# every run, which both fought controller_runtime for the mode (neither role
+# could ever report a clean second run) and left the lab's secret directory
+# listable by anyone on the host.
+- name: main | Ensure the operator directories exist
+  when: (kube_cli_controller_enabled | bool)
+  loop:
+    - path: "{{ kube_cli_controller_bin_dir }}"
+      mode: "0755"
+    - path: "{{ kube_cli_controller_config_dir }}"
+      mode: "0700"
+  loop_control:
+    loop_var: _item_kube_cli_controller_dir
+    label: "{{ _item_kube_cli_controller_dir['path'] }}"
+  ansible.builtin.file:
+    path: "{{ _item_kube_cli_controller_dir['path'] }}"
+    state: directory
+    mode: "{{ _item_kube_cli_controller_dir['mode'] }}"
+
+- name: main | Install kubectl from the cluster's own binary
+  when:
+    - (kube_cli_controller_enabled | bool)
+    - (kube_cli_controller_kubectl_enabled | bool)
+  ansible.builtin.include_tasks: kubectl.yml
+
+- name: main | Install k9s
+  when:
+    - (kube_cli_controller_enabled | bool)
+    - (kube_cli_controller_k9s_enabled | bool)
+  ansible.builtin.include_tasks: k9s.yml
+
+- name: main | Configure the operator shell
+  when:
+    - (kube_cli_controller_enabled | bool)
+    - (kube_cli_controller_shell_enabled | bool)
+  ansible.builtin.include_tasks: shell.yml
+
+- name: main | Install the Flux CLI
+  when:
+    - (kube_cli_controller_enabled | bool)
+    - (kube_cli_controller_flux_enabled | bool)
+  ansible.builtin.include_tasks: flux.yml
+
+- name: main | Install kubeseal
+  when:
+    - (kube_cli_controller_enabled | bool)
+    - (kube_cli_controller_kubeseal_enabled | bool)
+  ansible.builtin.include_tasks: kubeseal.yml

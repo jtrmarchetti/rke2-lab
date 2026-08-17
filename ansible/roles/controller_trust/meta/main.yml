@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: controller_trust
+  author: rke2lab
+  description: >-
+    Puts the controller's trust state under automation: the domain CA in the
+    system trust store, and the managed hosts' SSH keys in known_hosts. Both
+    were previously invisible to Ansible and blocking for a human.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - pki
+    - ssh
+
+dependencies: []

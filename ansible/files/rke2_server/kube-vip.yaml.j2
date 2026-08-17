@@ -1,0 +1,139 @@
+{{ ansible_managed | comment }}
+#
+# kube-vip in ARP mode, leader-elected across the control plane, holding the API
+# VIP. Written into the RKE2 auto-deploy manifest directory, so it is applied as
+# soon as the first server's apiserver answers — which is before the second
+# server needs the VIP to join.
+#
+# Generated from `kube-vip manifest daemonset` for this exact image tag rather
+# than copied from the documentation, whose published example is several major
+# versions behind. Two things are added to that output: the node selector, and
+# the RBAC below.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-vip
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  name: system:kube-vip-role
+rules:
+  - apiGroups: [""]
+    resources: ["services/status"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["list", "get", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "get", "watch", "update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["list", "get", "watch", "update", "create"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["list", "get", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:kube-vip-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-vip-role
+subjects:
+  - kind: ServiceAccount
+    name: kube-vip
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-vip-ds
+  name: kube-vip-ds
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-vip-ds
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-vip-ds
+    spec:
+      # `kube-vip manifest daemonset` emits no node selector, which is harmless
+      # while the cluster is control plane only and wrong the moment Phase 5
+      # adds workers: without this the VIP daemon would be scheduled onto every
+      # worker as well.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      containers:
+        - name: kube-vip
+          image: {{ rke2_server_kube_vip_image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - manager
+          env:
+            - name: vip_arp
+              value: "true"
+            - name: port
+              value: "{{ rke2_server_api_port }}"
+            - name: vip_nodename
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: vip_interface
+              value: {{ rke2_server_kube_vip_interface }}
+            - name: vip_subnet
+              value: "32"
+            - name: dns_mode
+              value: first
+            - name: dhcp_mode
+              value: ipv4
+            - name: cp_enable
+              value: "true"
+            - name: cp_namespace
+              value: kube-system
+            # Only one node advertises the VIP at a time. Without leader
+            # election every control plane node would answer ARP for the same
+            # address.
+            - name: vip_leaderelection
+              value: "true"
+            - name: vip_leasename
+              value: plndr-cp-lock
+            - name: vip_leaseduration
+              value: "{{ rke2_server_kube_vip_lease_duration }}"
+            - name: vip_renewdeadline
+              value: "{{ rke2_server_kube_vip_renew_deadline }}"
+            - name: vip_retryperiod
+              value: "{{ rke2_server_kube_vip_retry_period }}"
+            - name: address
+              value: {{ rke2_server_api_address }}
+            - name: prometheus_server
+              value: :2112
+          resources: {}
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
+              drop:
+                - ALL
+      hostNetwork: true
+      serviceAccountName: kube-vip
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+  updateStrategy: {}

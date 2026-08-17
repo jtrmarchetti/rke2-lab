@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: split_dns
+  author: devops
+  description: >-
+    Split-horizon DNS with dnsmasq for a host needing two authorities.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

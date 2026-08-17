@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: artifact_host
+  author: devops
+  description: >-
+    Apache artifact host serving staged artifacts to internal nodes over HTTP.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

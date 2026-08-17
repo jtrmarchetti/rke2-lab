@@ -1,0 +1,47 @@
+---
+argument_specs:
+  main:
+    short_description: Make an RKE2 node operable from a shell
+    description:
+      - Links kubectl, crictl and ctr from the RKE2 data directory onto the
+        default PATH, because RKE2 installs them somewhere nothing searches.
+      - Writes /etc/crictl.yaml so crictl needs no --runtime-endpoint.
+      - Exports KUBECONFIG to interactive shells, and only when the file is
+        readable by the user whose shell it is.
+    options:
+      kube_cli_node_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      kube_cli_node_data_dir:
+        type: str
+        default: /data1/rancher/rke2
+        description:
+          - The RKE2 data directory holding the binaries. Must match
+            rke2_node_data_dir.
+      kube_cli_node_link_dir:
+        type: str
+        default: /usr/local/bin
+        description: Directory on the default PATH the binaries are linked into.
+      kube_cli_node_binaries:
+        type: list
+        elements: str
+        description:
+          - Binaries to link. Ones the node does not have are skipped rather
+            than linked broken.
+      kube_cli_node_kubeconfig:
+        type: str
+        default: /etc/rancher/rke2/rke2.yaml
+        description:
+          - Kubeconfig exported to interactive shells. Empty on an agent, which
+            has none.
+      kube_cli_node_containerd_sock:
+        type: str
+        default: unix:///run/k3s/containerd/containerd.sock
+        description: containerd socket written into /etc/crictl.yaml.
+      kube_cli_node_alias:
+        type: str
+        default: k
+        description:
+          - Alias for kubectl in interactive shells, with completion bound to
+            it. Empty disables the alias.

@@ -1,0 +1,52 @@
+---
+# The controller has internet access, so k9s is fetched here directly. That is
+# not a hole in the artifact rule: plan/OVERVIEW.md's rule is that no *internal*
+# node reaches the internet, and this host sits outside the Proxmox environment
+# and already installs Pulumi and Ansible from upstream.
+#
+# It is still pinned and checksummed, because "has internet" is not a reason to
+# install whatever happens to be current today.
+
+- name: k9s | Read the version already installed here
+  changed_when: false
+  failed_when: false
+  register: _reg_kube_cli_controller_k9s
+  ansible.builtin.command:
+    cmd: "{{ kube_cli_controller_bin_dir }}/k9s version --short"
+
+- name: k9s | Download and unpack the release
+  when: >-
+    _reg_kube_cli_controller_k9s['rc'] != 0
+    or kube_cli_controller_k9s_version
+       not in _reg_kube_cli_controller_k9s['stdout']
+  block:
+    - name: k9s | Create a scratch directory for the download
+      register: _reg_kube_cli_controller_tmp
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: k9s
+
+    # checksum: is the integrity control, not a note. get_url fails the task if
+    # it does not match, so a tampered or truncated download never reaches the
+    # unarchive below.
+    - name: k9s | Download the release tarball
+      ansible.builtin.get_url:
+        url: "{{ kube_cli_controller_k9s_url | trim }}"
+        dest: "{{ _reg_kube_cli_controller_tmp['path'] }}/k9s.tar.gz"
+        checksum: "sha256:{{ kube_cli_controller_k9s_sha256 | trim }}"
+        mode: "0644"
+
+    - name: k9s | Unpack just the binary
+      ansible.builtin.unarchive:
+        src: "{{ _reg_kube_cli_controller_tmp['path'] }}/k9s.tar.gz"
+        dest: "{{ kube_cli_controller_bin_dir }}"
+        remote_src: true
+        include:
+          - k9s
+        mode: "0755"
+  always:
+    - name: k9s | Remove the scratch directory
+      when: (_reg_kube_cli_controller_tmp['path'] | default('') | length) > 0
+      ansible.builtin.file:
+        path: "{{ _reg_kube_cli_controller_tmp['path'] | default('') }}"
+        state: absent

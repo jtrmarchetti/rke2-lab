@@ -1,0 +1,10 @@
+---
+# Owner of the kubeconfig written back to the controller. Automation runs there
+# as an unprivileged user, and a root-owned kubeconfig in that user's home
+# directory is a file they cannot read.
+_var_rke2_server_kubeconfig_owner: "{{ lookup('env', 'USER') }}"
+
+# Templates for this role live in ansible/files/rke2_server/ rather than
+# inside the role, so the tree that renders a host's configuration can
+# be read without opening the role.
+_var_rke2_server_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_server"

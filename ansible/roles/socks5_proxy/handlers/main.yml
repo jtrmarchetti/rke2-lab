@@ -1,0 +1,5 @@
+---
+- name: Restart danted
+  ansible.builtin.systemd:
+    name: "{{ _var_socks5_proxy_service }}"
+    state: restarted

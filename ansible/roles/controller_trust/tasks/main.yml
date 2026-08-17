@@ -1,0 +1,76 @@
+---
+# The controller's trust state, which no playbook owned until now.
+#
+# Two pieces, both found by inspection rather than by anything failing loudly,
+# and both invisible right up until a rebuild:
+#
+#   - The domain CA is not in this host's trust store. Ansible does not care,
+#     Flux does not care — its GitRepository carries the CA in a Secret — so
+#     the cluster trusts the CA while the machine that publishes to the
+#     cluster's repository does not. `git clone` against gitlab.dev.lo fails,
+#     and so does anything else that verifies a certificate this domain issued.
+#   - SSH host keys drift. ansible.cfg sets host_key_checking = False, so
+#     automation never notices; a human running plain `ssh` against a rebuilt
+#     host meets a changed-key warning and stops.
+#
+# That `host_key_checking = False` is worth naming for what it is: the
+# controller does not authenticate the hosts it configures, over a tunnel it
+# also configures. Acceptable in a lab where Proxmox can read every guest disk;
+# not a setting to carry anywhere else. This role does not change it — it makes
+# the known-hosts state correct so that turning it on later is a choice rather
+# than a project.
+
+- name: main | Install the domain certificate authority
+  when: (controller_trust_enabled | bool)
+  become: true
+  register: _reg_controller_trust_ca
+  ansible.builtin.get_url:
+    url: "{{ controller_trust_ca_url }}"
+    dest: "{{ controller_trust_ca_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Only when the certificate changed. update-ca-certificates rewrites the whole
+# bundle and reports change every time it runs, which would make this role
+# permanently dirty.
+- name: main | Rebuild the system trust bundle
+  when:
+    - (controller_trust_enabled | bool)
+    - _reg_controller_trust_ca is changed
+  changed_when: true
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ controller_trust_update_command }}"
+
+# ca_path, explicitly, and the reason is a trap this host is built to fall
+# into: Ansible runs on Homebrew's Python, which verifies against Homebrew's
+# own bundle at $(brew --prefix)/etc/openssl@3/cert.pem, not the system store
+# this role just updated. curl and git see the new CA immediately; anything
+# Python does not, unless it is told where to look. A verification task that
+# used the default would fail here and prove nothing about the install.
+- name: main | Prove the domain certificate now verifies
+  when: (controller_trust_enabled | bool)
+  changed_when: false
+  ansible.builtin.uri:
+    url: "{{ controller_trust_verify_url }}"
+    method: HEAD
+    ca_path: "{{ controller_trust_system_bundle }}"
+    status_code: [200, 302, 401, 404]
+
+# Accepted rather than pinned by hand. ssh-keyscan reads what each host is
+# currently presenting, which on a rebuilt host is a new key — the case that
+# makes a hand-maintained known_hosts file wrong exactly when it matters.
+- name: main | Record the host keys of every managed host
+  when:
+    - (controller_trust_enabled | bool)
+    - (controller_trust_hosts | length) > 0
+  loop: "{{ controller_trust_hosts }}"
+  loop_control:
+    loop_var: _item_controller_trust_host
+    label: "{{ _item_controller_trust_host }}"
+  ansible.builtin.known_hosts:
+    name: "{{ _item_controller_trust_host }}"
+    key: "{{ lookup('pipe', controller_trust_keyscan ~ ' ' ~ _item_controller_trust_host) }}"
+    path: "{{ controller_trust_known_hosts }}"
+    state: present

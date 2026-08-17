@@ -1,0 +1,26 @@
+{{ ansible_managed | comment }}
+# The unsealer, as a Kustomization of its own.
+#
+# Separate from infra-controllers on purpose. When OpenBao moves to a seal that
+# unseals itself — SoftHSM over PKCS#11 is the documented next step — this loop
+# becomes not just unnecessary but wrong, and retiring it should be deleting
+# this file and its directory. Folded into the infrastructure layer it would
+# instead have to be unpicked from a release it has no other connection to.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: unsealer
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-controllers
+  interval: 30m
+  retryInterval: 2m
+  timeout: 10m
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./infrastructure/unsealer

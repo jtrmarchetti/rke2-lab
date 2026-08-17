@@ -1,0 +1,160 @@
+---
+argument_specs:
+  main:
+    short_description: Render the cluster-state GitOps tree and push it to GitLab
+    description:
+      - Makes the automation repository the source of truth for what the
+        cluster runs. The tree under templates/cluster-state is rendered into a
+        working clone, the bootstrap secrets are sealed into it from plaintext
+        held on the controller, and the result is committed and pushed.
+      - Runtime secrets are not sealed here. They live in OpenBao, written by
+        the openbao_secrets role, and reach the cluster as ExternalSecrets.
+      - The render wipes the working tree first, so a file deleted from the
+        template tree disappears from GitLab and an edit made directly in
+        GitLab is overwritten. That is deliberate - a repository that accepts
+        edits from both ends has two sources of truth and therefore none.
+      - Commits only when something changed, because every commit is a new
+        revision Flux reconciles the whole cluster against.
+    options:
+      gitops_source_ca_file:
+        type: str
+        description:
+          - CA bundle Ansible's Python verifies internal HTTPS against.
+            Homebrew's Python does not read the system trust store, so this
+            has to be named rather than assumed.
+      gitops_source_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      gitops_source_gitlab_url:
+        type: str
+        description: Base URL of the GitLab instance.
+      gitops_source_gitlab_host:
+        type: str
+        required: true
+        description:
+          - Inventory name of the host GitLab runs on. The admin token is
+            minted there with gitlab-rails, which has no REST equivalent.
+      gitops_source_group:
+        type: str
+        default: platform
+        description:
+          - Group the project lives in. Deliberately not the artifact group,
+            whose deploy token every cluster node holds.
+      gitops_source_project:
+        type: str
+        default: cluster-state
+        description: Project the cluster reconciles from.
+      gitops_source_branch:
+        type: str
+        default: main
+        description:
+          - Branch pushed to, and the branch the GitRepository tracks. Also the
+            project's default branch when this role creates it.
+      gitops_source_cluster_path:
+        type: str
+        default: ./clusters/dev-lo
+        description:
+          - Flux's entry point within the repository, as the Kustomization in
+            gotk-sync.yaml reconciles it.
+      gitops_source_domain:
+        type: str
+        description: The domain the environment lives in.
+      gitops_source_cluster_domain:
+        type: str
+        description:
+          - The cluster's own subdomain, which the domain forwards wholesale
+            and holds no records inside.
+      gitops_source_keycloak_realm:
+        type: str
+        description:
+          - The Keycloak realm the cluster's services authenticate against.
+            Every OIDC endpoint in the rendered tree is built from it. Must not
+            be master; see the keycloak_realm role.
+      gitops_source_registry_host:
+        type: str
+        description: Registry every image and chart is pulled from.
+      gitops_source_charts_repo:
+        type: str
+        default: rke2/charts
+        description:
+          - OCI repository charts are installed from, as group/project. Keep
+            equal to rke2_publish's group and charts project.
+      gitops_source_lb_range:
+        type: str
+        description: Address pool the LoadBalancer controller allocates from.
+      gitops_source_dns_address:
+        type: str
+        description:
+          - Address the cluster's DNS service requests, because the domain's
+            forward zone names it.
+      gitops_source_ingress_address:
+        type: str
+        description:
+          - Address every ingress hostname resolves to, answered by the
+            cluster's own DNS.
+      gitops_source_domain_ca_file:
+        type: str
+        description:
+          - The domain CA in this host's trust store, read at render time so a
+            reissued CA reaches the cluster without a manual copy.
+      gitops_source_work_dir:
+        type: str
+        description:
+          - Working clone. Removed and re-cloned each run, and left in place
+            afterwards so the pushed tree can be inspected.
+      gitops_source_bin_dir:
+        type: str
+        description: Directory holding kubeseal on this host.
+      gitops_source_sealing_key_file:
+        type: str
+        description:
+          - Backup of the Sealed Secrets key pair. Used both to seal and, in
+            recovery mode, to decrypt the committed ciphertext for comparison.
+            The backup rather than the cluster, because on a cold rebuild the
+            controller that would answer does not exist yet.
+      gitops_source_ca_dir:
+        type: str
+        description:
+          - Directory ipa_sub_ca wrote the cluster intermediate CA into.
+      gitops_source_ca_common_name:
+        type: str
+        description:
+          - Common name of that intermediate, which is also its filename stem.
+      gitops_source_push:
+        type: bool
+        default: true
+        description:
+          - False renders and seals, reports the diff, and stops before
+            committing. The way to see what Flux is about to be told without
+            telling it.
+      gitops_source_commit_message:
+        type: str
+        description: Message recorded on the commit this role creates.
+      gitops_source_commit_name:
+        type: str
+        description:
+          - Committer name, set on the clone rather than globally - this host
+            is a workstation with an operator identity of its own.
+      gitops_source_commit_email:
+        type: str
+        description: Committer email, set on the clone.
+      gitops_source_deploy_token_file:
+        type: str
+        description:
+          - File on the GitLab host where rke2_publish recorded the read-only
+            deploy token. GitLab returns a deploy token's value once, so this
+            is the only copy.
+      gitops_source_openbao_unseal_keys:
+        type: str
+        default: ""
+        description:
+          - All five unseal shares, comma separated, as openbao_init recorded
+            them. Only the first three are sealed into Git - enough to unseal,
+            not enough to rekey.
+          - Empty is a real state, not a mistake - on a cold rebuild the vault
+            does not exist yet. The entry is omitted while this is empty.
+      gitops_source_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it exposes every secret.

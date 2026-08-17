@@ -1,0 +1,202 @@
+{{ ansible_managed | comment }}
+# The front door to the Longhorn UI.
+#
+# Longhorn has no authentication. Not a weak default, not a password to change
+# — the UI serves the whole management API to anyone who reaches it, and the
+# only supported way to put an identity in front of it is an authenticating
+# proxy. Every other service in this cluster could be told about Keycloak;
+# this one had to be given something that speaks OIDC on its behalf.
+#
+# ## Reverse proxy, not forward auth
+#
+# Traefik can call an external authenticator with a `forwardAuth` middleware,
+# and that is the arrangement most guides describe. It is not used here for two
+# reasons. `forwardAuth` answers 401 for an unauthenticated request and Traefik
+# has no way to turn that into a redirect to the identity provider, so a fresh
+# visitor gets a blank error page instead of a login screen — fixable, with a
+# second Ingress path and an errors middleware, none of which is in Git as one
+# readable object. And a Middleware CRD can only be referenced by an Ingress in
+# its own namespace unless Traefik is started with cross-namespace references
+# enabled, which is a cluster-wide loosening for one UI.
+#
+# Full reverse proxy mode is one Deployment, one Service, one Ingress: the
+# proxy is the backend for the hostname and forwards to longhorn-frontend once
+# the user has a session. The cost is that every byte of UI traffic passes
+# through this pod, which for an administrative interface nobody keeps open is
+# not a cost.
+#
+# ## What authorises
+#
+# `--allowed-role` against the client roles Keycloak issues. A person in the
+# FreeIPA group longhorn-admins or longhorn-users gets through; anyone else
+# authenticates successfully at Keycloak and is refused here, which is the
+# correct place for that answer.
+#
+# Both roles are allowed rather than only admins, and the distinction is
+# deliberately not enforced beyond this point: Longhorn's UI has no read-only
+# mode, so `longhorn-users` is not a viewer tier and should not be read as one.
+# It exists so that the group structure is uniform across every service, and so
+# that the day Longhorn gains an authorisation model there is already a group
+# to attach it to. Put people in longhorn-users only if you would be content
+# for them to detach a volume.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: longhorn-auth-ca
+  namespace: longhorn-system
+data:
+  # The domain CA, so the proxy verifies Keycloak's certificate rather than
+  # trusting it. Public material, committed in the clear but not pasted in the
+  # clear — read from the controller's trust store at render time, the same way
+  # the registry's CA Secret is, so reissuing the domain CA changes this file
+  # without anyone remembering to re-copy it.
+  #
+  # The domain root is enough even though the certificate on sso is issued by
+  # the cluster's intermediate: cert-manager's CA issuer serves the
+  # intermediate alongside the leaf, so the chain is complete up to this.
+  ca.crt: >-
+    {{ lookup('file', gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhorn-auth
+  namespace: longhorn-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: longhorn-auth
+  template:
+    metadata:
+      labels:
+        app: longhorn-auth
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      containers:
+        - name: oauth2-proxy
+          # The upstream reference, as every other manifest here carries.
+          # containerd rewrites it to the GitLab registry from registries.yaml,
+          # so the air-gap is handled a layer below Git and this file says what
+          # the image actually is.
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+          imagePullPolicy: IfNotPresent
+          args:
+            # keycloak-oidc, not the generic oidc provider. It is the one that
+            # understands `resource_access.<client>.roles`, which is where
+            # --allowed-role looks; with the generic provider the flag matches
+            # nothing and every authenticated user is refused.
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}
+            - --client-id=longhorn
+            - --provider-ca-file=/etc/ssl/domain/ca.crt
+            - --redirect-url=https://longhorn.{{ gitops_source_cluster_domain }}/oauth2/callback
+            - --upstream=http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+            - --allowed-role=longhorn:admin
+            - --allowed-role=longhorn:user
+            # Listen on all interfaces: the default is 127.0.0.1, on which a
+            # Service routes to a port nothing outside the pod can reach.
+            - --http-address=0.0.0.0:4180
+            # Behind Traefik, so the client address and the scheme come from
+            # the forwarded headers. Without this the proxy builds its
+            # redirects from the connection it actually received, which is
+            # plain HTTP from the ingress, and the OIDC redirect downgrades —
+            # the same failure KC_PROXY_HEADERS prevents on Keycloak's side.
+            - --reverse-proxy=true
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            # Matches the realm's SSO session idle timeout, so the proxy's
+            # session and Keycloak's expire together rather than the proxy
+            # holding a session Keycloak has already forgotten.
+            - --cookie-expire=1h
+            - --cookie-refresh=15m
+            - --email-domain=*
+            - --skip-provider-button=true
+            - --set-xauthrequest=true
+            # Longhorn does not read them, but they cost nothing and they are
+            # what an access log needs to attribute an action to a person.
+            - --pass-basic-auth=false
+            - --pass-user-headers=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: longhorn-auth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: longhorn-auth
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+              name: http
+          volumeMounts:
+            - name: domain-ca
+              mountPath: /etc/ssl/domain
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 96Mi
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: domain-ca
+          secret:
+            secretName: longhorn-auth-ca
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: longhorn-auth
+  namespace: longhorn-system
+spec:
+  type: ClusterIP
+  selector:
+    app: longhorn-auth
+  ports:
+    - port: 80
+      targetPort: 4180
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: longhorn-auth
+  namespace: longhorn-system
+  annotations:
+    cert-manager.io/cluster-issuer: k8s-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - longhorn.{{ gitops_source_cluster_domain }}
+      secretName: longhorn-ui-tls
+  rules:
+    - host: longhorn.{{ gitops_source_cluster_domain }}
+      http:
+        paths:
+          # Everything, including /oauth2/*, which the proxy answers itself.
+          # There is deliberately no path that reaches longhorn-frontend
+          # without passing through here.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: longhorn-auth
+                port:
+                  number: 80

@@ -1,0 +1,5 @@
+---
+- name: Restart apt-cacher-ng
+  ansible.builtin.systemd:
+    name: "{{ _var_apt_proxy_service }}"
+    state: restarted

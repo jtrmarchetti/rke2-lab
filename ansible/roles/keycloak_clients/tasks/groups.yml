@@ -1,0 +1,103 @@
+---
+# The join between the domain and the service: each FreeIPA group is granted
+# the matching client role.
+#
+# The groups themselves are not created here and could not be — they are
+# imported from FreeIPA by the LDAP group mapper keycloak_ldap configures, and
+# creating one in Keycloak would produce a second group with the same name and
+# no members, which is the failure mode that reads as "the mapping is there and
+# nobody has it".
+#
+# What *is* held in Keycloak is the grant. That is deliberate and it is the one
+# piece of authorisation state the directory does not own: FreeIPA has no
+# concept of a Keycloak client role, so the sentence "members of
+# grafana-admins are administrators of Grafana" has to be written somewhere,
+# and Keycloak is where both halves of it are nameable. The membership — who is
+# in grafana-admins — stays in the domain, which is the half that changes.
+
+- name: groups | Assert the directory groups have been imported into the realm
+  vars:
+    _keycloak_clients_known: >-
+      {{ _reg_keycloak_clients_groups['json'] | map(attribute='name') | list }}
+    _keycloak_clients_absent: >-
+      {{ _var_keycloak_clients_grants | map(attribute='group')
+         | reject('in', _keycloak_clients_known) | list }}
+  ansible.builtin.assert:
+    that:
+      - (_keycloak_clients_absent | length) == 0
+    fail_msg: >-
+      The realm has not imported these groups from the directory:
+      {{ _keycloak_clients_absent | join(', ') }}. Either ipa_sso_groups has
+      not run, or keycloak_ldap's group mapper has not synchronised — the
+      federation imports groups on a sync, not on the next login, so a group
+      created in FreeIPA after the last sync is invisible here. Re-run
+      keycloak_ldap.
+    quiet: true
+
+# Refreshed again here, because roles.yml has just run between this and the
+# token application.yml obtained. See token.yml.
+- name: groups | Obtain a fresh admin token
+  ansible.builtin.include_tasks: token.yml
+
+- name: groups | Read the roles each group already holds on this client
+  changed_when: false
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  register: _reg_keycloak_clients_granted
+  loop: "{{ _var_keycloak_clients_grants }}"
+  loop_control:
+    loop_var: _item_keycloak_clients_grant
+    label: "{{ _item_keycloak_clients_grant['group'] }}"
+  vars:
+    _keycloak_clients_group_id: >-
+      {{ (_reg_keycloak_clients_groups['json']
+          | selectattr('name', 'equalto',
+                       _item_keycloak_clients_grant['group'])
+          | list | first)['id'] }}
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/groups/{{
+      _keycloak_clients_group_id | trim }}/role-mappings/clients/{{
+      _var_keycloak_clients_uuid | trim }}
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+
+# Additive. This grants the role and never removes another: a group in this
+# realm may legitimately hold roles on clients this repository does not manage,
+# and a role mapping asserted as an exact set would silently revoke them.
+- name: groups | Grant each group the role it is missing
+  when: >-
+    _item_keycloak_clients_grant[0]['role'] not in
+    (_item_keycloak_clients_grant[1]['json'] | map(attribute='name') | list)
+  changed_when: true
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  loop: >-
+    {{ _var_keycloak_clients_grants
+       | zip(_reg_keycloak_clients_granted['results']) | list }}
+  loop_control:
+    loop_var: _item_keycloak_clients_grant
+    label: >-
+      {{ _item_keycloak_clients_grant[0]['group'] }} ->
+      {{ _var_keycloak_clients_slug | trim }}:{{
+      _item_keycloak_clients_grant[0]['role'] }}
+  vars:
+    _keycloak_clients_group_id: >-
+      {{ (_reg_keycloak_clients_groups['json']
+          | selectattr('name', 'equalto',
+                       _item_keycloak_clients_grant[0]['group'])
+          | list | first)['id'] }}
+    _keycloak_clients_role: >-
+      {{ _reg_keycloak_clients_roles['json']
+         | selectattr('name', 'equalto',
+                      _item_keycloak_clients_grant[0]['role'])
+         | list }}
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_clients_admin_api }}/groups/{{
+      _keycloak_clients_group_id | trim }}/role-mappings/clients/{{
+      _var_keycloak_clients_uuid | trim }}
+    method: POST
+    headers: "{{ _var_keycloak_clients_headers }}"
+    ca_path: "{{ keycloak_clients_ca_file }}"
+    body_format: json
+    body: "{{ _keycloak_clients_role }}"
+    status_code: [204]

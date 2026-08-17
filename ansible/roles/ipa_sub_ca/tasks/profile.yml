@@ -1,0 +1,70 @@
+---
+# The Dogtag profile, the subject principal, and the access rule that ties them
+# together. Read before write throughout, so a second run reports no change.
+#
+# Everything happens in one shell session inside the FreeIPA container, for the
+# reason ipa_service_cert documents: the Kerberos ticket lives in that process
+# tree's credential cache, and splitting the steps across tasks would discard
+# it. The profile arrives on stdin rather than by `docker cp`, because the
+# container runs read_only and a copy into it fails however writable the target
+# path looks.
+
+- name: profile | Render the subordinate CA profile configuration
+  register: _reg_ipa_sub_ca_profile_file
+  ansible.builtin.template:
+    src: "{{ _var_ipa_sub_ca_files_dir }}/subca-profile.cfg.j2"
+    dest: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_profile_id }}.cfg"
+    mode: "0644"
+
+- name: profile | Read the rendered profile configuration
+  register: _reg_ipa_sub_ca_profile_content
+  ansible.builtin.slurp:
+    src: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_profile_id }}.cfg"
+
+# A literal block, not a folded one: folding joins the lines with spaces and
+# collapses the script into a single unparseable command. The password crosses
+# as base64 so no character in it can terminate a quote.
+#
+# Each step is guarded by its own read. `ipa caacl-add-profile` and its
+# siblings are additive and refuse duplicates with a non-zero exit, so the
+# guards are what make the whole session idempotent rather than the commands.
+- name: profile | Ensure the profile, principal and access rule exist
+  changed_when: "'changed=1' in _reg_ipa_sub_ca_profile_result['stdout']"
+  delegate_to: "{{ ipa_sub_ca_ipa_host }}"
+  no_log: "{{ ipa_sub_ca_no_log | bool }}"
+  register: _reg_ipa_sub_ca_profile_result
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -i {{ ipa_sub_ca_ipa_container }} bash -c '
+        set -e
+        cat > {{ _var_ipa_sub_ca_remote_profile | trim }}
+        echo "{{ ipa_sub_ca_admin_password | b64encode }}" |
+          base64 -d | kinit {{ ipa_sub_ca_admin_user }} >/dev/null
+        changed=0
+        if ! ipa certprofile-show {{ ipa_sub_ca_profile_id }} >/dev/null 2>&1
+        then
+          ipa certprofile-import {{ ipa_sub_ca_profile_id }} \
+            --file {{ _var_ipa_sub_ca_remote_profile | trim }} \
+            --desc "{{ ipa_sub_ca_profile_description }}" \
+            --store=TRUE >/dev/null
+          changed=1
+        fi
+        if ! ipa host-show {{ ipa_sub_ca_common_name }} >/dev/null 2>&1
+        then
+          ipa host-add --force {{ ipa_sub_ca_common_name }} >/dev/null
+          changed=1
+        fi
+        if ! ipa caacl-show {{ ipa_sub_ca_acl_name }} >/dev/null 2>&1
+        then
+          ipa caacl-add {{ ipa_sub_ca_acl_name }} --hostcat="" >/dev/null
+          ipa caacl-add-profile {{ ipa_sub_ca_acl_name }} \
+            --certprofiles {{ ipa_sub_ca_profile_id }} >/dev/null
+          ipa caacl-add-ca {{ ipa_sub_ca_acl_name }} \
+            --cas {{ ipa_sub_ca_ca }} >/dev/null
+          ipa caacl-add-host {{ ipa_sub_ca_acl_name }} \
+            --hosts {{ ipa_sub_ca_common_name }} >/dev/null
+          changed=1
+        fi
+        rm -f {{ _var_ipa_sub_ca_remote_profile | trim }}
+        echo "changed=${changed}"'
+    stdin: "{{ _reg_ipa_sub_ca_profile_content['content'] | b64decode }}"

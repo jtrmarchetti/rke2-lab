@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: kube_cli_node
+  author: rke2lab
+  description: >-
+    Makes an RKE2 node operable from a shell: links the binaries RKE2 ships
+    onto the default PATH, configures crictl to find containerd, and exports a
+    kubeconfig to interactive shells that can read one.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - kubernetes
+    - kubectl
+
+dependencies: []

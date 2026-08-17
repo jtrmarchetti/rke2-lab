@@ -1,0 +1,17 @@
+---
+# The root token travels in a header, not in a command line: no process on any
+# host ever has it in argv.
+_var_openbao_config_headers:
+  X-Vault-Token: "{{ openbao_config_root_token }}"
+
+# Read on the data path and on metadata, which KV v2 keeps separately — a
+# policy that grants the first and forgets the second lets a client read a
+# secret it cannot list, which reads as a broken store rather than a narrow
+# policy.
+_var_openbao_config_policy: |
+  path "{{ openbao_config_kv_path }}/data/*" {
+    capabilities = ["read"]
+  }
+  path "{{ openbao_config_kv_path }}/metadata/*" {
+    capabilities = ["read", "list"]
+  }

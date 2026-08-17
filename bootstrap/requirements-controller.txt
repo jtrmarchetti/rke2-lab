@@ -1,0 +1,23 @@
+# Python dependencies of the automation controller itself.
+#
+# Pinned exactly, and deliberately. plan/CONTROLLER.md records these as "what is
+# installed and working", which is only a useful record if a rebuild installs
+# the same thing — a floor (">=") records what was tested against nothing in
+# particular.
+#
+# This file has two consumers and one meaning:
+#
+#   - bootstrap/controller-bootstrap.sh installs it into the managed virtual
+#     environment on a bare host, before Ansible exists to do anything.
+#   - The controller_runtime role reconciles the same virtual environment from
+#     the same file on every run, so drift is corrected rather than discovered.
+#
+# Upgrading is editing this file and re-running either one.
+
+# Configuration management. The whole repository is Ansible; this is the thing
+# that runs it.
+ansible==13.4.0
+
+# ANSIBLE_STANDARDS.md enforcement. Not optional tooling: the standards are
+# mandatory, so the linter that checks them is a dependency of the work.
+ansible-lint==26.3.0

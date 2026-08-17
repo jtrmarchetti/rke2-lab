@@ -1,0 +1,16 @@
+[Interface]
+Address = {{ inventory_controller_wireguard_address }}
+ListenPort = {{ inventory_controller_wireguard_listen_port }}
+PrivateKey = {{ inventory_controller_wireguard_private_key }}
+{% if inventory_controller_wireguard_route_subnets | length > 0 %}
+{% for _item_tunnel_controller_access_subnet in inventory_controller_wireguard_route_subnets %}
+PostUp = ip route replace {{ _item_tunnel_controller_access_subnet }} dev {{ inventory_controller_wireguard_interface }}
+PostDown = ip route del {{ _item_tunnel_controller_access_subnet }} dev {{ inventory_controller_wireguard_interface }} || true
+{% endfor %}
+{% endif %}
+
+[Peer]
+PublicKey = {{ inventory_controller_wireguard_peer_public_key }}
+AllowedIPs = {{ inventory_controller_wireguard_peer_allowed_ips | join(',') }}
+Endpoint = {{ inventory_controller_wireguard_peer_endpoint }}
+PersistentKeepalive = {{ inventory_controller_wireguard_peer_persistent_keepalive }}

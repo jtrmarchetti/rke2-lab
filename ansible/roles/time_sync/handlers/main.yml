@@ -1,0 +1,6 @@
+---
+- name: Restart chrony
+  when: not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_time_sync_service_name }}"
+    state: restarted

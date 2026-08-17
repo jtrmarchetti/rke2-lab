@@ -1,0 +1,35 @@
+---
+- name: main | Ensure apt-cacher-ng package is installed
+  when: (apt_proxy_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ _var_apt_proxy_package }}"
+    state: present
+
+- name: main | Ensure the cache directory exists on the data volume
+  when: (apt_proxy_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ apt_proxy_cache_dir }}"
+    state: directory
+    owner: "{{ _var_apt_proxy_user }}"
+    group: "{{ _var_apt_proxy_group }}"
+    mode: "0755"
+
+- name: main | Ensure the packaged config is left unmanaged and overrides are rendered
+  when: (apt_proxy_enabled | bool)
+  notify:
+    - Restart apt-cacher-ng
+  ansible.builtin.template:
+    src: "{{ _var_apt_proxy_files_dir }}/acng_local.conf.j2"
+    dest: "{{ _var_apt_proxy_override_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Ensure apt-cacher-ng service is enabled and started
+  when:
+    - (apt_proxy_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_apt_proxy_service }}"
+    enabled: true
+    state: started

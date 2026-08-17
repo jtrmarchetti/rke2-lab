@@ -1,0 +1,62 @@
+---
+argument_specs:
+  main:
+    short_description: Time synchronization with chrony.
+    description:
+      - Configures a host as a chrony client, an internal time server, or both.
+      - Replaces the distribution chrony.conf so an isolated host never polls an
+        unreachable public pool.
+    options:
+      time_sync_enabled:
+        type: bool
+        required: false
+      time_sync_sources:
+        description: >-
+          Sources to synchronize from, in chrony syntax without the directive,
+          for example "192.168.2.99 iburst".
+        type: list
+        elements: str
+        required: false
+      time_sync_source_directive:
+        description: >-
+          pool for a name resolving to several addresses, server for a single
+          address.
+        type: str
+        required: false
+        choices:
+          - pool
+          - server
+      time_sync_allow_networks:
+        description: Networks permitted to synchronize from this host.
+        type: list
+        elements: str
+        required: false
+      time_sync_local_stratum:
+        description: >-
+          Serve time at this stratum even with no reachable upstream. 0 disables.
+        type: int
+        required: false
+      time_sync_manage_timesyncd:
+        description: Stop and mask systemd-timesyncd, which conflicts with chrony.
+        type: bool
+        required: false
+      time_sync_makestep:
+        description: chrony makestep value, as "threshold limit".
+        type: str
+        required: false
+      time_sync_require_source:
+        description: >-
+          Fail if no source is selected. Clock skew breaks Kerberos before it
+          shows any other symptom.
+        type: bool
+        required: false
+      time_sync_ready_retries:
+        type: int
+        required: false
+      time_sync_ready_delay:
+        type: int
+        required: false
+      time_sync_packages:
+        type: list
+        elements: str
+        required: false

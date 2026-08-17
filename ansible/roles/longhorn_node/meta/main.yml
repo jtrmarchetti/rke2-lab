@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: longhorn_node
+  author: rke2lab
+  description: >-
+    Prepares a node to run Longhorn: the iSCSI initiator Longhorn attaches
+    volumes through, NFS for ReadWriteMany volumes, a multipath blacklist, and
+    a check that the replica directory is not on the OS disk.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - longhorn
+    - storage
+    - kubernetes
+
+dependencies: []

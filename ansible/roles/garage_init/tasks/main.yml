@@ -1,0 +1,188 @@
+---
+# Brings a fresh Garage from "running" to "usable", which are further apart
+# than they are for most services.
+#
+# A Garage node starts with no layout: it knows it exists, and it does not know
+# how much space it offers or what zone it is in, so it accepts no objects.
+# Assigning a layout is a one-time administrative act, versioned by Garage
+# itself, and it is the reason this role exists rather than a line in a
+# manifest.
+#
+# Every command runs inside the pod. The admin token is already in that pod's
+# environment, put there from a Secret External Secrets syncs out of OpenBao,
+# so nothing here has to carry a credential — which is the same reason
+# openbao_config went through the API instead of exec: use whichever path does
+# not need a secret in transit.
+
+# Added when Garage's credentials moved from a SealedSecret to OpenBao. They
+# used to be in Git, so by the time this role ran Flux had long since started
+# Garage; now they are written into the vault a few tasks earlier in the same
+# play, and Garage cannot start until External Secrets has synced them into the
+# namespace. Without this wait the role's first command fails with a pod that
+# does not exist yet, which reads as a broken deployment rather than as a race.
+- name: main | Wait for Garage to start on its synced credentials
+  changed_when: false
+  register: _reg_garage_init_ready
+  until: _reg_garage_init_ready is succeeded
+  retries: "{{ garage_init_ready_retries }}"
+  delay: 10
+  ansible.builtin.command:
+    cmd: >-
+      {{ garage_init_kubectl }} wait --for=condition=Ready
+      pod/{{ garage_init_pod }} -n {{ garage_init_namespace }}
+      --timeout={{ garage_init_ready_timeout }}s
+
+- name: main | Read the node identifier and layout state
+  changed_when: false
+  register: _reg_garage_init_status
+  ansible.builtin.command:
+    cmd: "{{ _var_garage_init_exec }} /garage status"
+
+- name: main | Determine whether a layout is already applied
+  ansible.builtin.set_fact:
+    _garage_init_configured: >-
+      {{ 'NO ROLE ASSIGNED' not in _reg_garage_init_status['stdout']
+         and 'No nodes currently have a role' not in
+             _reg_garage_init_status['stdout'] }}
+    _garage_init_node: >-
+      {{ _reg_garage_init_status['stdout_lines']
+         | select('match', '^[0-9a-f]{16}')
+         | map('regex_replace', '^([0-9a-f]+).*$', '\1')
+         | first | default('') }}
+
+- name: main | Report the layout state
+  ansible.builtin.debug:
+    msg: >-
+      garage node {{ _garage_init_node }}: layout applied =
+      {{ _garage_init_configured }}
+    verbosity: 0
+
+- name: main | Assign and apply the storage layout
+  when: not (_garage_init_configured | bool)
+  block:
+    - name: main | Assert the node identifier was found
+      ansible.builtin.assert:
+        that:
+          - (_garage_init_node | length) >= 16
+        fail_msg: >-
+          No node identifier could be read from `garage status`. Without it the
+          layout would be assigned to nothing, and Garage would keep accepting
+          no objects while reporting itself healthy.
+        quiet: true
+
+    # The capacity here is what Garage will advertise, and it should be smaller
+    # than the volume: Garage refusing writes at its stated capacity is a much
+    # better failure than a full filesystem underneath it.
+    - name: main | Assign the node its zone and capacity
+      changed_when: true
+      ansible.builtin.command:
+        cmd: >-
+          {{ _var_garage_init_exec }} /garage layout assign {{ _garage_init_node }}
+          -z {{ garage_init_zone }} -c {{ garage_init_capacity }}
+
+    - name: main | Apply the layout
+      changed_when: true
+      ansible.builtin.command:
+        cmd: >-
+          {{ _var_garage_init_exec }} /garage layout apply
+          --version {{ garage_init_layout_version }}
+
+- name: main | Ensure the buckets exist
+  changed_when: "'Bucket' in _reg_garage_init_bucket['stdout']"
+  # Creating a bucket that exists is an error, and it is the error this task
+  # expects to see on every run after the first.
+  failed_when:
+    - _reg_garage_init_bucket['rc'] != 0
+    - "'already exists' not in _reg_garage_init_bucket['stderr']"
+  register: _reg_garage_init_bucket
+  loop: "{{ garage_init_buckets }}"
+  loop_control:
+    loop_var: _item_garage_init_bucket
+  ansible.builtin.command:
+    cmd: "{{ _var_garage_init_exec }} /garage bucket create {{ _item_garage_init_bucket }}"
+
+- name: main | Read the existing access keys
+  changed_when: false
+  register: _reg_garage_init_keys
+  ansible.builtin.command:
+    cmd: "{{ _var_garage_init_exec }} /garage key list"
+
+- name: main | Create the access key and grant it the buckets
+  when: garage_init_key_name not in _reg_garage_init_keys['stdout']
+  block:
+    # The only moment the secret key exists in readable form. Garage shows it
+    # once, exactly like a deploy token or a vault's root token, so it is
+    # captured here or not at all.
+    - name: main | Create the access key
+      changed_when: true
+      no_log: "{{ garage_init_no_log | bool }}"
+      register: _reg_garage_init_new_key
+      ansible.builtin.command:
+        cmd: >-
+          {{ _var_garage_init_exec }} /garage key create {{ garage_init_key_name }}
+
+    - name: main | Record the credentials in the controller's environment
+      no_log: "{{ garage_init_no_log | bool }}"
+      ansible.builtin.blockinfile:
+        path: "{{ garage_init_env_file }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK garage-s3"
+        create: true
+        mode: "0600"
+        block: |
+          # Garage S3 credentials for {{ garage_init_key_name }}, created by
+          # the garage_init role. Garage shows a secret key once; this is that
+          # copy, and it is the break-glass one. The runtime copy is in
+          # OpenBao, written there by the openbao_secrets role and read by
+          # Loki and Tempo through an ExternalSecret — but not on this run:
+          # this file is on disk before that role can see it in the
+          # environment. Re-source env.sh and run cluster_init.yml again.
+          export GARAGE_S3_ACCESS_KEY="{{ _var_garage_init_access_id }}"
+          export GARAGE_S3_SECRET_KEY="{{ _var_garage_init_secret }}"
+
+# Read before granting. `bucket allow` succeeds whether or not the grant is
+# already in place, so granting unconditionally meant this role could never
+# report a clean second run.
+- name: main | Read the grants already on each bucket
+  changed_when: false
+  # A bucket that does not exist yet reports nothing to compare against.
+  failed_when: false
+  register: _reg_garage_init_grants
+  loop: "{{ garage_init_buckets }}"
+  loop_control:
+    loop_var: _item_garage_init_bucket
+  ansible.builtin.command:
+    cmd: >-
+      {{ _var_garage_init_exec }} /garage bucket info
+      {{ _item_garage_init_bucket }}
+
+# `bucket info` lists one line per key holding the bucket, with the permission
+# flags first and the key's local alias last: "RWO  GK<id>  cluster".
+- name: main | Grant the key access to each bucket
+  when: >-
+    (_reg_garage_init_grants['results'][_garage_init_index]['stdout']
+     | default('')) is not search('(?m)^RWO\s+\S+\s+'
+                                  ~ garage_init_key_name ~ '\s*$')
+  changed_when: true
+  loop: "{{ garage_init_buckets }}"
+  loop_control:
+    loop_var: _item_garage_init_bucket
+    index_var: _garage_init_index
+  ansible.builtin.command:
+    cmd: >-
+      {{ _var_garage_init_exec }} /garage bucket allow --read --write --owner
+      {{ _item_garage_init_bucket }} --key {{ garage_init_key_name }}
+
+- name: main | Confirm the store reports itself healthy
+  changed_when: false
+  register: _reg_garage_init_final
+  ansible.builtin.command:
+    cmd: "{{ _var_garage_init_exec }} /garage status"
+
+- name: main | Assert the node holds a role
+  ansible.builtin.assert:
+    that:
+      - "'NO ROLE ASSIGNED' not in _reg_garage_init_final['stdout']"
+    fail_msg: >-
+      The Garage node still holds no role, so it will accept no objects while
+      answering on every port and looking healthy from outside.
+    quiet: true

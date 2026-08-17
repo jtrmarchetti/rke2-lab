@@ -1,0 +1,39 @@
+---
+argument_specs:
+  main:
+    short_description: Base host preparation inputs.
+    options:
+      base_host_packages:
+        type: list
+        elements: str
+        required: false
+      base_host_apt_proxy_enabled:
+        type: bool
+        required: false
+      base_host_apt_proxy_url:
+        type: str
+        required: false
+      base_host_manage_hostname:
+        type: bool
+        required: false
+      base_host_target_hostname:
+        type: str
+        required: false
+      base_host_split_dns_enabled:
+        description: Route some domains to internal resolvers on one link.
+        type: bool
+        required: false
+      base_host_split_dns_interface:
+        description: Interface whose link carries the internal resolvers.
+        type: str
+        required: false
+      base_host_split_dns_servers:
+        description: Internal resolver addresses for the split-DNS domains.
+        type: list
+        elements: str
+        required: false
+      base_host_split_dns_domains:
+        description: Domains routed to the internal resolvers.
+        type: list
+        elements: str
+        required: false

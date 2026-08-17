@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  role_name: freeipa_server
+  author: devops
+  description: Containerized FreeIPA server for an isolated, no-internet network.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+collections:
+  - community.docker
+  - community.general
+
+dependencies: []

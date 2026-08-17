@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: ipa_sso_groups
+  author: rke2lab
+  description: >-
+    Creates the FreeIPA groups that authorise access to each application
+    federated to Keycloak: an administrator group and a user group per
+    application. Membership is never touched, because who belongs in a group is
+    a decision about people rather than a fact automation can assert.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - freeipa
+    - keycloak
+    - sso
+
+dependencies: []

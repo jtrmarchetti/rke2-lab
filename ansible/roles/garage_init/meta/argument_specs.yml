@@ -1,0 +1,66 @@
+---
+argument_specs:
+  main:
+    short_description: Assign Garage a layout and create its buckets
+    description:
+      - Assigns and applies the storage layout, without which the node answers
+        on every port, looks healthy, and accepts no objects.
+      - Creates the buckets and the access key, recording the secret key that
+        Garage prints exactly once.
+    options:
+      garage_init_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      garage_init_namespace:
+        type: str
+        default: garage
+        description: Namespace Garage runs in.
+      garage_init_pod:
+        type: str
+        default: garage-0
+        description: Pod the commands run inside.
+      garage_init_kubectl:
+        type: str
+        description: kubectl invocation, including the kubeconfig.
+      garage_init_ready_timeout:
+        type: int
+        default: 180
+        description:
+          - Seconds to wait for the Garage pod to become ready before acting
+            on it. It cannot start until External Secrets has synced its
+            credentials out of OpenBao.
+      garage_init_ready_retries:
+        type: int
+        default: 20
+        description:
+          - Attempts at that wait. Needed because `kubectl wait` fails at once,
+            rather than after the timeout, when the pod does not yet exist.
+      garage_init_zone:
+        type: str
+        default: dev-lo
+        description: Failure domain the node is assigned to.
+      garage_init_capacity:
+        type: str
+        default: 16G
+        description:
+          - Capacity the node advertises. Below the volume size on purpose.
+      garage_init_layout_version:
+        type: int
+        default: 1
+        description: Layout version to apply.
+      garage_init_buckets:
+        type: list
+        elements: str
+        description: Buckets to create and grant the key access to.
+      garage_init_key_name:
+        type: str
+        default: cluster
+        description: Name of the S3 access key.
+      garage_init_env_file:
+        type: str
+        description: File the one-time secret key is recorded in.
+      garage_init_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints the secret key.

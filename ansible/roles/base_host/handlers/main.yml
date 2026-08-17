@@ -1,0 +1,5 @@
+---
+- name: Apply netplan configuration
+  changed_when: true
+  ansible.builtin.command:
+    cmd: netplan apply

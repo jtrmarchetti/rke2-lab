@@ -1,0 +1,114 @@
+---
+argument_specs:
+  main:
+    short_description: Artifact staging role inputs.
+    description: >-
+      Stages every manifest artifact on the host that has upstream access, and
+      publishes each one with a checksum file for air-gapped consumers.
+    options:
+      artifact_stage_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether artifact staging runs on this host.
+      artifact_stage_root:
+        type: str
+        required: false
+        default: /data1/artifacts
+        description: >-
+          Document root artifacts are published under. Must match
+          artifact_host_document_root.
+      artifact_stage_manifest:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Artifacts to stage. Each entry needs name, phase, type, and dest;
+          type 'file' also needs url and sha256, type 'image' also needs image
+          and digest.
+        options:
+          name:
+            type: str
+            required: true
+            description: Short identifier for the artifact.
+          phase:
+            type: int
+            required: true
+            description: Phase that consumes the artifact.
+          retention:
+            type: str
+            required: true
+            choices:
+              - bootstrap
+              - transit
+            description: >-
+              Whether the artifact stays on this host permanently
+              ('bootstrap' — a cold start needs it, or the publishing step
+              does) or is deleted once published into GitLab ('transit').
+          type:
+            type: str
+            required: true
+            choices:
+              - file
+              - image
+              - mirror
+            description: >-
+              How the artifact is obtained. 'mirror' entries are copied
+              registry to registry by rke2_publish and are ignored by this
+              role entirely, so they carry no dest.
+          dest:
+            type: str
+            required: false
+            description: >-
+              Path under the document root, including file name. Required for
+              every type but 'mirror'.
+          url:
+            type: str
+            required: false
+            description: Upstream URL for a file artifact.
+          sha256:
+            type: str
+            required: false
+            description: Expected SHA256 of a file artifact.
+          image:
+            type: str
+            required: false
+            description: Registry reference including tag for an image artifact.
+          digest:
+            type: str
+            required: false
+            description: Expected registry manifest digest for an image artifact.
+      artifact_stage_owner:
+        type: str
+        required: false
+        default: root
+        description: Owner of published artifacts.
+      artifact_stage_group:
+        type: str
+        required: false
+        default: root
+        description: Group of published artifacts.
+      artifact_stage_file_mode:
+        type: str
+        required: false
+        default: "0644"
+        description: Permissions on published artifacts.
+      artifact_stage_download_timeout:
+        type: int
+        required: false
+        default: 600
+        description: Timeout in seconds for a single download.
+      artifact_stage_work_dir:
+        type: str
+        required: false
+        default: /data1/.artifact-staging
+        description: Scratch directory used while exporting image tarballs.
+      artifact_stage_published_names:
+        type: list
+        elements: str
+        required: false
+        default: []
+        description: >-
+          Names of transit artifacts already confirmed present at their
+          destination. These are not restaged, because their local copy is
+          deleted by design once published.

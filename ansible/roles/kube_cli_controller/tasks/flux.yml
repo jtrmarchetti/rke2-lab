@@ -1,0 +1,56 @@
+---
+# The Flux CLI, fetched from repo01's artifact host rather than from upstream.
+#
+# k9s next door is downloaded from the internet, and that is deliberate: it is
+# an operator convenience this host alone uses. The Flux CLI is different. It
+# bootstraps the cluster, so it is part of the rebuild path, and the rebuild
+# path must not assume the controller can reach GitHub. It is in the artifact
+# manifest as a bootstrap artifact and served from Apache like everything else
+# a rebuild needs.
+#
+# See plan/CONTROLLER.md.
+
+- name: flux | Read the version already installed here
+  changed_when: false
+  failed_when: false
+  register: _reg_kube_cli_controller_flux
+  ansible.builtin.command:
+    cmd: "{{ kube_cli_controller_bin_dir }}/flux --version"
+
+- name: flux | Download and unpack the release
+  when: >-
+    _reg_kube_cli_controller_flux['rc'] != 0
+    or kube_cli_controller_flux_version
+       not in _reg_kube_cli_controller_flux['stdout']
+  block:
+    - name: flux | Create a scratch directory for the download
+      register: _reg_kube_cli_controller_flux_tmp
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: flux
+
+    # The checksum is the manifest's recorded SHA256 for this release, so the
+    # integrity chain terminates in this repository rather than in whatever
+    # Apache happens to be serving.
+    - name: flux | Download the release tarball from the artifact host
+      ansible.builtin.get_url:
+        url: "{{ kube_cli_controller_flux_url | trim }}"
+        dest: "{{ _reg_kube_cli_controller_flux_tmp['path'] }}/flux.tar.gz"
+        checksum: "sha256:{{ kube_cli_controller_flux_sha256 | trim }}"
+        mode: "0644"
+
+    - name: flux | Unpack just the binary
+      ansible.builtin.unarchive:
+        src: "{{ _reg_kube_cli_controller_flux_tmp['path'] }}/flux.tar.gz"
+        dest: "{{ kube_cli_controller_bin_dir }}"
+        remote_src: true
+        include:
+          - flux
+        mode: "0755"
+  always:
+    - name: flux | Remove the scratch directory
+      when: >-
+        (_reg_kube_cli_controller_flux_tmp['path'] | default('') | length) > 0
+      ansible.builtin.file:
+        path: "{{ _reg_kube_cli_controller_flux_tmp['path'] | default('') }}"
+        state: absent

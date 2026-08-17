@@ -1,0 +1,171 @@
+---
+# Signing in to the vault with a domain account, without making the identity
+# provider part of the vault's recovery path.
+#
+# This is the service where "tie it into SSO" needs the most care, because
+# OpenBao is upstream of Keycloak rather than downstream of it: the vault holds
+# Keycloak's database password and its bootstrap administrator, and External
+# Secrets is what delivers them. A vault that could only be opened by Keycloak
+# could not be opened at all on the day Keycloak will not start — which is the
+# day someone needs to read Keycloak's database password.
+#
+# So OIDC here is strictly additive, and three things keep it that way:
+#
+#   - The root token is never replaced, revoked or rotated by this role. It
+#     stays in the controller's env.sh as the offline way in, exactly as
+#     openbao_init left it.
+#   - Neither policy this role writes can seal, unseal, rekey, or change an
+#     auth method or a policy. An administrator who signs in through Keycloak
+#     can read and rewrite secrets; they cannot lock the vault, and they cannot
+#     grant themselves a way back in. Those stay with the root token.
+#   - The unsealer loop reads a SealedSecret and does not authenticate at all,
+#     so restart recovery is untouched.
+#
+# The result is two independent paths in: a domain account through Keycloak for
+# ordinary work, and the root token for the case where the first one is what is
+# broken. That is the same shape as Grafana's local administrator and GitLab's
+# root account, and it is the answer to the question the whole change raises —
+# what happens when the identity provider is down.
+#
+# Everything is read before it is written, so a second run reports no change.
+
+- name: main | Assert the required inputs are present
+  when: (openbao_oidc_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (openbao_oidc_root_token | length) > 0
+      - (openbao_oidc_url | length) > 0
+      - (openbao_oidc_issuer | length) > 0
+      - (openbao_oidc_client_secret | length) > 0
+      - (openbao_oidc_discovery_ca_file | default('', true) | length) > 0
+    fail_msg: >-
+      openbao_oidc needs the root token (OPENBAO_ROOT_TOKEN, written to
+      ~/.config/rke2lab/env.sh by openbao_init), the vault's URL, Keycloak's
+      realm issuer, the client secret this vault authenticates to Keycloak
+      with, and the domain CA it verifies Keycloak's certificate against —
+      without that last one the configuration write fails with
+      `error checking oidc discovery URL`, which names the URL and says nothing
+      about certificates. Run `source ~/.config/rke2lab/env.sh` first; see
+      plan/SECRETS.md.
+    quiet: true
+
+- name: main | Add an OIDC path into the vault beside the root token
+  when:
+    - (openbao_oidc_enabled | bool)
+    # uri has no dry run and every read needs the root token anyway. Same gate
+    # the other write-side vault roles use.
+    - not ansible_check_mode
+  block:
+    - name: main | Read the enabled authentication methods
+      changed_when: false
+      no_log: "{{ openbao_oidc_no_log | bool }}"
+      register: _reg_openbao_oidc_auth
+      ansible.builtin.uri:
+        url: "{{ openbao_oidc_url }}/v1/sys/auth"
+        headers: "{{ _var_openbao_oidc_headers }}"
+        ca_path: "{{ openbao_oidc_ca_file }}"
+
+    - name: main | Enable the OIDC authentication method
+      when: >-
+        (openbao_oidc_mount ~ '/') not in _reg_openbao_oidc_auth['json']
+      changed_when: true
+      no_log: "{{ openbao_oidc_no_log | bool }}"
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_oidc_url }}/v1/sys/auth/{{ openbao_oidc_mount }}
+        method: POST
+        headers: "{{ _var_openbao_oidc_headers }}"
+        ca_path: "{{ openbao_oidc_ca_file }}"
+        body_format: json
+        body:
+          type: oidc
+        status_code: [200, 204]
+
+    - name: main | Read the current OIDC configuration
+      changed_when: false
+      # Absent until the first write, which is not an error.
+      failed_when: false
+      no_log: "{{ openbao_oidc_no_log | bool }}"
+      register: _reg_openbao_oidc_config
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_oidc_url }}/v1/auth/{{ openbao_oidc_mount }}/config
+        headers: "{{ _var_openbao_oidc_headers }}"
+        ca_path: "{{ openbao_oidc_ca_file }}"
+        status_code: [200, 404]
+
+    # The client secret is never disclosed on read, so it cannot take part in
+    # the comparison. Everything else can, the CA included — a reissued domain
+    # CA has to be rewritten here or the vault goes on verifying against an
+    # authority that no longer signs anything.
+    - name: main | Point the OIDC method at the Keycloak realm
+      when: >-
+        (_reg_openbao_oidc_config['status'] | default(404)) != 200
+        or (_reg_openbao_oidc_config['json']['data']['oidc_discovery_url']
+            | default('')) != openbao_oidc_issuer
+        or (_reg_openbao_oidc_config['json']['data']['oidc_client_id']
+            | default('')) != openbao_oidc_client_id
+        or (_reg_openbao_oidc_config['json']['data']['default_role']
+            | default('')) != openbao_oidc_role_name
+        or (_reg_openbao_oidc_config['json']['data']['oidc_discovery_ca_pem']
+            | default('') | trim) != (_var_openbao_oidc_discovery_ca | trim)
+      changed_when: true
+      no_log: "{{ openbao_oidc_no_log | bool }}"
+      ansible.builtin.uri:
+        url: >-
+          {{ openbao_oidc_url }}/v1/auth/{{ openbao_oidc_mount }}/config
+        method: POST
+        headers: "{{ _var_openbao_oidc_headers }}"
+        ca_path: "{{ openbao_oidc_ca_file }}"
+        body_format: json
+        body:
+          oidc_discovery_url: "{{ openbao_oidc_issuer }}"
+          oidc_discovery_ca_pem: "{{ _var_openbao_oidc_discovery_ca }}"
+          oidc_client_id: "{{ openbao_oidc_client_id }}"
+          oidc_client_secret: "{{ openbao_oidc_client_secret }}"
+          default_role: "{{ openbao_oidc_role_name }}"
+        status_code: [200, 204]
+
+    - name: main | Include the policy tasks
+      ansible.builtin.include_tasks: policies.yml
+
+    - name: main | Include the role and identity group tasks
+      ansible.builtin.include_tasks: identity.yml
+
+    - name: main | Confirm the root token still authenticates
+      changed_when: false
+      no_log: "{{ openbao_oidc_no_log | bool }}"
+      register: _reg_openbao_oidc_root_check
+      ansible.builtin.uri:
+        url: "{{ openbao_oidc_url }}/v1/auth/token/lookup-self"
+        headers: "{{ _var_openbao_oidc_headers }}"
+        ca_path: "{{ openbao_oidc_ca_file }}"
+
+    # The one assertion this role genuinely needs to make. Everything above is
+    # additive by construction, and this proves it: the offline way in is still
+    # a way in after the identity provider has been wired up.
+    - name: main | Assert the offline way in survived
+      vars:
+        _openbao_oidc_root_policies: >-
+          {{ _reg_openbao_oidc_root_check['json']['data']['policies']
+             | default([]) }}
+      ansible.builtin.assert:
+        that:
+          - "'root' in _openbao_oidc_root_policies"
+        fail_msg: >-
+          The root token no longer carries the root policy. OIDC was supposed
+          to be a second way in, not a replacement for the first — a vault
+          reachable only through Keycloak cannot be opened on the day Keycloak
+          will not start, which is the day someone needs the Keycloak database
+          password this vault holds.
+        quiet: true
+
+    - name: main | Report the OIDC path
+      ansible.builtin.debug:
+        msg: >-
+          OIDC login enabled at {{ openbao_oidc_url }}/ui against
+          {{ openbao_oidc_issuer }}. The '{{ openbao_oidc_admin_role }}' role
+          grants {{ openbao_oidc_admin_policy }} and
+          '{{ openbao_oidc_user_role }}' grants {{ openbao_oidc_user_policy }}.
+          The root token remains valid.
+        verbosity: 0

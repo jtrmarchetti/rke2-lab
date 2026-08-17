@@ -1,0 +1,52 @@
+---
+rke2_agent_enabled: true
+
+# The address a joining agent registers against. This is the kube-vip VIP, not
+# any one server's address, so a worker joining does not depend on which server
+# happens to be up.
+#
+# It seeds the agent's client-side load balancer and nothing more. Once the
+# agent has joined it syncs the full apiserver endpoint list from the kubernetes
+# service and holds connections to every server, so this address going away
+# later does not disconnect the node.
+rke2_agent_server_address: null
+rke2_agent_supervisor_port: 9345
+
+# The cluster join secret, shared with the servers. No default: an empty token
+# produces an agent that fails authentication against the supervisor, which
+# reads in the journal like a TLS problem rather than like a missing secret.
+# rke2_agent_token:
+
+# This node's address on the internal network. Passed in rather than derived,
+# for the same reason the server role does not derive it: these hosts have one
+# NIC today and deriving it would quietly pick the wrong one the day they have
+# two.
+# rke2_agent_node_ip:
+
+# Must match rke2_node_data_dir. containerd's image store lives under it and
+# grows with every image the node pulls, which is why it is on the data volume
+# and not on the 32 GB OS disk.
+rke2_agent_data_dir: /data1/rancher/rke2
+
+# --- readiness ------------------------------------------------------------
+#
+# An agent has no kubeconfig and no kubectl: /etc/rancher/rke2/rke2.yaml is
+# written by servers only. So the readiness question cannot be asked on the
+# host being gated, and is delegated to a host that can see the API.
+#
+# No default for the host itself. Guessing at one would mean a role that
+# silently delegates somewhere unintended; the playbook maps it from inventory.
+# rke2_agent_control_host:
+
+# Where kubectl lives on that delegate. Separate from rke2_agent_data_dir
+# because it describes a different machine, even though both are the same path
+# in this environment today.
+rke2_agent_control_data_dir: /data1/rancher/rke2
+rke2_agent_control_kubeconfig: /etc/rancher/rke2/rke2.yaml
+
+# Gates on a transaction — the node reaching Ready — rather than on
+# `systemctl is-active`, which reports that systemd has not given up on the
+# unit. A worker whose CNI cannot pull registers and then stays NotReady
+# forever, and that is exactly the state these numbers exist to exclude.
+rke2_agent_ready_retries: 90
+rke2_agent_ready_delay: 10

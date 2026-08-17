@@ -1,0 +1,43 @@
+---
+argument_specs:
+  main:
+    short_description: Initialise OpenBao and record its keys
+    description:
+      - Runs the one-time initialisation, records the unseal keys and root
+        token in the controller's environment file before unsealing with them,
+        and leaves an already-initialised vault alone.
+      - The keys are recorded before the unseal deliberately, because a
+        failure between the two leaves a sealed vault whose keys exist rather
+        than an unsealed vault whose keys do not.
+    options:
+      openbao_init_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      openbao_init_namespace:
+        type: str
+        default: openbao
+        description: Namespace the vault runs in.
+      openbao_init_pod:
+        type: str
+        default: openbao-0
+        description: Pod the vault runs in.
+      openbao_init_key_shares:
+        type: int
+        default: 5
+        description: Number of unseal key shares to produce.
+      openbao_init_key_threshold:
+        type: int
+        default: 3
+        description: How many shares are needed to unseal.
+      openbao_init_env_file:
+        type: str
+        description:
+          - File the break-glass copy of the keys is written to, at mode 0600.
+      openbao_init_kubectl:
+        type: str
+        description: kubectl invocation, including the kubeconfig.
+      openbao_init_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints unseal keys.

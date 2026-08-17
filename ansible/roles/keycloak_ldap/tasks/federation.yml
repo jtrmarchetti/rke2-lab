@@ -1,0 +1,288 @@
+---
+# The Keycloak side: a user federation provider pointing at FreeIPA.
+#
+# Configured through the admin API rather than by importing a realm file,
+# because the bind credential belongs in the request and not in a file in Git.
+# Read before written, so a second run reports no change.
+
+- name: federation | Obtain an admin token
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_token
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/realms/master/protocol/openid-connect/token
+    method: POST
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_ldap_admin_user }}"
+      password: "{{ keycloak_ldap_admin_password }}"
+
+- name: federation | Read the realm
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_realm_info
+  ansible.builtin.uri:
+    url: "{{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm }}"
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+
+- name: federation | Read the realm's existing components
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_components
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components?type=org.keycloak.storage.UserStorageProvider
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+
+- name: federation | Create the FreeIPA user federation provider
+  when: not (_var_keycloak_ldap_present | bool)
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm }}/components
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: "{{ _var_keycloak_ldap_component }}"
+    status_code: [201]
+
+# Create-only would be a trap, and this role fell into it once: the provider
+# was created on a run whose connection URL was wrong, and every later run
+# found a provider by that name and left it alone. Keycloak went on reporting
+# UnknownHost against a host name that had since been corrected in this
+# repository, which is the worst kind of drift — the fix is committed, applied,
+# and not in effect.
+- name: federation | Update the existing provider to match this definition
+  when: (_var_keycloak_ldap_present | bool)
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components/{{ _var_keycloak_ldap_existing_id }}
+    method: PUT
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: >-
+      {{ _var_keycloak_ldap_component
+         | combine({'id': _var_keycloak_ldap_existing_id,
+                    'parentId': _var_keycloak_ldap_realm_id}) }}
+    status_code: [204]
+
+- name: federation | Re-read the components
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_final
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components?type=org.keycloak.storage.UserStorageProvider
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+
+# The attribute mappers Keycloak creates with the provider are nearly right.
+# For the `rhds` vendor it maps **first name from `cn`**, which in FreeIPA is
+# the full name — so every federated user arrives with their whole name in the
+# first-name field and their surname repeated after it. FreeIPA keeps the given
+# name in `givenName`, like every other directory, so the mapper is corrected
+# rather than the directory being reshaped to suit it.
+- name: federation | Read the provider's attribute mappers
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_mappers
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components?parent={{ _var_keycloak_ldap_provider_id }}&type={{
+      _var_keycloak_ldap_mapper_type }}
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+
+- name: federation | Point the first-name mapper at the given name
+  when: >-
+    keycloak_ldap_first_name_mapper in
+    (_reg_keycloak_ldap_mappers['json'] | map(attribute='name') | list)
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  vars:
+    _keycloak_ldap_mapper: >-
+      {{ (_reg_keycloak_ldap_mappers['json']
+          | selectattr('name', 'equalto', keycloak_ldap_first_name_mapper)
+          | list | first) }}
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components/{{ _keycloak_ldap_mapper['id'] }}
+    method: PUT
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: >-
+      {{ _keycloak_ldap_mapper
+         | combine({'config': _keycloak_ldap_mapper['config']
+                    | combine({'ldap.attribute':
+                               [keycloak_ldap_first_name_attribute]})},
+                   recursive=True) }}
+    status_code: [204]
+
+# The groups. Everything above this point federates identity; this federates
+# authorisation, and without it Keycloak can say who someone is and nothing
+# about what they may do.
+- name: federation | Create the group mapper
+  when:
+    - (keycloak_ldap_group_mapper_enabled | bool)
+    - (_var_keycloak_ldap_group_mapper_matching | length) == 0
+  changed_when: true
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: "{{ _var_keycloak_ldap_group_mapper }}"
+    status_code: [201]
+
+# Updated as well as created, for the reason the provider itself is: a mapper
+# created with the wrong subtree is a mapper every later run finds by name and
+# leaves alone, and the symptom — a realm with no groups in it — points at
+# FreeIPA rather than at the mapper.
+- name: federation | Update an existing group mapper to match this definition
+  when:
+    - (keycloak_ldap_group_mapper_enabled | bool)
+    - (_var_keycloak_ldap_group_mapper_matching | length) > 0
+    - >-
+      (_var_keycloak_ldap_group_mapper_matching[0]['config']
+       | combine(_var_keycloak_ldap_group_mapper['config']))
+      != _var_keycloak_ldap_group_mapper_matching[0]['config']
+  changed_when: true
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components/{{ _var_keycloak_ldap_group_mapper_matching[0]['id'] }}
+    method: PUT
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body: >-
+      {{ _var_keycloak_ldap_group_mapper_matching[0]
+         | combine(_var_keycloak_ldap_group_mapper) }}
+    status_code: [204]
+
+- name: federation | Re-read the mappers so the group mapper's id is known
+  when: (keycloak_ldap_group_mapper_enabled | bool)
+  changed_when: false
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_mappers
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/components?parent={{ _var_keycloak_ldap_provider_id }}&type={{
+      _var_keycloak_ldap_mapper_type }}
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+
+# Import now rather than at some later sync.
+#
+# Keycloak imports groups when the federation synchronises, not when a user
+# logs in, so a group ipa_sso_groups created a moment ago is not in the realm
+# yet — and keycloak_clients reads the realm's groups to bind them to client
+# roles. Without this, the run that adds an application is exactly the run that
+# cannot finish it, and the error names a group that plainly exists in FreeIPA.
+#
+# Reported unchanged: it imports whatever the directory holds and leaves no
+# state of its own, so a run where nothing in the directory has moved genuinely
+# changes nothing. What it does report is how many groups were added or
+# updated, which is the number worth reading when a login is refused.
+- name: federation | Import the directory's groups into the realm
+  when:
+    - (keycloak_ldap_group_mapper_enabled | bool)
+    - (keycloak_ldap_group_sync | bool)
+  changed_when: false
+  register: _reg_keycloak_ldap_group_sync
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/user-storage/{{ _var_keycloak_ldap_provider_id | trim
+      }}/mappers/{{ _var_keycloak_ldap_group_mapper_matching[0]['id']
+      }}/sync?direction=fedToKeycloak
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    status_code: [200]
+
+# A fresh token, because the sync above is the one step in this role that can
+# take real time — it walks the whole group subtree — and **Keycloak's master
+# realm issues 60 second access tokens by default**. The calls after this would
+# otherwise fail with a 401 whose cause is entirely invisible from the error,
+# and only on directories large enough to push the sync past the minute.
+- name: federation | Obtain a fresh admin token after the import
+  when:
+    - (keycloak_ldap_group_mapper_enabled | bool)
+    - (keycloak_ldap_group_sync | bool)
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  register: _reg_keycloak_ldap_token
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/realms/master/protocol/openid-connect/token
+    method: POST
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_ldap_admin_user }}"
+      password: "{{ keycloak_ldap_admin_password }}"
+
+- name: federation | Report the group import
+  when:
+    - (keycloak_ldap_group_mapper_enabled | bool)
+    - (keycloak_ldap_group_sync | bool)
+  ansible.builtin.debug:
+    msg: >-
+      {{ keycloak_ldap_realm }}: group import from
+      {{ keycloak_ldap_groups_dn }} —
+      {{ _reg_keycloak_ldap_group_sync['json']['status'] | default('no status') }}
+    verbosity: 0
+
+# Keycloak's own connection test, which is the only check that proves the
+# provider is usable rather than merely present.
+- name: federation | Ask Keycloak to test the connection and the bind
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  loop:
+    - testConnection
+    - testAuthentication
+  loop_control:
+    loop_var: _item_keycloak_ldap_test
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/testLDAPConnection
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    body_format: json
+    body:
+      action: "{{ _item_keycloak_ldap_test }}"
+      connectionUrl: "{{ keycloak_ldap_connection_url }}"
+      bindDn: "{{ _var_keycloak_ldap_bind_dn }}"
+      bindCredential: "{{ keycloak_ldap_bind_password }}"
+      useTruststoreSpi: always
+      connectionTimeout: "10000"
+      startTls: "false"
+      authType: simple
+    status_code: [204]
+
+- name: federation | Report the federation
+  ansible.builtin.debug:
+    msg: >-
+      {{ keycloak_ldap_realm }}: user federation
+      '{{ keycloak_ldap_provider_name }}' present =
+      {{ keycloak_ldap_provider_name in
+         (_reg_keycloak_ldap_final['json'] | map(attribute='name') | list) }}
+    verbosity: 0

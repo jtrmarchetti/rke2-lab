@@ -1,0 +1,48 @@
+---
+# Federates Keycloak to FreeIPA over LDAP, so the domain stays the one place a
+# person exists.
+#
+# The alternative — Keycloak holding its own users — would give this lab two
+# identity stores that agree only as long as someone maintains both. FreeIPA is
+# already the authority: it holds the users, the groups, the password policy
+# and the CA. Keycloak's job here is to speak OIDC on top of that, not to
+# become a second copy of it.
+#
+# Two halves, and they run against different hosts:
+#
+#   - A bind account in FreeIPA. A *system account* under cn=sysaccounts, not a
+#     user: it has no POSIX identity, cannot log in anywhere, and exists only
+#     to read the directory. FreeIPA has no CLI for these, so it is created
+#     with ldapmodify as Directory Manager — the one operation in this
+#     repository that needs that credential.
+#   - A user federation provider in Keycloak, configured through the admin API,
+#     read before written so a second run changes nothing.
+
+- name: main | Assert the required inputs are present
+  ansible.builtin.assert:
+    that:
+      - (keycloak_ldap_ipa_host | length) > 0
+      - (keycloak_ldap_dir_manager_password | length) >= 8
+      - (keycloak_ldap_bind_password | length) >= 12
+      # default('', true) rather than a bare length, because the default is
+      # now null: an unset realm has to reach the message below rather than
+      # raising on `None | length` before anyone reads it.
+      - not (keycloak_ldap_configure_keycloak | bool)
+        or ((keycloak_ldap_realm | default('', true) | length) > 0
+            and keycloak_ldap_realm != 'master')
+    fail_msg: >-
+      keycloak_ldap needs the identity host, the Directory Manager password
+      (FREEIPA_DIR_MANAGER_PASSWORD), and a bind password for the system
+      account. All come from ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
+      When it is configuring Keycloak it also needs the application realm,
+      which must not be master — that realm administers every other realm and
+      holds Keycloak's own break-glass administrator, so federated end users
+      do not belong in it. See the keycloak_realm role.
+    quiet: true
+
+- name: main | Ensure the LDAP bind system account exists
+  ansible.builtin.include_tasks: sysaccount.yml
+
+- name: main | Configure the Keycloak user federation
+  when: (keycloak_ldap_configure_keycloak | bool)
+  ansible.builtin.include_tasks: federation.yml

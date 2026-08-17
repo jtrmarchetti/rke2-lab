@@ -1,0 +1,209 @@
+---
+- name: main | Assert the GitLab root password is available
+  when: (gitlab_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - gitlab_root_password | length >= 8
+    fail_msg: >-
+      GITLAB_ROOT_PASSWORD is missing or too short. It comes from
+      ~/.config/rke2lab/env.sh; run `source ~/.config/rke2lab/env.sh` first.
+    quiet: true
+
+- name: main | Assert the single sign-on inputs are present when it is enabled
+  when:
+    - (gitlab_enabled | bool)
+    - (gitlab_oidc_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (gitlab_oidc_issuer | length) > 0
+      - (gitlab_oidc_client_secret | length) > 0
+      - (gitlab_oidc_ca_source_file | length) > 0
+    fail_msg: >-
+      Single sign-on is enabled but incompletely configured. It needs the
+      Keycloak realm issuer, the client secret
+      (OIDC_CLIENT_SECRET_GITLAB from ~/.config/rke2lab/env.sh), and the domain
+      CA to verify Keycloak's certificate with. An empty client secret produces
+      a sign-in button that fails at the token exchange, long after this run
+      has reported success. See plan/SECRETS.md.
+    quiet: true
+
+# Certificates come from the ipa_service_cert role, which runs before this one.
+# Failing here names the missing file; letting omnibus discover it produces a
+# reconfigure that fails deep inside an nginx template.
+- name: main | Check the service certificates are present
+  when: (gitlab_enabled | bool)
+  register: _reg_gitlab_cert_files
+  loop:
+    - "{{ gitlab_external_hostname }}.crt"
+    - "{{ gitlab_external_hostname }}.key"
+    - "{{ gitlab_registry_hostname }}.crt"
+    - "{{ gitlab_registry_hostname }}.key"
+  loop_control:
+    loop_var: _item_gitlab_certificate_file
+  ansible.builtin.stat:
+    path: "{{ gitlab_ssl_source_dir }}/{{ _item_gitlab_certificate_file }}"
+
+- name: main | Assert the service certificates are present
+  when: (gitlab_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_reg_gitlab_cert_files.results | rejectattr('stat.exists')
+         | list | length) == 0
+    fail_msg: >-
+      TLS material is missing from {{ gitlab_ssl_source_dir }}. The
+      ipa_service_cert role issues it and must run before this role.
+    quiet: true
+
+- name: main | Ensure container runtime packages are installed
+  when: (gitlab_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ gitlab_runtime_packages }}"
+    state: present
+
+- name: main | Ensure the container runtime is running
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: main | Ensure the GitLab compose directory exists
+  when: (gitlab_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ gitlab_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# 0755, not 0700. These are bind-mount roots, and omnibus runs its services as
+# non-root users inside the container — postgresql as gitlab-psql, gitaly and
+# workhorse as git, nginx workers as gitlab-www — every one of which has to
+# traverse the mount root to reach its own subdirectory. At 0700 root:root,
+# PostgreSQL fails with `could not access directory
+# "/var/opt/gitlab/postgresql/data": Permission denied` and restarts forever
+# while the container still reports Up and nginx answers 502.
+#
+# It is also what omnibus sets these directories to itself. Declaring 0700 here
+# did not merely start them wrong: the file module re-applied it on every run,
+# so a re-run took a working GitLab down. Matching omnibus stops the role and
+# the application fighting over the same mode.
+#
+# This is the FreeIPA lesson from Phase 2, in a different service: check the
+# mode of the data directory, not just its path.
+- name: main | Ensure the GitLab data directories exist
+  when: (gitlab_enabled | bool)
+  loop: "{{ _var_gitlab_data_dirs }}"
+  loop_control:
+    loop_var: _item_gitlab_data_dir
+    label: "{{ _item_gitlab_data_dir['path'] }}"
+  ansible.builtin.file:
+    path: "{{ _item_gitlab_data_dir['path'] }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ _item_gitlab_data_dir['mode'] | default(omit) }}"
+
+# Before the compose file, because a reconfigure that finds the certificate
+# missing links nothing and the next sign-in fails at the token exchange with a
+# verification error that names neither this file nor Keycloak.
+#
+# /etc/gitlab is the config bind mount, so this lands inside the container at
+# the path omnibus reads on every reconfigure. The certificate is the domain
+# CA — the same file ipa_service_cert already put in this host's trust store —
+# and it is enough on its own: sso's certificate is issued by the cluster's
+# intermediate, which cert-manager serves alongside the leaf, so the chain
+# completes at the root.
+- name: main | Ensure the trusted certificate directory exists
+  when:
+    - (gitlab_enabled | bool)
+    - (gitlab_oidc_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ _var_gitlab_trusted_certs_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: main | Ensure the domain certificate authority is trusted by GitLab
+  when:
+    - (gitlab_enabled | bool)
+    - (gitlab_oidc_enabled | bool)
+  ansible.builtin.copy:
+    src: "{{ gitlab_oidc_ca_source_file }}"
+    # Keeps the source file's own name, so the role carries no domain of its
+    # own and a second environment's CA does not land on top of this one's.
+    dest: >-
+      {{ _var_gitlab_trusted_certs_dir }}/{{
+      gitlab_oidc_ca_source_file | basename }}
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Include the image loading tasks
+  when: (gitlab_enabled | bool)
+  ansible.builtin.include_tasks: image.yml
+
+- name: main | Ensure the GitLab environment file is present
+  when: (gitlab_enabled | bool)
+  no_log: "{{ gitlab_no_log | bool }}"
+  ansible.builtin.template:
+    src: "{{ _var_gitlab_files_dir }}/gitlab.env.j2"
+    dest: "{{ _var_gitlab_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: main | Ensure the GitLab compose file is present
+  when: (gitlab_enabled | bool)
+  ansible.builtin.template:
+    src: "{{ _var_gitlab_files_dir }}/docker-compose.gitlab.yml.j2"
+    dest: "{{ _var_gitlab_compose_file }}"
+    owner: root
+    group: root
+    mode: "0640"
+
+# Compose adopts an existing container only if it carries this project's label.
+# One created any other way holds the name and makes every later run fail with
+# a name conflict. Same reasoning as the FreeIPA role.
+- name: main | Check which compose project owns an existing container
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_gitlab_container_state
+  community.docker.docker_container_info:
+    name: "{{ gitlab_container_name }}"
+
+- name: main | Remove a GitLab container this compose project does not own
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+    - (_reg_gitlab_container_state.exists | default(false))
+    - >-
+      (_reg_gitlab_container_state.container['Config']['Labels'][
+        'com.docker.compose.project'] | default('')) != 'gitlab'
+  community.docker.docker_container:
+    name: "{{ gitlab_container_name }}"
+    state: absent
+
+- name: main | Ensure GitLab is running
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_gitlab_compose_result
+  community.docker.docker_compose_v2:
+    project_src: "{{ gitlab_compose_dir }}"
+    files:
+      - "{{ _var_gitlab_compose_file | basename }}"
+    state: present
+    wait: false
+
+- name: main | Include the readiness tasks
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.include_tasks: readiness.yml

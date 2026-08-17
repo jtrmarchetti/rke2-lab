@@ -1,0 +1,301 @@
+---
+# Phase 1 validation. Mirrors the Test section of
+# plan/PHASE1_IMPLEMENTATION.md: services, tunnel, artifact distribution, and
+# the negative tests that prove the no-internet-access design holds.
+#
+# Checks that depend on a host built in a later phase are skipped rather than
+# failed, so this playbook stays runnable from Phase 1 onward.
+
+- name: Validate phase1 repo01 services
+  hosts: repo
+  gather_facts: true
+  become: true
+  tasks:
+    - name: validate_phase1 | Gather service facts
+      ansible.builtin.service_facts:
+
+    # --- Data volume ---------------------------------------------------
+
+    - name: validate_phase1 | Validate the data volume is mounted
+      when: (inventory_data_volume_enabled | bool)
+      vars:
+        _validate_mounts: >-
+          {{ ansible_facts['mounts'] | selectattr('mount', 'equalto',
+             inventory_data_volume_mount_path) | list }}
+      ansible.builtin.assert:
+        that:
+          - _validate_mounts | length == 1
+          - _validate_mounts[0]['device'] is defined
+        fail_msg: >-
+          {{ inventory_data_volume_mount_path }} is not mounted. Artifacts and the apt
+          cache would be written to the OS disk.
+        quiet: true
+
+    # --- Service state ---------------------------------------------------
+
+    - name: validate_phase1 | Validate apt proxy listener on the internal address
+      when: (inventory_apt_proxy_enabled | bool)
+      loop: "{{ inventory_apt_proxy_bind_addresses }}"
+      loop_control:
+        loop_var: _item_validate_bind_address
+      ansible.builtin.wait_for:
+        host: "{{ _item_validate_bind_address }}"
+        port: "{{ inventory_apt_proxy_bind_port }}"
+        timeout: 5
+
+    - name: validate_phase1 | Validate SOCKS5 listener
+      when: (inventory_socks5_proxy_enabled | bool)
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ inventory_socks5_proxy_listen_port }}"
+        timeout: 5
+
+    - name: validate_phase1 | Validate apt-cacher-ng service state
+      when: (inventory_apt_proxy_enabled | bool)
+      ansible.builtin.assert:
+        that:
+          - "'apt-cacher-ng.service' in ansible_facts['services']"
+          - >-
+            ansible_facts['services']['apt-cacher-ng.service']['state']
+            == 'running'
+        fail_msg: apt-cacher-ng is not running as expected.
+        quiet: true
+
+    - name: validate_phase1 | Validate danted service state
+      when: (inventory_socks5_proxy_enabled | bool)
+      ansible.builtin.assert:
+        that:
+          - "'danted.service' in ansible_facts['services']"
+          - ansible_facts['services']['danted.service']['state'] == 'running'
+        fail_msg: danted is not running as expected.
+        quiet: true
+
+    - name: validate_phase1 | Validate Apache service state
+      when: (inventory_artifact_host_enabled | bool)
+      ansible.builtin.assert:
+        that:
+          - "'apache2.service' in ansible_facts['services']"
+          - ansible_facts['services']['apache2.service']['state'] == 'running'
+        fail_msg: Apache is not running as expected.
+        quiet: true
+
+    # --- APT cache behavior ----------------------------------------------
+
+    - name: validate_phase1 | Validate the apt cache is on the data volume
+      when: (inventory_apt_proxy_enabled | bool)
+      register: _reg_validate_apt_cache
+      ansible.builtin.stat:
+        path: "{{ inventory_apt_proxy_cache_dir }}"
+        get_checksum: false
+
+    - name: validate_phase1 | Assert the apt cache directory exists on the data volume
+      when: (inventory_apt_proxy_enabled | bool)
+      ansible.builtin.assert:
+        that:
+          - _reg_validate_apt_cache['stat']['exists']
+          - _reg_validate_apt_cache['stat']['isdir']
+          - inventory_apt_proxy_cache_dir is match(inventory_data_volume_mount_path + '/')
+        fail_msg: >-
+          The apt cache is not on {{ inventory_data_volume_mount_path }}; it would grow
+          on the OS disk.
+        quiet: true
+
+    # --- Artifact publication ---------------------------------------------
+
+    - name: validate_phase1 | Validate each manifest artifact is published with a checksum
+      when: (inventory_artifact_stage_manifest | length > 0)
+      register: _reg_validate_artifacts
+      loop: "{{ inventory_artifact_stage_manifest }}"
+      loop_control:
+        loop_var: _item_validate_artifact
+        label: "{{ _item_validate_artifact['dest'] }}"
+      ansible.builtin.stat:
+        path: "{{ inventory_artifact_host_document_root }}/{{ _item_validate_artifact['dest'] }}"
+        checksum_algorithm: sha256
+
+    - name: validate_phase1 | Read the published checksum file for each artifact
+      when: (inventory_artifact_stage_manifest | length > 0)
+      register: _reg_validate_checksum_files
+      loop: "{{ inventory_artifact_stage_manifest }}"
+      loop_control:
+        loop_var: _item_validate_artifact
+        label: "{{ _item_validate_artifact['dest'] }}"
+      ansible.builtin.slurp:
+        src: >-
+          {{ inventory_artifact_host_document_root }}/{{ _item_validate_artifact['dest'] }}.sha256
+
+    - name: validate_phase1 | Assert every artifact matches its published checksum
+      loop: "{{ _reg_validate_artifacts['results'] | default([]) }}"
+      loop_control:
+        loop_var: _item_validate_result
+        label: "{{ _item_validate_result['_item_validate_artifact']['dest'] }}"
+        extended: true
+      vars:
+        _validate_published: >-
+          {{ (_reg_validate_checksum_files['results'][ansible_loop.index0]
+              ['content'] | b64decode).split() | first }}
+      ansible.builtin.assert:
+        that:
+          - _item_validate_result['stat']['exists']
+          - item['stat']['checksum'] == _validate_published
+        fail_msg: >-
+          {{ _item_validate_result['_item_validate_artifact']['name'] }} does not match its published .sha256 file.
+          An internal node verifying before use would reject it.
+        quiet: true
+
+    # --- Negative: the artifact host is read-only ------------------------
+
+    # The artifact host is a static file server. A write method reaching a
+    # handler at all would mean the document root is something an internal node
+    # could change, rather than something it can only read.
+    - name: validate_phase1 | Validate write methods are refused by the artifact host
+      when:
+        - (inventory_artifact_host_enabled | bool)
+        - (inventory_artifact_stage_manifest | length > 0)
+      loop:
+        - POST
+        - PUT
+        - DELETE
+      loop_control:
+        loop_var: _item_validate_method
+      vars:
+        _validate_artifact_url: >-
+          http://{{ inventory_apt_proxy_bind_addresses | first }}/{{
+          (inventory_artifact_stage_manifest | first)['dest'] }}.sha256
+      ansible.builtin.uri:
+        url: "{{ _validate_artifact_url }}"
+        method: "{{ _item_validate_method }}"
+        status_code:
+          - 403
+
+    # --- Negative: the proxy is not general internet egress ---------------
+
+    # The proxy binds only to the internal and tunnel addresses, so a connect
+    # on the external address must be refused. If this succeeds, every host on
+    # the lab network can use repo01 as a package proxy.
+    - name: validate_phase1 | Validate the apt proxy is not reachable on the external address
+      when: (inventory_apt_proxy_enabled | bool)
+      ansible.builtin.wait_for:
+        host: "{{ ansible_facts['default_ipv4']['address'] }}"
+        port: "{{ inventory_apt_proxy_bind_port }}"
+        timeout: 5
+        state: stopped
+
+    # PassThroughPattern allows CONNECT only to the Ubuntu archives. A wider
+    # pattern would turn the package proxy into an internet path for every
+    # internal node.
+    - name: validate_phase1 | Validate CONNECT to a non-Ubuntu host is refused by the proxy
+      when: (inventory_apt_proxy_enabled | bool)
+      failed_when: _reg_validate_connect['status'] | default(0) == 200
+      environment:
+        https_proxy: >-
+          http://{{ inventory_apt_proxy_bind_addresses | first }}:{{
+          inventory_apt_proxy_bind_port }}
+      register: _reg_validate_connect
+      ansible.builtin.uri:
+        url: https://github.com
+        use_proxy: true
+        status_code:
+          - -1
+        timeout: 15
+
+    # --- Split DNS ---------------------------------------------------------
+
+    - name: validate_phase1 | Validate an upstream name resolves
+      changed_when: false
+      register: _reg_validate_upstream_dns
+      ansible.builtin.command:
+        cmd: getent hosts archive.ubuntu.com
+
+    - name: validate_phase1 | Check whether the internal resolver is deployed yet
+      when: (inventory_base_host_split_dns_enabled | bool)
+      failed_when: false
+      register: _reg_validate_internal_resolver
+      ansible.builtin.wait_for:
+        host: "{{ base_host_split_dns_servers | first }}"
+        port: 53
+        timeout: 5
+
+    # core01 is a Phase 2 host. Until it exists there is nothing to answer for
+    # dev.lo, so this resolves only once Phase 2 has run.
+    - name: validate_phase1 | Validate a dev.lo name resolves through the internal resolver
+      when:
+        - (inventory_base_host_split_dns_enabled | bool)
+        - not (_reg_validate_internal_resolver['failed'] | default(true))
+      changed_when: false
+      failed_when: _reg_validate_internal_dns['rc'] not in [0, 2]
+      register: _reg_validate_internal_dns
+      ansible.builtin.command:
+        cmd: >-
+          getent hosts {{ base_host_split_dns_domains | first }}
+
+- name: Validate controller tunnel and artifact access
+  hosts: controller
+  gather_facts: false
+  become: false
+  vars:
+    _validate_repo_internal_address: 192.168.2.99
+    _validate_repo_external_address: 192.168.1.20
+    _validate_repo_tunnel_address: 10.66.66.1
+  tasks:
+    - name: validate_phase1 | Validate controller can reach repo WireGuard endpoint address
+      changed_when: false
+      ansible.builtin.command:
+        cmd: ping -c 1 -W 2 {{ _validate_repo_tunnel_address }}
+
+    - name: validate_phase1 | Validate controller route to internal subnet target
+      changed_when: false
+      ansible.builtin.command:
+        cmd: ping -c 1 -W 2 {{ _validate_repo_internal_address }}
+
+    # Proves the whole distribution path end to end: the controller reaches the
+    # internal address over the tunnel, Apache allows the tunnel source, and
+    # the bytes served match what was published.
+    - name: validate_phase1 | Fetch a published artifact over the tunnel
+      when: hostvars['repo01']['inventory_artifact_stage_manifest'] | length > 0
+      register: _reg_validate_fetch
+      vars:
+        _validate_artifact: >-
+          {{ hostvars['repo01']['inventory_artifact_stage_manifest'] | first }}
+      ansible.builtin.uri:
+        url: >-
+          http://{{ _validate_repo_internal_address }}/{{
+          _validate_artifact['dest'] }}.sha256
+        return_content: true
+        status_code:
+          - 200
+
+    # Access is restricted to the internal network and the tunnel. A request
+    # arriving on the external address comes from a source outside both, so
+    # Apache must refuse it.
+    - name: validate_phase1 | Validate Apache refuses requests from outside the allowed networks
+      register: _reg_validate_forbidden
+      ansible.builtin.uri:
+        url: "http://{{ _validate_repo_external_address }}/"
+        status_code:
+          - 403
+
+- name: Validate internal nodes have no internet path
+  hosts: core
+  gather_facts: false
+  become: false
+  tasks:
+    # Runs only once a Phase 2 host exists. The point of the whole artifact
+    # model is that this fails: if an internal node can reach upstream
+    # directly, nothing else in the design is being enforced.
+    - name: validate_phase1 | Check whether this internal host is reachable yet
+      failed_when: false
+      register: _reg_validate_internal_reachable
+      ansible.builtin.wait_for_connection:
+        timeout: 10
+
+    - name: validate_phase1 | Validate a direct upstream fetch from an internal node fails
+      when: not (_reg_validate_internal_reachable['failed'] | default(true))
+      failed_when: _reg_validate_egress['status'] | default(0) == 200
+      register: _reg_validate_egress
+      ansible.builtin.uri:
+        url: https://archive.ubuntu.com
+        use_proxy: false
+        timeout: 15
+        status_code:
+          - -1

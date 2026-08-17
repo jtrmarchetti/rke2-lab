@@ -1,0 +1,15 @@
+---
+# Every group this role is responsible for, flattened from the application
+# list into the two-per-application pair the authorisation model is made of.
+#
+# Kept here rather than only inside the task loop because it is what the
+# verification step at the end of the role checks the directory against, and
+# because it is the list a reader compares with `ipa group-find` when a login
+# is refused. keycloak_clients derives exactly these names from exactly these
+# slugs; the two roles agree because they share the suffixes, not because
+# anyone keeps two lists aligned.
+_var_ipa_sso_groups_all: >-
+  {{ ipa_sso_groups_applications
+     | map(attribute='name')
+     | product([ipa_sso_groups_admin_suffix, ipa_sso_groups_user_suffix])
+     | map('join', '-') | list }}

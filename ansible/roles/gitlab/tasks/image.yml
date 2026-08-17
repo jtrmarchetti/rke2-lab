@@ -1,0 +1,43 @@
+---
+- name: image | Check whether the GitLab image is already loaded
+  register: _reg_gitlab_image_check
+  community.docker.docker_image_info:
+    name: "{{ gitlab_container_image }}"
+
+- name: image | Download the image tarball from the artifact host
+  when:
+    - (_reg_gitlab_image_check.images | default([]) | length) == 0
+    - (gitlab_image_tarball_url | length > 0)
+  ansible.builtin.get_url:
+    url: "{{ gitlab_image_tarball_url }}"
+    dest: "{{ gitlab_image_tarball_path }}"
+    checksum: "{{ gitlab_image_tarball_checksum | default(omit, true) }}"
+    mode: "0640"
+
+- name: image | Load the GitLab image from the artifact tarball
+  when:
+    - (_reg_gitlab_image_check.images | default([]) | length) == 0
+    - not ansible_check_mode
+  community.docker.docker_image_load:
+    path: "{{ gitlab_image_tarball_path }}"
+
+# A tarball built from a differently tagged image loads under that other tag,
+# and compose would then try to pull an image that does not exist. On this host
+# a pull would even succeed, since it is the one host with internet access —
+# quietly defeating the whole staged-artifact model. Fail here instead.
+- name: image | Verify the expected image tag is present after loading
+  when: not ansible_check_mode
+  register: _reg_gitlab_image_verify
+  community.docker.docker_image_info:
+    name: "{{ gitlab_container_image }}"
+
+- name: image | Assert the expected GitLab image tag is present
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - (_reg_gitlab_image_verify.images | default([]) | length) > 0
+    fail_msg: >-
+      The staged tarball did not provide {{ gitlab_container_image }}. Check
+      that the manifest entry in group_vars/repo/artifacts.yml uses the same
+      tag this role expects.
+    quiet: true

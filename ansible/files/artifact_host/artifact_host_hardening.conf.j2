@@ -1,0 +1,20 @@
+{{ ansible_managed | comment }}
+#
+# Server-wide settings for the artifact host. Kept out of the vhost so they
+# still apply if another vhost is ever added on this server.
+
+# Do not advertise the Apache version and module list in responses and error
+# pages. The artifact host is reachable from every internal node, none of which
+# has any reason to learn its patch level.
+ServerTokens Prod
+ServerSignature Off
+
+# TRACE is only ever useful for reflecting request headers back at a client.
+TraceEnable Off
+
+# The document root is a static file tree. Nothing under it should ever be
+# handed to an interpreter, regardless of what the staging process names a
+# file, so any handler association is stripped back to plain download.
+<Directory {{ artifact_host_document_root }}>
+    RemoveHandler .php .phar .cgi .pl .py .sh
+</Directory>

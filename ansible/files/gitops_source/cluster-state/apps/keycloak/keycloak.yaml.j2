@@ -1,0 +1,229 @@
+{{ ansible_managed | comment }}
+# Keycloak, and the database it needs.
+#
+# FIPS is not configured here. It is a property of the environment rather than
+# of Keycloak, and this file is shared by every environment: dev does not run
+# in the FIPS boundary and production does. The switch is the `fips` component
+# beside this file, which a cluster enables in its own kustomization — see
+# components/fips/kustomization.yaml for what it changes and why it is more
+# than one flag.
+#
+# What is here regardless of FIPS:
+#
+#   - TLS terminates at Traefik, not in Keycloak. The certificate that matters
+#     is the one on the ingress, issued by the cluster's CA. Terminating here
+#     as well would mean a keystore to generate and rotate for a connection
+#     that never leaves the pod network — and in FIPS mode that keystore has
+#     to be BCFKS, which is a second format for no gain.
+#   - `proxy-headers=xforwarded` is what makes that safe: without it Keycloak
+#     builds redirect URLs from the request it actually received, which is
+#     plain HTTP from Traefik, and every OIDC redirect would downgrade.
+#   - Users come from FreeIPA over LDAP, configured by the keycloak_ldap role
+#     rather than declared here, because the bind credential belongs in a
+#     request and not in a file in Git.
+#
+# Plain manifests rather than the Operator or the community chart. For a single
+# instance the Operator is a controller to keep current for no gain, and the
+# community chart is a third party in the authentication path.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+spec:
+  clusterIP: None
+  selector:
+    app: keycloak-db
+  ports:
+    - port: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak-db
+  namespace: keycloak
+spec:
+  serviceName: keycloak-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak-db
+  template:
+    metadata:
+      labels:
+        app: keycloak-db
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      containers:
+        - name: postgres
+          image: postgres:17.7-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              value: keycloak
+            - name: POSTGRES_USER
+              value: keycloak
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-password
+            # Postgres refuses to initialise into a non-empty directory, and a
+            # Longhorn volume arrives with lost+found in it. A subdirectory is
+            # the documented answer.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "keycloak"]
+            initialDelaySeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.7.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - start
+            # Built at start rather than baked into a derived image. An
+            # optimised build would be faster to start and would mean
+            # maintaining an image of our own in the registry — a fair trade
+            # for a busy cluster, and the wrong one for a single instance that
+            # restarts rarely.
+            - --optimized=false
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://keycloak-db:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-password
+            - name: KC_HOSTNAME
+              value: https://sso.{{ gitops_source_cluster_domain }}
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: admin-password
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9000
+              name: management
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              memory: 1280Mi
+          # Keycloak's health endpoints are on the management port, not the
+          # HTTP one, and a probe pointed at 8080 gets a 404 that reads as the
+          # server being broken.
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: 9000
+            failureThreshold: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+            periodSeconds: 15
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    cert-manager.io/cluster-issuer: k8s-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - sso.{{ gitops_source_cluster_domain }}
+      secretName: keycloak-tls
+  rules:
+    - host: sso.{{ gitops_source_cluster_domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080

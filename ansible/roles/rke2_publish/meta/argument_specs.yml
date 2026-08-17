@@ -1,0 +1,218 @@
+---
+argument_specs:
+  main:
+    short_description: Publish the RKE2 artifact set into GitLab
+    description:
+      - Reads the artifact set staged by the artifact_stage role and publishes
+        it into GitLab, which is Tier 2 of the artifact model.
+      - Container images are pushed to the container registry under one project
+        path, so the containerd rewrite rule on a consuming node is a prefix.
+      - The installer, the binary tarball, and the release checksum file are
+        uploaded to the generic package registry, because a node needs those
+        before it has anything that can pull an image.
+      - Mints a group-scoped read-only deploy token and records its value, since
+        GitLab returns it exactly once.
+    options:
+      rke2_publish_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      rke2_publish_gitlab_url:
+        type: str
+        description: Base URL of the GitLab instance.
+      rke2_publish_registry_host:
+        type: str
+        description: Host name of the GitLab container registry.
+      rke2_publish_group:
+        type: str
+        default: rke2
+        description: GitLab group the artifact projects live in.
+      rke2_publish_images_project:
+        type: str
+        default: images
+        description: Project whose container registry receives the images.
+      rke2_publish_packages_project:
+        type: str
+        default: packages
+        description: Project whose package registry receives the binaries.
+      rke2_publish_charts_project:
+        type: str
+        default: charts
+        description:
+          - Project whose container registry receives the Helm charts, pushed
+            as OCI artifacts.
+      rke2_publish_root_password:
+        type: str
+        required: true
+        description:
+          - Password of the GitLab root account, used to create the group and
+            projects and to push images.
+          - Comes from GITLAB_ROOT_PASSWORD in the environment.
+      rke2_publish_deploy_token_name:
+        type: str
+        default: rke2-nodes
+        description: Name and username of the read-only group deploy token.
+      rke2_publish_deploy_token_scopes:
+        type: list
+        elements: str
+        description:
+          - Scopes the deploy token is created with. read_registry and
+            read_package_registry are separate permissions and a node needs
+            both. Widening this replaces the existing token.
+      rke2_publish_deploy_token_file:
+        type: str
+        default: /data1/gitlab/rke2-deploy-token.yml
+        description:
+          - Where the deploy token value is recorded, since GitLab returns it
+            only at creation.
+      rke2_publish_deploy_token_username:
+        type: str
+        default: ""
+        description:
+          - An existing deploy token username to use instead of minting one.
+            Both this and the value must be set for the override to apply.
+      rke2_publish_deploy_token_value:
+        type: str
+        default: ""
+        description: The matching deploy token value.
+      rke2_publish_artifact_dir:
+        type: str
+        default: /data1/artifacts/rke2
+        description: Directory the artifact_stage role staged the set into.
+      rke2_publish_api_timeout:
+        type: int
+        required: false
+        default: 180
+        description:
+          - Seconds a GitLab API call may take. The registry tag enumeration
+            needs well over the module's 30 second default.
+      rke2_publish_api_retries:
+        type: int
+        required: false
+        default: 3
+        description: Attempts for the read-only registry enumeration.
+      rke2_publish_api_delay:
+        type: int
+        required: false
+        default: 10
+        description: Seconds between those attempts.
+      rke2_publish_no_log:
+        type: bool
+        required: false
+        default: true
+        description:
+          - Suppress task output that would expose the admin or deploy token.
+            Set false to see the API responses when diagnosing a failure.
+      rke2_publish_manifest:
+        type: list
+        elements: dict
+        required: false
+        description:
+          - The artifact manifest this role publishes from, as given to the
+            artifact_stage role. Entries are matched on type and retention.
+      rke2_publish_artifact_root:
+        type: path
+        required: false
+        description:
+          - Root the artifact set was staged under, as given to the
+            artifact_stage role. Charts and retention markers are addressed
+            relative to it.
+      rke2_publish_image_sets:
+        type: list
+        elements: dict
+        description:
+          - Image sets to publish, each pairing a saved tarball with the
+            release's own list of what that tarball contains.
+        options:
+          name:
+            type: str
+            required: true
+            description: Short identifier used in task output.
+          tarball:
+            type: str
+            required: true
+            description: File name of the saved image tarball.
+          list:
+            type: str
+            required: true
+            description: File name of the release image list.
+      rke2_publish_extra_images:
+        type: list
+        elements: dict
+        description:
+          - Single images with no release list file of their own.
+        options:
+          name:
+            type: str
+            required: true
+            description: Short identifier used in task output.
+          tarball:
+            type: str
+            required: true
+            description: File name of the saved image tarball.
+          image:
+            type: str
+            required: true
+            description:
+              - Fully qualified reference of the image inside the tarball.
+          artifact_dir:
+            type: str
+            required: false
+            description:
+              - Directory holding this entry's tarball. Defaults to
+                rke2_publish_artifact_dir. Set when an entry is staged
+                somewhere other than the RKE2 artifact directory, which is
+                how the Flux images are read from artifacts/flux.
+      rke2_publish_chart_sets:
+        type: list
+        elements: dict
+        required: false
+        description:
+          - Helm charts to publish into the registry as OCI artifacts.
+        options:
+          name:
+            type: str
+            required: true
+            description:
+              - Chart name. Becomes the OCI repository, and must equal the
+                name in the chart's own Chart.yaml, because helm derives the
+                push target from the tarball rather than from this value.
+          version:
+            type: str
+            required: true
+            description: Chart version. Becomes the OCI tag.
+          dest:
+            type: str
+            required: true
+            description:
+              - Path of the staged chart tarball under the artifact root, as
+                the artifact manifest declares it.
+      rke2_publish_helm_binary:
+        type: str
+        default: /usr/local/bin/helm
+        description: Helm binary used to push charts, installed by helm_cli.
+      rke2_publish_package_name:
+        type: str
+        default: rke2
+        description: Generic package name.
+      rke2_publish_package_version:
+        type: str
+        default: 1.35.7+rke2r1
+        description:
+          - Generic package version. GitLab validates this as semver, so the
+            RKE2 tag's leading v is dropped and +rke2r1 is build metadata.
+      rke2_publish_package_files:
+        type: list
+        elements: str
+        description: File names under the artifact directory to upload.
+      rke2_publish_push_timeout:
+        type: int
+        default: 900
+        description: Bound on a single upload, in seconds.
+      rke2_publish_apply_retention:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Whether the local copy of a published transit artifact is removed
+          from the Apache document root once GitLab is confirmed to hold it.

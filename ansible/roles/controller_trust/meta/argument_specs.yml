@@ -1,0 +1,45 @@
+---
+argument_specs:
+  main:
+    short_description: Establish the controller's trust state
+    description:
+      - Installs the domain CA into the system trust store and proves a
+        certificate it signed now verifies.
+      - Records the SSH host key of every managed host, so a human running
+        plain ssh is not stopped by a key nothing ever accepted.
+    options:
+      controller_trust_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      controller_trust_ca_url:
+        type: str
+        description:
+          - Where the CA is fetched from. Plain HTTP deliberately, since it is
+            the trust being delivered.
+      controller_trust_ca_path:
+        type: str
+        description: Where the CA is installed for the system trust store.
+      controller_trust_update_command:
+        type: str
+        default: update-ca-certificates
+        description: Command that rebuilds the trust bundle.
+      controller_trust_verify_url:
+        type: str
+        description: A URL signed by the CA, used to prove the install worked.
+      controller_trust_system_bundle:
+        type: str
+        default: /etc/ssl/certs/ca-certificates.crt
+        description:
+          - The system CA bundle, passed explicitly to verification because
+            Homebrew's Python does not read it by default.
+      controller_trust_hosts:
+        type: list
+        elements: str
+        description: Hosts whose SSH keys are recorded.
+      controller_trust_known_hosts:
+        type: str
+        description: known_hosts file the keys are recorded in.
+      controller_trust_keyscan:
+        type: str
+        description: ssh-keyscan invocation used to read each host's key.

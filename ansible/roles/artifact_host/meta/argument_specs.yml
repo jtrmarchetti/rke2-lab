@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: Artifact host role inputs.
+    description: >-
+      Installs Apache and serves the staged artifact tree read-only to the
+      internal network and the controller tunnel.
+    options:
+      artifact_host_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether the artifact host is managed on this host.
+      artifact_host_document_root:
+        type: str
+        required: false
+        default: /data1/artifacts
+        description: Absolute path served as the document root.
+      artifact_host_directories:
+        type: list
+        elements: str
+        required: false
+        description: Subdirectories created under the document root.
+      artifact_host_listen_port:
+        type: int
+        required: false
+        default: 80
+        description: TCP port the artifact vhost answers on.
+      artifact_host_server_name:
+        type: str
+        required: false
+        description: ServerName for the artifact vhost.
+      artifact_host_allowed_networks:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Client networks permitted to read artifacts. Any other source
+          address is refused.
+      artifact_host_directory_index_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether browsable directory listings are generated.
+      artifact_host_owner:
+        type: str
+        required: false
+        default: root
+        description: Owner of the artifact tree.
+      artifact_host_group:
+        type: str
+        required: false
+        default: root
+        description: Group of the artifact tree.
+      artifact_host_directory_mode:
+        type: str
+        required: false
+        default: "0755"
+        description: Permissions on artifact directories.
+      artifact_host_file_mode:
+        type: str
+        required: false
+        default: "0644"
+        description: Permissions on published artifact files.

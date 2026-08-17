@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+# Workloads. Depends on the whole infrastructure layer: an app that needs a
+# PVC or a certificate before the CSI driver and the issuer exist will fail in
+# a way that points at the app rather than at what is missing.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-configs
+  interval: 30m
+  retryInterval: 2m
+  timeout: 10m
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps

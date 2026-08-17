@@ -1,0 +1,56 @@
+---
+# kubeseal, the client half of Sealed Secrets, fetched from repo01's artifact
+# host rather than from upstream — for the same reason the Flux CLI is.
+#
+# It is the only way to produce a SealedSecret, and Phase 6b seals the OpenBao
+# unseal keys with it. A controller that cannot run kubeseal cannot put a new
+# secret into Git and cannot rebuild the vault's recovery path, so it belongs
+# in the rebuild path and not in a package manager somewhere.
+#
+# See plan/CONTROLLER.md.
+
+- name: kubeseal | Read the version already installed here
+  changed_when: false
+  failed_when: false
+  register: _reg_kube_cli_controller_kubeseal
+  ansible.builtin.command:
+    cmd: "{{ kube_cli_controller_bin_dir }}/kubeseal --version"
+
+- name: kubeseal | Download and unpack the release
+  when: >-
+    _reg_kube_cli_controller_kubeseal['rc'] != 0
+    or kube_cli_controller_kubeseal_version
+       not in _reg_kube_cli_controller_kubeseal['stdout']
+  block:
+    - name: kubeseal | Create a scratch directory for the download
+      register: _reg_kube_cli_controller_kubeseal_tmp
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: kubeseal
+
+    # The checksum is the vendor's own, recorded in the artifact manifest, so
+    # the integrity chain terminates in this repository rather than in whatever
+    # Apache happens to be serving.
+    - name: kubeseal | Download the release tarball from the artifact host
+      ansible.builtin.get_url:
+        url: "{{ kube_cli_controller_kubeseal_url | trim }}"
+        dest: >-
+          {{ _reg_kube_cli_controller_kubeseal_tmp['path'] }}/kubeseal.tar.gz
+        checksum: "sha256:{{ kube_cli_controller_kubeseal_sha256 | trim }}"
+        mode: "0644"
+
+    - name: kubeseal | Unpack just the binary
+      ansible.builtin.unarchive:
+        src: "{{ _reg_kube_cli_controller_kubeseal_tmp['path'] }}/kubeseal.tar.gz"
+        dest: "{{ kube_cli_controller_bin_dir }}"
+        remote_src: true
+        include:
+          - kubeseal
+        mode: "0755"
+  always:
+    - name: kubeseal | Remove the scratch directory
+      when: >-
+        (_reg_kube_cli_controller_kubeseal_tmp['path'] | default('') | length) > 0
+      ansible.builtin.file:
+        path: "{{ _reg_kube_cli_controller_kubeseal_tmp['path'] | default('') }}"
+        state: absent

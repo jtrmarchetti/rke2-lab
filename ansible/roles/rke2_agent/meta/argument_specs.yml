@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: Configure, start, and gate an RKE2 agent
+    description:
+      - Renders /etc/rancher/rke2/config.yaml for a worker joining an existing
+        cluster through the API virtual address.
+      - Starts rke2-agent and waits for the node to report Ready.
+      - Asks the readiness question from a control plane host, because an agent
+        has no kubeconfig of its own and cannot answer it locally.
+    options:
+      rke2_agent_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      rke2_agent_token:
+        type: str
+        required: true
+        description:
+          - The cluster join secret, shared with the servers. Sourced from
+            RKE2_TOKEN; see plan/SECRETS.md.
+      rke2_agent_node_ip:
+        type: str
+        required: true
+        description: This node's address on the internal network.
+      rke2_agent_server_address:
+        type: str
+        description:
+          - The address the agent registers against, held by kube-vip. Seeds
+            the client-side load balancer and is not depended on afterwards.
+      rke2_agent_supervisor_port:
+        type: int
+        default: 9345
+        description: Port new nodes register against.
+      rke2_agent_data_dir:
+        type: str
+        default: /data1/rancher/rke2
+        description:
+          - Where RKE2 keeps everything, containerd's image store included.
+            Must equal rke2_node_data_dir.
+      rke2_agent_control_host:
+        type: str
+        required: true
+        description:
+          - Inventory name of a control plane host the readiness check is
+            delegated to. Required because an agent has no kubectl.
+      rke2_agent_control_data_dir:
+        type: str
+        default: /data1/rancher/rke2
+        description: Data directory on the delegate, where its kubectl lives.
+      rke2_agent_control_kubeconfig:
+        type: str
+        default: /etc/rancher/rke2/rke2.yaml
+        description: Kubeconfig used on the delegate.
+      rke2_agent_ready_retries:
+        type: int
+        default: 90
+        description:
+          - Multiplied by the delay to form the readiness timeout. A worker
+            that cannot pull its CNI registers and then never becomes Ready.
+      rke2_agent_ready_delay:
+        type: int
+        default: 10
+        description: Seconds per readiness attempt.

@@ -1,0 +1,44 @@
+---
+# Copies one image from its upstream registry into the GitLab mirror.
+#
+# The source is addressed by digest and the destination by tag. That asymmetry
+# is deliberate: the digest is what the manifest pins and what skopeo verifies,
+# and the tag is what a node asks for after the containerd rewrite has turned
+# an upstream name into a mirror path. Copying digest-to-tag is what binds the
+# two together.
+
+# `--all --preserve-digests`, and both are load-bearing for the same reason.
+#
+# The digest this manifest pins is an image *index* — the multi-platform object
+# a tag points at. By default skopeo copies only the platform it is running on,
+# so the destination ends up holding a single-platform manifest whose digest is
+# necessarily different. `--preserve-digests` on its own does not fix that; it
+# only refuses conversions of what is being copied.
+#
+# That difference is invisible until something references the image by digest,
+# which charts increasingly do: the Alloy chart pins its config-reloader as
+# `tag@sha256:...`, and the node then asks the mirror for a digest the mirror
+# does not have — a 404 for an image sitting right there under the tag.
+#
+# The cost is real: an index carries every architecture, so mirroring one is
+# several times the bytes of the one this cluster runs. That is the right trade
+# for an air-gapped mirror, where an image that cannot be addressed the way its
+# chart addresses it is not mirrored at all.
+- name: mirror_copy | Copy the image into the GitLab registry
+  changed_when: _reg_rke2_publish_mirror_result['rc'] == 0
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_mirror_result
+  ansible.builtin.command:
+    cmd: >-
+      {{ rke2_publish_skopeo_binary }} copy --all --preserve-digests
+      --retry-times {{ rke2_publish_mirror_retries }}
+      --dest-creds root:{{ rke2_publish_root_password }}
+      docker://{{ _var_rke2_publish_mirror_source }}
+      docker://{{ _var_rke2_publish_mirror_target }}
+
+- name: mirror_copy | Report the copy
+  ansible.builtin.debug:
+    msg: >-
+      mirrored {{ _item_rke2_publish_mirror['image'] }}
+      to {{ _var_rke2_publish_mirror_target }}
+    verbosity: 0

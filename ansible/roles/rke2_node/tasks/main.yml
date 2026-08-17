@@ -1,0 +1,26 @@
+---
+- name: main | Assert the required inputs are present
+  when: (rke2_node_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - rke2_node_type in ['server', 'agent']
+      - (rke2_node_registry_username | default('') | length) > 0
+      - (rke2_node_registry_password | default('') | length) > 0
+      - (rke2_node_version | length) > 0
+    fail_msg: >-
+      rke2_node needs a node type of server or agent, a registry username and
+      password, and a version. The credential is the deploy token recorded by
+      the rke2_publish role on the repo host; the playbook reads it from there.
+    quiet: true
+
+- name: main | Trust the domain certificate authority
+  when: (rke2_node_enabled | bool)
+  ansible.builtin.include_tasks: trust.yml
+
+- name: main | Configure the container registry mirror
+  when: (rke2_node_enabled | bool)
+  ansible.builtin.include_tasks: registries.yml
+
+- name: main | Install RKE2 from the GitLab package registry
+  when: (rke2_node_enabled | bool)
+  ansible.builtin.include_tasks: install.yml

@@ -1,0 +1,40 @@
+---
+- name: main | Ensure WireGuard packages are installed
+  when: (wireguard_gateway_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ _var_wireguard_gateway_packages }}"
+    state: present
+
+- name: main | Ensure IPv4 forwarding sysctl is configured
+  when: (wireguard_gateway_enabled | bool)
+  notify:
+    - Apply WireGuard sysctl
+  ansible.builtin.copy:
+    dest: "{{ _var_wireguard_gateway_sysctl_file }}"
+    content: |
+      net.ipv4.ip_forward={{ _var_wireguard_gateway_forward_value }}
+    mode: "0644"
+
+- name: main | Ensure WireGuard interface config is rendered
+  when:
+    - (wireguard_gateway_enabled | bool)
+    - (wireguard_gateway_private_key | length > 0)
+    - (wireguard_gateway_peer_public_key | length > 0)
+  notify:
+    - Restart WireGuard interface
+  ansible.builtin.template:
+    src: "{{ _var_wireguard_gateway_files_dir }}/wg_interface.conf.j2"
+    dest: >-
+      {{ _var_wireguard_gateway_config_path }}/{{ wireguard_gateway_interface }}.conf
+    mode: "0600"
+
+- name: main | Ensure WireGuard interface service is enabled
+  when:
+    - (wireguard_gateway_enabled | bool)
+    - (wireguard_gateway_private_key | length > 0)
+    - (wireguard_gateway_peer_public_key | length > 0)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wireguard_gateway_interface }}"
+    enabled: true
+    state: started

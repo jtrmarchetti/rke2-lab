@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: keycloak_clients
+  author: rke2lab
+  description: >-
+    Creates one confidential OIDC client per federated application, with two
+    client roles, a mapper that writes those roles into the token, and grants
+    from the FreeIPA groups ipa_sso_groups created. Client secrets are authored
+    rather than generated, so no workload waits on Keycloak to exist.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - keycloak
+    - oidc
+    - sso
+
+dependencies: []

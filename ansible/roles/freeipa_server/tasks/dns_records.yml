@@ -1,0 +1,70 @@
+---
+# Service records published in the FreeIPA zone. The plan keeps this set minimal
+# and deterministic: only names another phase depends on, each with an explicit
+# value from inventory rather than anything derived at run time.
+#
+# These run against the IPA API over HTTPS, from core01 itself rather than from
+# the controller. The controller has no route to dev.lo names — it resolves
+# through the lab's own resolver and TARGETS.md gives it no dev.lo path — so an
+# API call delegated to localhost cannot resolve the server it is configuring.
+# Run on the host that is its own resolver and the question disappears.
+#
+# The API certificate is issued by the CA this role just created, which nothing
+# trusts yet, so certificate validation is off for this loopback-style call from
+# the server to itself.
+# Zones first: a record cannot be added to a zone that does not exist. The
+# installer creates the forward zone but not necessarily a reverse zone, and
+# reverse lookups for the internal subnet have no other authority to reach —
+# left uncreated, they leak upstream to a resolver that knows nothing about
+# 192.168.2.0/24.
+- name: dns_records | Ensure DNS zones exist
+  when:
+    - (freeipa_server_enabled | bool)
+    - (freeipa_server_dns_zones | length) > 0
+    - not ansible_check_mode
+  # The module issues a dnszone_mod for a zone that already exists, and IPA
+  # answers a no-op modification with an error rather than a success. That
+  # message means the zone is exactly as requested, so treating it as a failure
+  # would make every second run fail on a correct configuration.
+  failed_when:
+    - _reg_freeipa_server_zone_result is failed
+    - >-
+      'no modifications to be performed'
+      not in (_reg_freeipa_server_zone_result.msg | default(''))
+  no_log: "{{ freeipa_server_no_log | default(true) }}"
+  register: _reg_freeipa_server_zone_result
+  loop: "{{ freeipa_server_dns_zones }}"
+  loop_control:
+    loop_var: _item_freeipa_server_dns_zone
+    label: "{{ _item_freeipa_server_dns_zone['name'] }}"
+  community.general.ipa_dnszone:
+    ipa_host: "{{ freeipa_server_hostname }}"
+    ipa_user: admin
+    ipa_pass: "{{ freeipa_server_admin_password }}"
+    validate_certs: false
+    zone_name: "{{ _item_freeipa_server_dns_zone['name'] }}"
+    dynamicupdate: >-
+      {{ _item_freeipa_server_dns_zone['dynamic_update'] | default(false) }}
+    state: present
+
+- name: dns_records | Ensure service DNS records are published
+  when:
+    - (freeipa_server_enabled | bool)
+    - (freeipa_server_dns_records | length) > 0
+    - not ansible_check_mode
+  no_log: "{{ freeipa_server_no_log | default(true) }}"
+  loop: "{{ freeipa_server_dns_records }}"
+  loop_control:
+    loop_var: _item_freeipa_server_dns_record
+    label: >-
+      {{ _item_freeipa_server_dns_record['name'] }}.{{ _item_freeipa_server_dns_record['zone'] | default(freeipa_server_domain) }}
+  community.general.ipa_dnsrecord:
+    ipa_host: "{{ freeipa_server_hostname }}"
+    ipa_user: admin
+    ipa_pass: "{{ freeipa_server_admin_password }}"
+    validate_certs: false
+    zone_name: "{{ _item_freeipa_server_dns_record['zone'] | default(freeipa_server_domain) }}"
+    record_name: "{{ _item_freeipa_server_dns_record['name'] }}"
+    record_type: "{{ _item_freeipa_server_dns_record['type'] | default('A') }}"
+    record_value: "{{ _item_freeipa_server_dns_record['value'] }}"
+    state: present

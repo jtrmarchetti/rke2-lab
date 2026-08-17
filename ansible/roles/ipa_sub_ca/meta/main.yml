@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: ipa_sub_ca
+  author: rke2lab
+  description: >-
+    Obtains an intermediate CA certificate for the cluster from FreeIPA. It
+    imports a subordinate-CA certificate profile (FreeIPA ships none), creates
+    the subject principal and the access rule that permits it, generates the
+    intermediate's key on the controller, and has the domain CA sign it. The
+    private key never leaves the controller in plaintext.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - freeipa
+    - pki
+    - certificates
+
+dependencies: []

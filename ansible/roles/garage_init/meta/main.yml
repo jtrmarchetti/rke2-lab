@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: garage_init
+  author: rke2lab
+  description: >-
+    Brings a fresh Garage from running to usable: assigns and applies the
+    storage layout without which the node accepts no objects, creates the
+    buckets, and captures the access key Garage prints exactly once.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - garage
+    - s3
+
+dependencies: []

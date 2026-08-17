@@ -1,0 +1,22 @@
+---
+- name: main | Assert the required inputs are present
+  when: (rke2_agent_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (rke2_agent_token | default('') | length) > 0
+      - (rke2_agent_node_ip | default('') | length) > 0
+      - (rke2_agent_control_host | default('') | length) > 0
+    fail_msg: >-
+      rke2_agent needs the cluster token, this node's address, and the name of a
+      control plane host to ask about readiness. The token comes from RKE2_TOKEN
+      in ~/.config/rke2lab/env.sh; see plan/SECRETS.md. The control host is
+      needed because an agent has no kubeconfig of its own.
+    quiet: true
+
+- name: main | Configure the RKE2 agent
+  when: (rke2_agent_enabled | bool)
+  ansible.builtin.include_tasks: config.yml
+
+- name: main | Start the RKE2 agent and wait for the node to be usable
+  when: (rke2_agent_enabled | bool)
+  ansible.builtin.include_tasks: service.yml

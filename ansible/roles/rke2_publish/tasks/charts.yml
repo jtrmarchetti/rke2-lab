@@ -1,0 +1,81 @@
+---
+# Helm charts, pushed into the GitLab container registry as OCI artifacts.
+#
+# Why the container registry and not the package registry: GitLab has a Helm
+# package registry, but Flux's source-controller speaks either a classic HTTP
+# repository index or OCI, and OCI is the one that reuses what already works
+# here — the same host, the same certificate, and the same read-only deploy
+# token the nodes already pull images with. A classic index would have to be
+# generated and served by Apache, which would put chart delivery on a different
+# path from image delivery for no gain.
+#
+# Charts are staged as ordinary `type: file` artifacts: a chart is a tarball at
+# a URL with a published checksum, so it needs no new staging machinery. This
+# file is only the publishing half.
+
+- name: charts | Read what the chart registry already holds
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_charts_existing
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: >-
+      {{ _var_rke2_publish_api }}/projects/{{ _var_rke2_publish_charts_path
+      }}/registry/repositories?tags=true&per_page={{
+      _var_rke2_publish_page_size }}
+    headers: "{{ _var_rke2_publish_headers }}"
+
+- name: charts | Report what the chart registry holds
+  ansible.builtin.debug:
+    msg: >-
+      chart registry holds {{ _var_rke2_publish_chart_refs | length }} tags
+      across {{ _reg_rke2_publish_charts_existing['json'] | length }}
+      repositories
+    verbosity: 0
+
+# Same zip-and-reject shape images.yml uses, and for the same reason: the
+# comparison is against the reference a push would produce, assembled here,
+# rather than against a name the registry happens to report.
+- name: charts | Determine which charts are missing
+  ansible.builtin.set_fact:
+    _rke2_publish_charts_missing: >-
+      {{ rke2_publish_chart_sets
+         | zip(rke2_publish_chart_sets | map(attribute='name')
+               | zip(rke2_publish_chart_sets | map(attribute='version'))
+               | map('join', ':')
+               | map('regex_replace', '^',
+                     _var_rke2_publish_charts_prefix ~ '/')
+               | list)
+         | rejectattr(1, 'in', _var_rke2_publish_chart_refs)
+         | map(attribute=0) | list }}
+
+- name: charts | Push the missing charts
+  when: (_rke2_publish_charts_missing | length) > 0
+  block:
+    # helm keeps its own registry credentials, separate from Docker's, so a
+    # docker_login earlier in this role does not cover a helm push.
+    - name: charts | Log in to the registry with push rights
+      changed_when: false
+      no_log: "{{ rke2_publish_no_log | bool }}"
+      ansible.builtin.command:
+        cmd: >-
+          {{ rke2_publish_helm_binary }} registry login
+          {{ rke2_publish_registry_host }}
+          --username root --password-stdin
+        stdin: "{{ rke2_publish_root_password }}"
+
+    - name: charts | Push each missing chart
+      loop: "{{ _rke2_publish_charts_missing }}"
+      loop_control:
+        loop_var: _item_rke2_publish_chart
+        label: >-
+          {{ _item_rke2_publish_chart['name'] }}
+          {{ _item_rke2_publish_chart['version'] }}
+      ansible.builtin.include_tasks: chart_push.yml
+  always:
+    - name: charts | Log out of the registry
+      changed_when: false
+      failed_when: false
+      ansible.builtin.command:
+        cmd: >-
+          {{ rke2_publish_helm_binary }} registry logout
+          {{ rke2_publish_registry_host }}

@@ -1,0 +1,99 @@
+---
+gitops_bootstrap_enabled: true
+
+# --- The repository being attached to -------------------------------------
+
+gitops_bootstrap_gitlab_url: null
+# No default: the admin token is minted with gitlab-rails inside that host's
+# container, and minting it on the wrong host fails or mints for the wrong
+# GitLab.
+# gitops_bootstrap_gitlab_host:
+gitops_bootstrap_group: platform
+gitops_bootstrap_project: cluster-state
+gitops_bootstrap_branch: main
+
+# The rendered tree gitops_source left behind. This role applies two files out
+# of it rather than carrying its own copies, so what is bootstrapped is exactly
+# what was pushed.
+gitops_bootstrap_work_dir: >-
+  {{ ansible_facts['env']['HOME'] }}/.cache/rke2lab/cluster-state
+gitops_bootstrap_cluster_dir: clusters/dev-lo
+
+# --- The credential Flux reads the repository with ------------------------
+
+# A project deploy token rather than a personal access token. It is scoped to
+# one project and to reading, it belongs to no user, and it is created here
+# instead of by hand — which is the whole point: a token that exists only
+# because someone once clicked it into being is a rebuild that stops.
+gitops_bootstrap_deploy_token_name: flux-cluster-state
+gitops_bootstrap_deploy_token_scopes:
+  - read_repository
+
+# GitLab returns a deploy token's value exactly once, so it is recorded here
+# for later runs. On the controller, beside the other secrets, mode 0600.
+gitops_bootstrap_deploy_token_file: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/flux-deploy-token.yml
+
+# The domain CA, which Flux needs in the Secret because the GitRepository is
+# HTTPS against an internally signed certificate. Read from this host's trust
+# store, where controller_trust put it.
+gitops_bootstrap_domain_ca_file: null
+
+# The trust store Ansible's own Python verifies against, which is not the one
+# `update-ca-certificates` writes for curl and git.
+#
+# Ansible runs on Homebrew's Python here, and that build reads its CA bundle
+# from `$(brew --prefix)/etc/openssl@3/cert.pem` rather than from the system
+# store — so every `uri` task against an internal HTTPS endpoint fails
+# verification even though the domain CA is installed and `git` is perfectly
+# happy with it. Naming the system bundle explicitly is the fix, and it is the
+# same one controller_trust and openbao_config already carry. See
+# plan/CONTROLLER.md.
+gitops_bootstrap_ca_file: /etc/ssl/certs/ca-certificates.crt
+
+# --- The cluster ----------------------------------------------------------
+
+gitops_bootstrap_namespace: flux-system
+
+# The Sealed Secrets key pair, backed up out of the cluster. Restored before
+# Flux installs the controller, because a controller that starts without a key
+# makes one — and everything gitops_source sealed was sealed against this one.
+gitops_bootstrap_sealing_key_file: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/sealed-secrets-key.yaml
+
+# How the controller finds its keys, and therefore how this role decides
+# whether the cluster already has one.
+gitops_bootstrap_sealing_key_label: >-
+  sealedsecrets.bitnami.com/sealed-secrets-key=active
+
+gitops_bootstrap_kubectl: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+# Flux's four controllers, as the vendored component set installs them. Named
+# rather than discovered, because "wait for whatever happens to be there" is
+# satisfied by an empty namespace.
+# The escape hatch for a Flux that is installed but wedged. Normally false:
+# Flux reconciles its own components from the repository, so re-applying them
+# on every run would put a second manager on every object it owns.
+#
+#   ansible-playbook playbooks/gitops.yml -e gitops_bootstrap_force_install=true
+#
+# ANSIBLE_STANDARDS.md permits extra vars for troubleshooting, which is exactly
+# and only what this is for.
+gitops_bootstrap_force_install: false
+
+gitops_bootstrap_controllers:
+  - source-controller
+  - kustomize-controller
+  - helm-controller
+  - notification-controller
+
+# Generous, because this is the first pull of four images through a mirror onto
+# storage at etcd's fsync floor, and because the failure it guards against —
+# giving up while an image is still being pulled — looks exactly like a broken
+# bootstrap.
+gitops_bootstrap_ready_timeout: 600
+
+# Set false only when debugging; it exposes the repository credential.
+gitops_bootstrap_no_log: true

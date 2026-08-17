@@ -1,0 +1,370 @@
+---
+# Phase 5 — the RKE2 workers.
+#
+# Three plays, and the order between them is the point.
+#
+# Nothing on a worker can be installed until GitLab holds the artifact set,
+# because a worker has no other source: no internet route and no image tarball
+# on local disk. Publishing runs first. It is a no-op for the core and cilium
+# sets the control plane already uses, and it is where the Traefik set added in
+# Phase 5 arrives.
+#
+# The third play changes the cluster rather than a host, and it runs only after
+# every worker is Ready. Its taint is NoExecute: applied while a worker is still
+# joining it would evict CoreDNS with nowhere to schedule, and cluster DNS would
+# stop. That is Risk Gate 4.
+#
+# Enabling Traefik is deliberately NOT here. It is a control plane
+# configuration change, so it belongs to playbooks/kubecp.yml, and it is run
+# after this playbook so the chart deploys onto workers that already exist and
+# a control plane that is already tainted. See plan/PHASE5_IMPLEMENTATION.md.
+
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env:
+      - GITLAB_ROOT_PASSWORD
+      - RKE2_TOKEN
+
+- name: Publish the RKE2 artifact set from the repo host into GitLab
+  hosts: repo
+  gather_facts: true
+  become: true
+  force_handlers: true
+  tasks:
+    # Re-runs the manifest so the Phase 5 entries are staged before anything
+    # tries to publish them. A run where the artifacts are already present is a
+    # no-op; a run on a rebuilt repo01 downloads them first.
+    - name: kubewk | Include artifact staging role
+      tags:
+        - artifact_stage
+      vars:
+        artifact_stage_enabled: "{{ inventory_artifact_stage_enabled }}"
+        artifact_stage_manifest: "{{ inventory_artifact_stage_manifest }}"
+        artifact_stage_root: "{{ inventory_artifact_stage_root }}"
+      ansible.builtin.include_role:
+        name: artifact_stage
+        apply:
+          tags:
+            - artifact_stage
+
+    - name: kubewk | Include RKE2 publishing role
+      tags:
+        - rke2_publish
+      vars:
+        rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
+        rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
+        rke2_publish_chart_sets: "{{ inventory_rke2_publish_chart_sets }}"
+        rke2_publish_deploy_token_username: >-
+          {{ inventory_rke2_publish_deploy_token_username }}
+        rke2_publish_deploy_token_value: >-
+          {{ inventory_rke2_publish_deploy_token_value }}
+        rke2_publish_enabled: "{{ inventory_rke2_publish_enabled }}"
+        rke2_publish_extra_images: "{{ inventory_rke2_publish_extra_images }}"
+        rke2_publish_gitlab_url: "{{ inventory_rke2_publish_gitlab_url }}"
+        rke2_publish_group: "{{ inventory_rke2_publish_group }}"
+        rke2_publish_images_project: "{{ inventory_rke2_publish_images_project }}"
+        rke2_publish_manifest: "{{ inventory_artifact_stage_manifest }}"
+        rke2_publish_package_version: >-
+          {{ inventory_rke2_publish_package_version }}
+        rke2_publish_packages_project: >-
+          {{ inventory_rke2_publish_packages_project }}
+        rke2_publish_registry_host: "{{ inventory_rke2_publish_registry_host }}"
+        rke2_publish_root_password: "{{ inventory_rke2_publish_root_password }}"
+      ansible.builtin.include_role:
+        name: rke2_publish
+        apply:
+          tags:
+            - rke2_publish
+
+- name: Join the RKE2 workers to the cluster
+  hosts: kubewk
+  gather_facts: true
+  become: true
+  # One at a time. Agents joining have none of etcd's quorum problem, so this is
+  # not strictly required the way it is for the servers. It is kept because
+  # three nodes pulling the full image set through one GitLab simultaneously is
+  # the other reliable way to make this lab's storage unhappy, and because a
+  # failed join is much easier to read when only one node was moving.
+  serial: "{{ kubewk_serial | default(1) }}"
+  force_handlers: true
+  tasks:
+    - name: kubewk | Include base host role
+      tags:
+        - base_host
+      vars:
+        base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
+        base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
+        base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
+        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
+        base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
+      ansible.builtin.include_role:
+        name: base_host
+        apply:
+          tags:
+            - base_host
+
+    # Before rke2_node, always. RKE2's data directory is on this volume, and a
+    # role that runs before the mount exists writes to the mount point on the
+    # OS disk instead — silently, and only visibly once the disk fills.
+    - name: kubewk | Include data volume role for the RKE2 data directory
+      tags:
+        - data_volume
+      vars:
+        data_volume_device: "{{ inventory_data_volume_device }}"
+        data_volume_enabled: "{{ inventory_data_volume_enabled }}"
+        data_volume_filesystem: "{{ inventory_data_volume_filesystem }}"
+        data_volume_label: "{{ inventory_data_volume_label }}"
+        data_volume_mount_path: "{{ inventory_data_volume_mount_path }}"
+      ansible.builtin.include_role:
+        name: data_volume
+        apply:
+          tags:
+            - data_volume
+
+    # The same role a second time, for the third disk. A worker has two data
+    # volumes and they are prepared identically; the only thing that differs is
+    # which device, which filesystem label, and where it lands. Passing those
+    # explicitly here rather than adding list handling to the role keeps the
+    # role's contract as "one disk, prepared safely" and keeps the second disk
+    # visible in the playbook rather than buried in a loop.
+    #
+    # Longhorn's default data path. Prepared in Phase 5 so that Phase 6 declares
+    # a Helm release instead of doing host-level disk work from a GitOps phase.
+    - name: kubewk | Include data volume role for the CSI disk
+      tags:
+        - data_volume
+        - csi_volume
+      vars:
+        data_volume_device: "{{ inventory_data_volume_device }}"
+        data_volume_enabled: "{{ inventory_data_volume_enabled }}"
+        data_volume_filesystem: "{{ inventory_data_volume_filesystem }}"
+        data_volume_label: "{{ inventory_data_volume_label }}"
+        data_volume_mount_path: "{{ inventory_data_volume_mount_path }}"
+        inventory_data_volume_device: "{{ inventory_kubewk_csi_volume_device }}"
+        inventory_data_volume_filesystem: >-
+          {{ inventory_kubewk_csi_volume_filesystem }}
+        inventory_data_volume_label: "{{ inventory_kubewk_csi_volume_label }}"
+        inventory_data_volume_mount_path: >-
+          {{ inventory_kubewk_csi_volume_mount_path }}
+      ansible.builtin.include_role:
+        name: data_volume
+        apply:
+          tags:
+            - data_volume
+            - csi_volume
+
+    - name: kubewk | Include time synchronization role
+      tags:
+        - time_sync
+      vars:
+        time_sync_enabled: "{{ inventory_time_sync_enabled }}"
+        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
+        time_sync_sources: "{{ inventory_time_sync_sources }}"
+      ansible.builtin.include_role:
+        name: time_sync
+        apply:
+          tags:
+            - time_sync
+
+    # The same deploy token the servers use, read from the one place it exists:
+    # the file rke2_publish wrote on the repo host. Keeping it there means it is
+    # out of inventory, out of this repository, and rotating it is one file on
+    # one host.
+    - name: kubewk | Read the registry deploy token from the repository host
+      delegate_to: "{{ groups['repo'] | first }}"
+      no_log: true
+      register: _reg_kubewk_deploy_token
+      tags:
+        - always
+      ansible.builtin.slurp:
+        src: /data1/gitlab/rke2-deploy-token.yml
+
+    - name: kubewk | Include RKE2 node preparation role
+      tags:
+        - rke2_node
+      vars:
+        rke2_node_ca_rke2_path: "{{ inventory_rke2_node_ca_rke2_path }}"
+        rke2_node_ca_system_path: "{{ inventory_rke2_node_ca_system_path }}"
+        rke2_node_ca_url: "{{ inventory_rke2_node_ca_url }}"
+        rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
+        rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
+        rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
+        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
+        rke2_node_registry_username: >-
+          {{ (_reg_kubewk_deploy_token['content'] | b64decode
+              | from_yaml)['username'] }}
+        rke2_node_type: "{{ inventory_rke2_node_type }}"
+        rke2_node_version: "{{ inventory_rke2_node_version }}"
+        rke2_node_registry_password: >-
+          {{ (_reg_kubewk_deploy_token['content'] | b64decode
+              | from_yaml)['token'] }}
+      ansible.builtin.include_role:
+        name: rke2_node
+        apply:
+          tags:
+            - rke2_node
+
+    - name: kubewk | Include RKE2 agent role
+      tags:
+        - rke2_agent
+      vars:
+        rke2_agent_control_host: "{{ inventory_kubewk_control_host }}"
+        rke2_agent_data_dir: "{{ inventory_rke2_agent_data_dir }}"
+        rke2_agent_enabled: "{{ inventory_rke2_agent_enabled }}"
+        rke2_agent_node_ip: "{{ inventory_rke2_agent_node_ip }}"
+        rke2_agent_server_address: "{{ inventory_rke2_agent_server_address }}"
+        rke2_agent_supervisor_port: "{{ inventory_rke2_agent_supervisor_port }}"
+        rke2_agent_token: "{{ inventory_rke2_agent_token }}"
+      ansible.builtin.include_role:
+        name: rke2_agent
+        apply:
+          tags:
+            - rke2_agent
+
+    # crictl only. An agent has no kubeconfig, so kubectl here would have
+    # nothing to point at — but crictl is exactly the tool the runbook sends
+    # people to a worker for, and it should not need a socket path every time.
+    - name: kubewk | Include the node CLI role
+      tags:
+        - kube_cli
+      vars:
+        kube_cli_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
+        kube_cli_node_kubeconfig: ""
+      ansible.builtin.include_role:
+        name: kube_cli_node
+        apply:
+          tags:
+            - kube_cli
+
+# Cluster-level, not host-level, which is why it is its own play against a
+# single control plane host rather than more tasks on the workers. Both actions
+# here are things a kubelet is not permitted to do to itself.
+- name: Label the workers and taint the control plane
+  hosts: kubecp
+  gather_facts: false
+  become: true
+  vars:
+    # Must stay equal to inventory_rke2_server_data_dir. kubectl ships inside the RKE2
+    # data directory, so it moves when that moves.
+    _kubewk_kubectl: >-
+      /data1/rancher/rke2/bin/kubectl
+      --kubeconfig /etc/rancher/rke2/rke2.yaml
+    _kubewk_worker_label: node-role.kubernetes.io/worker=true
+    _kubewk_control_plane_taint: CriticalAddonsOnly=true:NoExecute
+  tasks:
+    - name: kubewk | Apply the cluster-level changes from one server
+      # run_once rather than a templated host pattern. Any server can answer
+      # these — they are kubectl calls, not a property of a particular node —
+      # and a pattern like {{ some_var }} cannot be used here at all, because
+      # Ansible resolves a play's host pattern before any group's variables
+      # are in scope.
+      run_once: true
+      block:
+        # The obvious mechanism — node-label in the agent's config.yaml — does not
+        # work. The NodeRestriction admission plugin forbids a kubelet from
+        # setting
+        # any label under node-role.kubernetes.io/, so the kubelet is refused and
+        # the node registers without it. It has to come from a client with more
+        # rights over the node than the node has over itself.
+        - name: kubewk | Label each worker with its node role
+          changed_when: "'not labeled' not in _reg_kubewk_label['stdout']"
+          register: _reg_kubewk_label
+          loop: "{{ groups['kubewk'] }}"
+          loop_control:
+            loop_var: _item_kubewk_worker
+          tags:
+            - node_labels
+          ansible.builtin.command:
+            cmd: >-
+              {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.dev.lo
+              {{ _kubewk_worker_label }} --overwrite
+
+        # Read before writing, so this play refuses to proceed rather than taking
+        # cluster DNS down. Risk Gate 4: the taint below is NoExecute, and
+        # applying
+        # it while a worker is still joining evicts CoreDNS with nowhere to go.
+        # Every symptom after that points somewhere other than here.
+        #
+        # Two checks, because either alone passes in a state that is not safe. The
+        # count catches a worker that never registered — `wait` on a label
+        # selector
+        # matching two nodes succeeds perfectly well when there should be three.
+        # The wait catches one that registered and stayed NotReady.
+        #
+        # Neither uses -o jsonpath. The obvious expression for a node's Ready
+        # condition carries inner double quotes, and the command module's
+        # shell-like quoting eats them, so kubectl receives a malformed filter and
+        # fails every time regardless of the cluster's actual state. Phase 4 lost
+        # a
+        # retry budget to exactly that.
+        - name: kubewk | Count the workers that have registered
+          changed_when: false
+          register: _reg_kubewk_registered
+          tags:
+            - control_plane_taint
+          ansible.builtin.command:
+            cmd: >-
+              {{ _kubewk_kubectl }} get nodes
+              -l {{ _kubewk_worker_label }} --no-headers
+
+        - name: kubewk | Wait for every registered worker to report Ready
+          changed_when: false
+          failed_when: false
+          register: _reg_kubewk_ready
+          tags:
+            - control_plane_taint
+          ansible.builtin.command:
+            cmd: >-
+              {{ _kubewk_kubectl }} wait --for=condition=Ready
+              node -l {{ _kubewk_worker_label }} --timeout=300s
+
+        - name: kubewk | Assert every worker is Ready before tainting anything
+          tags:
+            - control_plane_taint
+          ansible.builtin.assert:
+            that:
+              - _reg_kubewk_registered['stdout_lines'] | length
+                == groups['kubewk'] | length
+              - _reg_kubewk_ready['rc'] == 0
+            fail_msg: >-
+              Not every worker is Ready, so the control plane must not be tainted.
+              CriticalAddonsOnly is NoExecute: applying it now would evict CoreDNS
+              and metrics-server with nowhere to reschedule, and cluster DNS would
+              stop. Fix the workers first — see the runbook in
+              plan/PHASE5_IMPLEMENTATION.md.
+            quiet: true
+
+        # Phase 4 left the servers untainted because tainting them would have left
+        # nothing schedulable. Workers now exist, so that reason has expired.
+        #
+        # Applied here with kubectl as well as declared in the servers'
+        # config.yaml,
+        # and that is not redundancy: node-taint reaches the kubelet as
+        # --register-with-taints, which applies only at first registration and
+        # does
+        # nothing to nodes that registered hours ago. The config entry is for a
+        # rebuilt node; this is for the ones already running.
+        #
+        # Run without --overwrite so that an already-tainted node is reported by
+        # kubectl rather than silently reapplied, which is what makes the second
+        # run
+        # of this playbook honest about having changed nothing.
+        - name: kubewk | Taint the control plane CriticalAddonsOnly
+          changed_when: _reg_kubewk_taint['rc'] == 0
+          failed_when:
+            - _reg_kubewk_taint['rc'] != 0
+            - "'already has' not in _reg_kubewk_taint['stderr']"
+          register: _reg_kubewk_taint
+          loop: "{{ groups['kubecp'] }}"
+          loop_control:
+            loop_var: _item_kubewk_server
+          tags:
+            - control_plane_taint
+          ansible.builtin.command:
+            cmd: >-
+              {{ _kubewk_kubectl }} taint node {{ _item_kubewk_server }}.dev.lo
+              {{ _kubewk_control_plane_taint }}

@@ -1,0 +1,208 @@
+---
+# Phase 4 — the RKE2 control plane. See plan/PHASE4_IMPLEMENTATION.md.
+ansible_user: "{{ lookup('env', 'VM_USERNAME') | default('root', true) }}"
+ansible_password: "{{ lookup('env', 'VM_USER_PASSWORD') }}"
+ansible_ssh_common_args: >-
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+
+inventory_base_host_manage_hostname: true
+inventory_base_host_target_hostname: "{{ inventory_hostname }}.dev.lo"
+
+# No internet route. Packages come from the repo01 proxy; every other artifact
+# comes from GitLab.
+inventory_base_host_apt_proxy_enabled: true
+inventory_base_host_apt_proxy_url: http://192.168.2.99:3142
+
+# No split DNS. These hosts resolve through core01, which is authoritative for
+# dev.lo and forwards nothing, and they have nothing else to ask.
+inventory_base_host_split_dns_enabled: false
+
+# Time chain: repo01 syncs upstream, core01 takes time from repo01, and the
+# cluster takes time from core01. Kubernetes tolerates a shared clock that
+# drifts; it does not tolerate nodes drifting apart, and etcd least of all.
+inventory_time_sync_enabled: true
+inventory_time_sync_source_directive: server
+inventory_time_sync_sources:
+  - 192.168.2.4 iburst
+
+# The 100 GB second disk. RKE2's data directory lives here, because the
+# containerd image store grows with every image the cluster pulls and would
+# otherwise fill the 32 GB OS disk. Applied before rke2_node, or the installer
+# writes to the mount point instead of to the volume.
+inventory_data_volume_enabled: true
+inventory_data_volume_device: /dev/sdb
+inventory_data_volume_filesystem: ext4
+inventory_data_volume_label: data1
+inventory_data_volume_mount_path: /data1
+
+# --- rke2_node: everything true before RKE2 starts ------------------------
+inventory_rke2_node_enabled: true
+inventory_rke2_node_type: server
+inventory_rke2_node_version: 1.35.7+rke2r1
+inventory_rke2_node_data_dir: /data1/rancher/rke2
+inventory_rke2_node_ca_url: http://192.168.2.99/gitlab/dev.lo-ca.crt
+inventory_rke2_node_gitlab_url: https://gitlab.dev.lo
+inventory_rke2_node_registry_host: registry.gitlab.dev.lo
+inventory_rke2_node_package_project: rke2/packages
+
+# Where rke2_publish pushed the image set. The replacement paths must stay equal
+# to inventory_rke2_publish_group and inventory_rke2_publish_images_project on the repo host, or a
+# node asks the registry for a path nothing pushed.
+inventory_rke2_node_registry_mirrors:
+  - upstream: docker.io
+    pattern: "^rancher/(.*)"
+    replacement: rke2/images/rancher/$1
+  - upstream: ghcr.io
+    pattern: "^kube-vip/(.*)"
+    replacement: rke2/images/kube-vip/$1
+  # Phase 6a. Flux's controllers keep their upstream ghcr.io/fluxcd names in the
+  # manifests Flux applies, so the rewrite is what makes an air-gapped install
+  # work without passing --registry to `flux bootstrap` and rewriting every
+  # image reference in Git.
+  - upstream: ghcr.io
+    pattern: "^fluxcd/(.*)"
+    replacement: rke2/images/fluxcd/$1
+  # Phase 6a. Sealed Secrets. A second docker.io rule rather than a second
+  # ghcr.io one, because the controller image is docker.io/bitnami/*, and the
+  # existing docker.io rule matches ^rancher/ only. This is the case the
+  # template bug of 6a was about: two rules under one upstream key, which the
+  # grouped template now emits as one mirror block with two rewrites.
+  - upstream: docker.io
+    pattern: "^bitnami/(.*)"
+    replacement: rke2/images/bitnami/$1
+  # Phase 6b. One rule per upstream namespace the cluster services are pulled
+  # from. Added in a single pass, deliberately: RKE2 regenerates containerd's
+  # hosts.toml from registries.yaml at service start, so every change here
+  # costs a rolling restart of all six nodes however correct the file on disk
+  # already is. Batching the whole 6b set is one restart instead of six.
+  - upstream: quay.io
+    pattern: "^jetstack/(.*)"
+    replacement: rke2/images/jetstack/$1
+  - upstream: quay.io
+    pattern: "^openbao/(.*)"
+    replacement: rke2/images/openbao/$1
+  - upstream: quay.io
+    pattern: "^keycloak/(.*)"
+    replacement: rke2/images/keycloak/$1
+  - upstream: docker.io
+    pattern: "^longhornio/(.*)"
+    replacement: rke2/images/longhornio/$1
+  - upstream: docker.io
+    pattern: "^dxflrs/(.*)"
+    replacement: rke2/images/dxflrs/$1
+  # Docker Hub official images: a bare `postgres:18` is docker.io/library/*
+  # by the time containerd resolves it, so the namespace has to be named.
+  - upstream: docker.io
+    pattern: "^library/(.*)"
+    replacement: rke2/images/library/$1
+  - upstream: ghcr.io
+    pattern: "^external-secrets/(.*)"
+    replacement: rke2/images/external-secrets/$1
+  # Phase 6c. The observability set. registry.k8s.io is a new upstream host,
+  # not just a new namespace under one already configured, which is why 6c
+  # costs its own rolling restart even though 6b already batched its rules.
+  - upstream: quay.io
+    pattern: "^prometheus/(.*)"
+    replacement: rke2/images/prometheus/$1
+  - upstream: quay.io
+    pattern: "^prometheus-operator/(.*)"
+    replacement: rke2/images/prometheus-operator/$1
+  - upstream: quay.io
+    pattern: "^kiwigrid/(.*)"
+    replacement: rke2/images/kiwigrid/$1
+  - upstream: docker.io
+    pattern: "^grafana/(.*)"
+    replacement: rke2/images/grafana/$1
+  - upstream: registry.k8s.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Single sign-on. The oauth2-proxy that fronts the Longhorn UI is the only
+  # image the SSO work adds — every other service federates by configuration
+  # rather than by gaining a component. It is one more quay.io namespace, so
+  # it costs the same rolling restart of all six nodes that any registries.yaml
+  # change does.
+  - upstream: quay.io
+    pattern: "^oauth2-proxy/(.*)"
+    replacement: rke2/images/oauth2-proxy/$1
+
+# The pull credential is not in inventory. It is a deploy token GitLab issues
+# once, recorded on repo01 by the rke2_publish role, and the playbook reads it
+# from there — so there is exactly one copy and no secret in this file.
+
+# --- rke2_server: the cluster itself --------------------------------------
+#
+# The server that starts the cluster. Named here rather than derived from the
+# first host in the play: those are the same thing only when the play runs
+# against the whole group, and under `--limit kubecp02:kubecp03` the derived
+# answer is kubecp02 — which would be given no server address and would start a
+# second cluster instead of joining this one.
+#
+# Changing this after the cluster exists does not move anything. The initial
+# etcd member is whichever host actually bootstrapped; this value only decides
+# who is told to join whom.
+inventory_kubecp_bootstrap_host: kubecp01
+
+inventory_rke2_server_enabled: true
+# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+inventory_rke2_server_token: "{{ lookup('env', 'RKE2_TOKEN') }}"
+inventory_rke2_server_node_ip: "{{ ansible_host }}"
+inventory_rke2_server_api_address: 192.168.2.20
+inventory_rke2_server_api_name: kube.dev.lo
+# Stated rather than left to the role defaults, because
+# playbooks/validate_phase4.yml checks these without including the role and
+# would otherwise have to guess at them.
+inventory_rke2_server_api_port: 6443
+inventory_rke2_server_supervisor_port: 9345
+inventory_rke2_server_data_dir: "{{ inventory_rke2_node_data_dir }}"
+
+# Every path the API is reachable by. Covering all of them now means adding one
+# later is not a certificate reissue and a rolling restart of the control plane.
+inventory_rke2_server_tls_san:
+  - kube.dev.lo
+  - 192.168.2.20
+  - kubecp01.dev.lo
+  - kubecp02.dev.lo
+  - kubecp03.dev.lo
+  - 192.168.2.21
+  - 192.168.2.22
+  - 192.168.2.23
+
+inventory_rke2_server_cni: cilium
+
+# Phase 5's decision, and it inverted Phase 4's note rather than confirming it.
+# Phase 4 recorded that RKE2's packaged default is ingress-nginx and that
+# plan/CLUSTER_COMPONENTS.md was wrong to say Traefik. Both halves were true at
+# the time; what changed is that ingress-nginx reached end of life in March 2026
+# and RKE2 makes Traefik the default for new clusters at v1.36. So the document
+# was right and its stated reason was wrong.
+#
+# `disable: rke2-ingress-nginx` is gone with it — ingress-controller is the
+# supported knob and selects the default ingress class at the same time.
+inventory_rke2_server_disable: []
+inventory_rke2_server_ingress_controller:
+  - traefik
+
+# The control plane taint, now that Phase 5 has workers to schedule onto.
+# Registration-time only, so it governs a rebuilt server; the running ones are
+# tainted with kubectl by playbooks/kubewk.yml, which first checks that every
+# worker is Ready.
+inventory_rke2_server_node_taints:
+  - CriticalAddonsOnly=true:NoExecute
+
+inventory_rke2_server_kube_vip_enabled: true
+inventory_rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.2
+inventory_rke2_server_kube_vip_interface: eth0
+
+# base_host
+inventory_base_host_split_dns_domains:
+  - dev.lo
+
+# rke2_node
+inventory_rke2_node_ca_system_path: /usr/local/share/ca-certificates/dev.lo.crt
+inventory_rke2_node_ca_rke2_path: /etc/rancher/rke2/dev.lo-ca.crt
+
+# rke2_server
+# Phase 6b. The address every ingress hostname resolves to, requested from the
+# kube-vip pool declared in the cluster-state repository. Pinned rather than
+# allocated: the cluster's DNS answers every name under k8s.dev.lo with it.
+inventory_rke2_server_ingress_address: 192.168.2.41

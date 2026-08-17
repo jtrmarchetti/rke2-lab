@@ -1,0 +1,69 @@
+---
+argument_specs:
+  main:
+    short_description: Create the realm federated applications live in
+    description:
+      - Creates a realm separate from master, which is where every federated
+        user and every application client belongs.
+      - Authenticates as the local administrator in master, which stays local
+        and unfederated so that Keycloak remains administrable when the
+        directory it federates is the thing that is broken.
+      - Writes only the fields it has an opinion on, so a realm edited in the
+        console is not reverted by a play run.
+    options:
+      keycloak_realm_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      keycloak_realm_url:
+        type: str
+        required: true
+        description: Keycloak's base URL.
+      keycloak_realm_ca_file:
+        type: str
+        description: CA bundle Keycloak's certificate is verified against.
+      keycloak_realm_admin_user:
+        type: str
+        default: admin
+        description: Keycloak's local administrator, always in master.
+      keycloak_realm_admin_password:
+        type: str
+        required: true
+        description: That administrator's password, from the vault.
+      keycloak_realm_name:
+        type: str
+        required: true
+        description:
+          - Name of the application realm. Must not be master.
+      keycloak_realm_display_name:
+        type: str
+        description: Name shown on the login page.
+      keycloak_realm_access_token_lifespan:
+        type: int
+        default: 300
+        description:
+          - Seconds an access token is valid. Short, because this is what a
+            compromised browser replays.
+      keycloak_realm_sso_session_idle_timeout:
+        type: int
+        default: 3600
+        description: Seconds of inactivity before the session ends.
+      keycloak_realm_sso_session_max_lifespan:
+        type: int
+        default: 36000
+        description: Seconds before a session ends regardless of activity.
+      keycloak_realm_brute_force_protected:
+        type: bool
+        default: true
+        description:
+          - Lock an account after repeated failures. FreeIPA's own lockout
+            policy never sees these attempts, because Keycloak binds with a
+            service account and rejects the wrong password itself.
+      keycloak_realm_failure_factor:
+        type: int
+        default: 10
+        description: Failures before the account is temporarily locked.
+      keycloak_realm_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints the password.

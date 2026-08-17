@@ -1,0 +1,79 @@
+---
+- name: main | Ensure dnsmasq is installed
+  when: (split_dns_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ split_dns_packages }}"
+    state: present
+
+# Before dnsmasq starts, not after: both want port 53, and whichever holds it
+# first keeps it. Installing the package already tried to start dnsmasq, so this
+# ordering is what makes the restart below succeed.
+- name: main | Ensure systemd-resolved is not holding port 53
+  when:
+    - (split_dns_enabled | bool)
+    - (split_dns_manage_resolver | bool)
+    - not ansible_check_mode
+  notify: Restart dnsmasq
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: false
+    masked: true
+
+# follow: false replaces the stub-resolv.conf symlink itself rather than writing
+# through it to a file systemd-resolved owns.
+- name: main | Ensure the host resolves through dnsmasq
+  when:
+    - (split_dns_enabled | bool)
+    - (split_dns_manage_resolver | bool)
+  ansible.builtin.template:
+    src: "{{ _var_split_dns_files_dir }}/resolv.conf.j2"
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: "0644"
+    follow: false
+
+- name: main | Ensure the split DNS configuration is present
+  when: (split_dns_enabled | bool)
+  notify: Restart dnsmasq
+  ansible.builtin.template:
+    src: "{{ _var_split_dns_files_dir }}/split_dns.conf.j2"
+    dest: "{{ _var_split_dns_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: dnsmasq --test --conf-file=%s
+
+- name: main | Ensure dnsmasq is running and enabled
+  when:
+    - (split_dns_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: started
+    enabled: true
+
+# Handlers have not fired yet at this point in the role, and the checks below
+# must test the configuration this run just wrote.
+- name: main | Flush handlers so the checks below test the current configuration
+  ansible.builtin.meta: flush_handlers
+
+# Resolution is the whole purpose of the role, and a daemon that is "active"
+# while answering nothing is the failure worth catching. Each configured zone is
+# checked through the local resolver, which is the path every consumer takes.
+- name: main | Verify each forwarded zone resolves through the local resolver
+  when:
+    - (split_dns_enabled | bool)
+    - (split_dns_verify_zones | bool)
+    - not ansible_check_mode
+  changed_when: false
+  failed_when: (_reg_split_dns_zone_check.stdout | trim | length) == 0
+  register: _reg_split_dns_zone_check
+  loop: "{{ split_dns_forward_zones }}"
+  loop_control:
+    loop_var: _item_split_dns_forward_zone
+    label: "{{ _item_split_dns_forward_zone['domain'] }}"
+  ansible.builtin.command:
+    cmd: >-
+      dig +short +time=3 +tries=2 SOA {{ _item_split_dns_forward_zone['domain'] }} @127.0.0.1

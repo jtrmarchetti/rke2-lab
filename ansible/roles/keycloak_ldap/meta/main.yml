@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: keycloak_ldap
+  author: rke2lab
+  description: >-
+    Federates Keycloak to FreeIPA over LDAP, so the domain remains the single
+    place a person exists. Creates a read-only bind system account in the
+    directory, proves it can actually read users, and configures Keycloak's
+    user federation provider through the admin API.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - keycloak
+    - freeipa
+    - ldap
+
+dependencies: []

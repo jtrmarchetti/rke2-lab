@@ -1,0 +1,190 @@
+{{ ansible_managed | comment }}
+# Garage, the cluster's object store.
+#
+# Single node, and the replication decision is the same one OpenBao made:
+# Longhorn already keeps two copies of every block, so Garage's own three-way
+# replication would mean six copies of every object on storage measured in
+# fsyncs. One Garage node on a two-replica volume survives a node loss, which
+# is what the redundancy was for.
+#
+# Vendored manifests rather than a chart. Garage publishes no chart to a
+# repository, and this is a StatefulSet, a ConfigMap and two Services — small
+# enough that mirroring a chart to render three objects would be more moving
+# parts, not fewer.
+#
+# In `apps/` rather than `infrastructure/`, because nothing in the
+# infrastructure layer depends on it. That ordering matters if it ever backs
+# Loki: the logging stack is an app too, so the dependency stays inside one
+# layer instead of crossing one.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: garage
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: garage-config
+  namespace: garage
+data:
+  garage.toml: |
+    metadata_dir = "/var/lib/garage/meta"
+    data_dir = "/var/lib/garage/data"
+    db_engine = "sqlite"
+
+    # One copy, because the volume underneath already keeps two. See the note
+    # at the top of this file.
+    replication_factor = 1
+
+    rpc_bind_addr = "[::]:3901"
+    rpc_public_addr = "127.0.0.1:3901"
+
+    [s3_api]
+    s3_region = "dev-lo"
+    api_bind_addr = "[::]:3900"
+    root_domain = ".s3.{{ gitops_source_cluster_domain }}"
+
+    [s3_web]
+    bind_addr = "[::]:3902"
+    root_domain = ".web.{{ gitops_source_cluster_domain }}"
+    index = "index.html"
+
+    [admin]
+    api_bind_addr = "[::]:3903"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+  namespace: garage
+spec:
+  type: ClusterIP
+  selector:
+    app: garage
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: 3900
+    - name: rpc
+      port: 3901
+      targetPort: 3901
+    - name: web
+      port: 3902
+      targetPort: 3902
+    - name: admin
+      port: 3903
+      targetPort: 3903
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: garage
+  namespace: garage
+spec:
+  serviceName: garage
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garage
+  template:
+    metadata:
+      labels:
+        app: garage
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      containers:
+        - name: garage
+          image: dxflrs/garage:v2.3.0
+          imagePullPolicy: IfNotPresent
+          # The RPC secret and the admin token come from a Secret rather than
+          # from the config above: a ConfigMap is readable by anything that can
+          # read ConfigMaps, and these two are what authorise cluster
+          # membership and administrative calls. The Secret is synced out of
+          # OpenBao — see secrets.yaml beside this file.
+          env:
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: garage-secrets
+                  key: rpc-secret
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: garage-secrets
+                  key: admin-token
+            - name: GARAGE_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: garage-secrets
+                  key: metrics-token
+          ports:
+            - containerPort: 3900
+              name: s3
+            - containerPort: 3901
+              name: rpc
+            - containerPort: 3902
+              name: web
+            - containerPort: 3903
+              name: admin
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/garage
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          readinessProbe:
+            tcpSocket:
+              port: 3900
+            initialDelaySeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 20Gi
+---
+# S3 through the cluster's own subdomain, with a certificate from the cluster's
+# own CA. The wildcard matters: S3 clients address buckets as
+# <bucket>.s3.k8s.dev.lo, and the cluster's DNS answers every single-label name
+# under k8s.dev.lo — but not two-label ones, which is what a bucket name makes.
+# So the ingress carries both, and DNS is told about the bucket form explicitly.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: garage-s3
+  namespace: garage
+  annotations:
+    cert-manager.io/cluster-issuer: k8s-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - s3.{{ gitops_source_cluster_domain }}
+      secretName: garage-s3-tls
+  rules:
+    - host: s3.{{ gitops_source_cluster_domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: garage
+                port:
+                  number: 3900

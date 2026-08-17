@@ -1,0 +1,67 @@
+---
+rke2_node_enabled: true
+
+# server or agent. Phase 4 installs servers; Phase 5 reuses this role with
+# agent, which is the only difference between the two node types at this layer.
+rke2_node_type: server
+
+# The RKE2 release. Must equal the version rke2_publish uploaded to the package
+# registry, because that is where the installer and binary are fetched from.
+rke2_node_version: 1.35.7+rke2r1
+
+# Where RKE2 keeps everything: the containerd image store, etcd, the static pod
+# manifests, and the packaged chart state. Deliberately on the data volume —
+# the image store grows with every image the cluster pulls and would eventually
+# fill the 32 GB OS disk.
+rke2_node_data_dir: /data1/rancher/rke2
+
+# Scratch directory the installer runs against. Holds only the binary tarball
+# and the release checksum file; see the note in install.yml about why the
+# airgap image tarball is deliberately absent.
+rke2_node_install_dir: /data1/rke2-install
+
+# --- Tier 1: the domain CA -----------------------------------------------
+#
+# Fetched over plain HTTP from the Apache artifact host, which is the only path
+# that does not already require the trust it is delivering. Installed before the
+# container runtime first starts, because the runtime caches the trust pool at
+# start.
+rke2_node_ca_url: null
+rke2_node_ca_system_path: null
+rke2_node_ca_rke2_path: null
+
+# --- Tier 2: the GitLab registries ---------------------------------------
+rke2_node_gitlab_url: null
+rke2_node_registry_host: null
+
+# The generic package registry coordinates the installer and binary come from.
+rke2_node_package_project: rke2/packages
+rke2_node_package_name: rke2
+
+# Containerd mirror rewrites. Each entry redirects one upstream registry at the
+# GitLab mirror and rewrites the repository path to where rke2_publish pushed
+# it. Keep these equal to rke2_publish's group and images project, or a node
+# will ask for a path nothing published.
+rke2_node_registry_mirrors:
+  - upstream: docker.io
+    pattern: "^rancher/(.*)"
+    replacement: rke2/images/rancher/$1
+  - upstream: ghcr.io
+    pattern: "^kube-vip/(.*)"
+    replacement: rke2/images/kube-vip/$1
+  # Phase 6a. Flux's controllers keep their upstream ghcr.io/fluxcd names in the
+  # manifests Flux applies, so the rewrite is what makes an air-gapped install
+  # work without passing --registry to `flux bootstrap` and rewriting every
+  # image reference in Git.
+  - upstream: ghcr.io
+    pattern: "^fluxcd/(.*)"
+    replacement: rke2/images/fluxcd/$1
+
+# Read-only pull credential. No default: a node with an empty credential would
+# get a 401 that reads like a broken mirror. The playbook reads it from the file
+# rke2_publish recorded on the repo host.
+# rke2_node_registry_username:
+# rke2_node_registry_password:
+
+# Bounds a single download from the package registry.
+rke2_node_download_timeout: 600

@@ -1,0 +1,186 @@
+---
+# Phase 5 — the RKE2 workers. See plan/PHASE5_IMPLEMENTATION.md.
+#
+# Deliberately close to group_vars/kubecp/main.yml. A worker differs from a
+# server in three ways and no more: it installs the agent rather than the
+# server, it has a second data disk for the CSI layer, and it joins the cluster
+# instead of forming it. Everything else — the apt proxy, the resolver, the
+# time chain, the registry mirror, the data volume — is the same host build,
+# and keeping it visibly the same is what makes a difference meaningful.
+ansible_user: "{{ lookup('env', 'VM_USERNAME') | default('root', true) }}"
+ansible_password: "{{ lookup('env', 'VM_USER_PASSWORD') }}"
+ansible_ssh_common_args: >-
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+
+inventory_base_host_manage_hostname: true
+inventory_base_host_target_hostname: "{{ inventory_hostname }}.dev.lo"
+
+# No internet route. Packages come from the repo01 proxy; every other artifact
+# comes from GitLab.
+inventory_base_host_apt_proxy_enabled: true
+inventory_base_host_apt_proxy_url: http://192.168.2.99:3142
+
+# No split DNS. These hosts resolve through core01, which is authoritative for
+# dev.lo and forwards nothing, and they have nothing else to ask.
+inventory_base_host_split_dns_enabled: false
+
+# Time chain: repo01 syncs upstream, core01 takes time from repo01, and the
+# cluster takes time from core01. Kubernetes tolerates a shared clock that
+# drifts; it does not tolerate nodes drifting apart.
+inventory_time_sync_enabled: true
+inventory_time_sync_source_directive: server
+inventory_time_sync_sources:
+  - 192.168.2.4 iburst
+
+# --- disks ----------------------------------------------------------------
+#
+# A worker has two data disks, not one, and they are prepared by the same role
+# invoked twice. These variables describe the first; the second is passed
+# explicitly by playbooks/kubewk.yml, because group_vars can only hold one value
+# for a variable name and both invocations read the same names.
+#
+# /dev/sdb — /data1, the RKE2 data directory and containerd's image store.
+inventory_data_volume_enabled: true
+inventory_data_volume_device: /dev/sdb
+inventory_data_volume_filesystem: ext4
+inventory_data_volume_label: data1
+inventory_data_volume_mount_path: /data1
+
+# /dev/sdc — the CSI disk, for Longhorn in Phase 6.
+#
+# Longhorn rather than Rook Ceph: lighter on these 4 vCPU / 10 GiB nodes and on
+# storage that is already at etcd's fsync floor, and Rook's usual advantage of
+# bringing object storage with it is redundant here because
+# plan/CLUSTER_COMPONENTS.md already selects Garage for that.
+#
+# Prepared now rather than in Phase 6 so that a GitOps phase declares a Helm
+# release instead of doing host-level disk work it should not own.
+inventory_kubewk_csi_volume_device: /dev/sdc
+inventory_kubewk_csi_volume_filesystem: ext4
+inventory_kubewk_csi_volume_label: longhorn
+inventory_kubewk_csi_volume_mount_path: /var/lib/longhorn
+
+# --- rke2_node: everything true before RKE2 starts ------------------------
+#
+# Identical to the control plane except for the node type. That is the whole
+# difference at this layer, and the role's own defaults say so.
+inventory_rke2_node_enabled: true
+inventory_rke2_node_type: agent
+inventory_rke2_node_version: 1.35.7+rke2r1
+inventory_rke2_node_data_dir: /data1/rancher/rke2
+inventory_rke2_node_ca_url: http://192.168.2.99/gitlab/dev.lo-ca.crt
+inventory_rke2_node_gitlab_url: https://gitlab.dev.lo
+inventory_rke2_node_registry_host: registry.gitlab.dev.lo
+inventory_rke2_node_package_project: rke2/packages
+
+# Must stay equal to the control plane's rewrites and to rke2_publish's group
+# and project, or a worker asks the registry for a path nothing pushed. The
+# Traefik image added in Phase 5 is a docker.io/rancher/* name and is already
+# covered by the first rule; it needs no entry of its own.
+inventory_rke2_node_registry_mirrors:
+  - upstream: docker.io
+    pattern: "^rancher/(.*)"
+    replacement: rke2/images/rancher/$1
+  - upstream: ghcr.io
+    pattern: "^kube-vip/(.*)"
+    replacement: rke2/images/kube-vip/$1
+  # Phase 6a. Flux's controllers keep their upstream ghcr.io/fluxcd names in the
+  # manifests Flux applies, so the rewrite is what makes an air-gapped install
+  # work without passing --registry to `flux bootstrap` and rewriting every
+  # image reference in Git.
+  - upstream: ghcr.io
+    pattern: "^fluxcd/(.*)"
+    replacement: rke2/images/fluxcd/$1
+  # Phase 6a. Sealed Secrets. A second docker.io rule rather than a second
+  # ghcr.io one, because the controller image is docker.io/bitnami/*, and the
+  # existing docker.io rule matches ^rancher/ only. This is the case the
+  # template bug of 6a was about: two rules under one upstream key, which the
+  # grouped template now emits as one mirror block with two rewrites.
+  - upstream: docker.io
+    pattern: "^bitnami/(.*)"
+    replacement: rke2/images/bitnami/$1
+  # Phase 6b. One rule per upstream namespace the cluster services are pulled
+  # from. Added in a single pass, deliberately: RKE2 regenerates containerd's
+  # hosts.toml from registries.yaml at service start, so every change here
+  # costs a rolling restart of all six nodes however correct the file on disk
+  # already is. Batching the whole 6b set is one restart instead of six.
+  - upstream: quay.io
+    pattern: "^jetstack/(.*)"
+    replacement: rke2/images/jetstack/$1
+  - upstream: quay.io
+    pattern: "^openbao/(.*)"
+    replacement: rke2/images/openbao/$1
+  - upstream: quay.io
+    pattern: "^keycloak/(.*)"
+    replacement: rke2/images/keycloak/$1
+  - upstream: docker.io
+    pattern: "^longhornio/(.*)"
+    replacement: rke2/images/longhornio/$1
+  - upstream: docker.io
+    pattern: "^dxflrs/(.*)"
+    replacement: rke2/images/dxflrs/$1
+  # Docker Hub official images: a bare `postgres:18` is docker.io/library/*
+  # by the time containerd resolves it, so the namespace has to be named.
+  - upstream: docker.io
+    pattern: "^library/(.*)"
+    replacement: rke2/images/library/$1
+  - upstream: ghcr.io
+    pattern: "^external-secrets/(.*)"
+    replacement: rke2/images/external-secrets/$1
+  # Phase 6c. The observability set. registry.k8s.io is a new upstream host,
+  # not just a new namespace under one already configured, which is why 6c
+  # costs its own rolling restart even though 6b already batched its rules.
+  - upstream: quay.io
+    pattern: "^prometheus/(.*)"
+    replacement: rke2/images/prometheus/$1
+  - upstream: quay.io
+    pattern: "^prometheus-operator/(.*)"
+    replacement: rke2/images/prometheus-operator/$1
+  - upstream: quay.io
+    pattern: "^kiwigrid/(.*)"
+    replacement: rke2/images/kiwigrid/$1
+  - upstream: docker.io
+    pattern: "^grafana/(.*)"
+    replacement: rke2/images/grafana/$1
+  - upstream: registry.k8s.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Single sign-on. The oauth2-proxy that fronts the Longhorn UI is the only
+  # image the SSO work adds — every other service federates by configuration
+  # rather than by gaining a component. It is one more quay.io namespace, so
+  # it costs the same rolling restart of all six nodes that any registries.yaml
+  # change does.
+  - upstream: quay.io
+    pattern: "^oauth2-proxy/(.*)"
+    replacement: rke2/images/oauth2-proxy/$1
+
+# The pull credential is not in inventory. It is the same deploy token the
+# servers use, recorded on repo01 by rke2_publish, and the playbook reads it
+# from there.
+
+# --- rke2_agent: joining the cluster --------------------------------------
+inventory_rke2_agent_enabled: true
+# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md). The same
+# token the servers hold — it is the cluster join secret, not a per-node one.
+inventory_rke2_agent_token: "{{ lookup('env', 'RKE2_TOKEN') }}"
+inventory_rke2_agent_node_ip: "{{ ansible_host }}"
+inventory_rke2_agent_data_dir: "{{ inventory_rke2_node_data_dir }}"
+
+# The VIP, exactly as the joining servers use. It only seeds the agent's
+# client-side load balancer: once joined, the agent syncs the full apiserver
+# endpoint list and holds connections to all three servers, so this address
+# being down later does not disconnect the node.
+inventory_rke2_agent_server_address: 192.168.2.20
+inventory_rke2_agent_supervisor_port: 9345
+
+# The host the readiness gate is asked from is inventory_kubewk_control_host, defined in
+# group_vars/all because playbooks/kubewk.yml also uses it as a play host
+# pattern and a pattern resolves before group variables are in scope.
+
+# base_host
+inventory_base_host_split_dns_domains:
+  - dev.lo
+
+# rke2_node
+inventory_rke2_node_ca_system_path: /usr/local/share/ca-certificates/dev.lo.crt
+inventory_rke2_node_ca_rke2_path: /etc/rancher/rke2/dev.lo-ca.crt

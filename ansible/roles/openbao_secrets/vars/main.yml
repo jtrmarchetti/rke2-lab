@@ -1,0 +1,103 @@
+---
+# The root token travels in a header, not in a command line: no process on any
+# host ever has it in argv.
+_var_openbao_secrets_headers:
+  X-Vault-Token: "{{ openbao_secrets_root_token }}"
+
+# Everything except Garage's S3 key, which is the one entry that cannot exist
+# on a first pass.
+#
+# The ordering is unavoidable rather than awkward: Garage will not start
+# without the credentials this role writes, and it mints its S3 access key only
+# once it is running. So the first pass omits that entry, garage_init creates
+# the key and records it, and a second pass writes it in. cluster_init.yml runs
+# this role twice for exactly that reason.
+#
+# On every run after that both values are set and nothing is omitted, so the
+# steady state has no special case in it.
+_var_openbao_secrets_entries: >-
+  {{ (_var_openbao_secrets_entries_all
+      | selectattr('optional', 'undefined') | list)
+     + ((_var_openbao_secrets_entries_all
+         | selectattr('optional', 'defined') | list)
+        if ((openbao_secrets_garage_s3_access_key | length) > 0
+            and (openbao_secrets_garage_s3_secret_key | length) > 0)
+        else []) }}
+
+# --- Every runtime secret in the vault -------------------------------------
+#
+# One entry per component, at a path an ExternalSecret in the cluster-state
+# repository names. Changing a path here without changing the `remoteRef` there
+# leaves the workload reading an entry that does not exist, which surfaces as
+# a Secret that never syncs rather than as an error here.
+#
+# Garage takes two entries rather than one, because the two halves have
+# different origins and different lifecycles: `garage-cluster` is authored by
+# hand and is what Garage needs in order to start, and `garage` is minted by
+# Garage itself once it has. Merging them would mean two writers to one path,
+# where whichever wrote last would drop the other's keys.
+_var_openbao_secrets_entries_all:
+  - path: keycloak
+    description: >-
+      Keycloak's bootstrap administrator and its database password. The
+      database password is the one value here that is not free to change:
+      rotating it in the vault without rotating it in the database leaves
+      Keycloak unable to start, and the failure reads as a broken PVC rather
+      than a wrong password.
+    data:
+      admin-password: "{{ openbao_secrets_keycloak_admin_password }}"
+      db-password: "{{ openbao_secrets_keycloak_db_password }}"
+
+  - path: garage-cluster
+    description: >-
+      Garage's cluster and control-plane credentials. rpc-secret is what the
+      nodes authenticate to each other with, so changing it is a cluster-wide
+      event rather than a credential rotation: every node must be restarted
+      onto the new value together.
+    data:
+      admin-token: "{{ openbao_secrets_garage_admin_token }}"
+      metrics-token: "{{ openbao_secrets_garage_metrics_token }}"
+      rpc-secret: "{{ openbao_secrets_garage_rpc_secret }}"
+
+  - path: grafana
+    description: >-
+      Grafana's local administrator, which exists as the way in when the
+      identity provider it federates to is the thing that is broken.
+    data:
+      username: "{{ openbao_secrets_grafana_admin_user }}"
+      password: "{{ openbao_secrets_grafana_admin_password }}"
+
+  - path: oidc-grafana
+    description: >-
+      Grafana's OIDC client secret. Authored rather than generated, which is
+      the whole reason Grafana can start on a cold rebuild before Keycloak
+      exists: this entry is written on the first pass, the ExternalSecret
+      syncs, and the pod comes up with a client secret for a client that does
+      not exist yet. It begins working the moment keycloak_clients runs, with
+      no restart and no second pass.
+    data:
+      client-secret: "{{ openbao_secrets_grafana_oidc_client_secret }}"
+
+  - path: oidc-longhorn
+    description: >-
+      The credentials for the oauth2-proxy that stands in front of the Longhorn
+      UI, which has no authentication of its own. The cookie secret is not an
+      OIDC credential — it is what the proxy encrypts its session cookie with,
+      and rotating it signs everyone out and nothing more. It has to be 16, 24
+      or 32 bytes; any other length is refused at start-up with an error about
+      AES key size that never mentions cookies.
+    data:
+      client-secret: "{{ openbao_secrets_longhorn_oidc_client_secret }}"
+      cookie-secret: "{{ openbao_secrets_longhorn_cookie_secret }}"
+
+  - path: garage
+    # The one entry that may legitimately be absent - see the filter above.
+    optional: true
+    description: >-
+      The S3 access key Garage minted for its own buckets, read by Loki and
+      Tempo. Created by garage_init, which records it in the controller's
+      env.sh because Garage discloses a secret key exactly once; this is the
+      runtime copy, and the only one a workload ever sees.
+    data:
+      access_key: "{{ openbao_secrets_garage_s3_access_key }}"
+      secret_key: "{{ openbao_secrets_garage_s3_secret_key }}"

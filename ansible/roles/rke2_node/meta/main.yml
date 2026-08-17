@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: rke2_node
+  author: rke2lab
+  description: >-
+    Prepares a host to run RKE2 in an air-gapped network: trusts the domain CA,
+    points containerd at the GitLab container registry mirror, and installs the
+    RKE2 binary from the GitLab generic package registry.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - containerd
+    - airgap
+
+dependencies: []

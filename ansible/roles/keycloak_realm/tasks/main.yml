@@ -1,0 +1,143 @@
+---
+# The realm every federated application lives in.
+#
+# This role exists because of where the federation started. keycloak_ldap
+# originally added FreeIPA to `master`, which worked and was the wrong place:
+# `master` is the realm that administers every other realm, so every federated
+# user in it is a user in the realm that holds Keycloak's own administrators,
+# and every client in it is one misconfiguration away from the administrative
+# API. Keycloak's own guidance is that master holds administrators and nothing
+# else.
+#
+# Moving is cheap now and expensive later — a realm with clients in it is a
+# migration — so the realm is created before the first client exists.
+#
+# What stays in `master` is deliberate: the `admin` account this role
+# authenticates as. That is Keycloak's break-glass. It is local rather than
+# federated, its password is in the vault and in env.sh, and nothing in the
+# single sign-on path can revoke it. A Keycloak whose administrators were
+# themselves federated would be unadministrable exactly when FreeIPA is the
+# thing that is broken.
+#
+# Read before written, so a second run reports no change.
+
+- name: main | Assert the required inputs are present
+  when: (keycloak_realm_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (keycloak_realm_url | length) > 0
+      - (keycloak_realm_name | length) > 0
+      - (keycloak_realm_admin_password | length) > 0
+    fail_msg: >-
+      keycloak_realm needs Keycloak's URL, the realm name, and the admin
+      password (KEYCLOAK_ADMIN_PASSWORD from ~/.config/rke2lab/env.sh, and in
+      the vault at kv/keycloak). See plan/SECRETS.md.
+    quiet: true
+
+- name: main | Create or update the application realm
+  when:
+    - (keycloak_realm_enabled | bool)
+    # uri has no dry run, and every read below needs a token this role would
+    # have to obtain anyway. Same gate the other Keycloak roles use.
+    - not ansible_check_mode
+  block:
+    # Always against master, whatever realm is being managed: that is where the
+    # administrator lives, and admin-cli in master is what can create realms.
+    - name: main | Obtain an admin token
+      no_log: "{{ keycloak_realm_no_log | bool }}"
+      register: _reg_keycloak_realm_token
+      ansible.builtin.uri:
+        url: >-
+          {{ keycloak_realm_url }}/realms/master/protocol/openid-connect/token
+        method: POST
+        ca_path: "{{ keycloak_realm_ca_file }}"
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_realm_admin_user }}"
+          password: "{{ keycloak_realm_admin_password }}"
+
+    - name: main | Read the realm as it currently stands
+      changed_when: false
+      no_log: "{{ keycloak_realm_no_log | bool }}"
+      register: _reg_keycloak_realm_current
+      ansible.builtin.uri:
+        url: "{{ keycloak_realm_url }}/admin/realms/{{ keycloak_realm_name }}"
+        headers: "{{ _var_keycloak_realm_headers }}"
+        ca_path: "{{ keycloak_realm_ca_file }}"
+        # 404 is the ordinary state on a cold build.
+        status_code: [200, 404]
+
+    - name: main | Create the realm
+      when: _reg_keycloak_realm_current['status'] == 404
+      changed_when: true
+      no_log: "{{ keycloak_realm_no_log | bool }}"
+      ansible.builtin.uri:
+        url: "{{ keycloak_realm_url }}/admin/realms"
+        method: POST
+        headers: "{{ _var_keycloak_realm_headers }}"
+        ca_path: "{{ keycloak_realm_ca_file }}"
+        body_format: json
+        body: "{{ _var_keycloak_realm_definition }}"
+        status_code: [201]
+
+    # Only the fields this role has an opinion on, compared as strings because
+    # the admin API returns integers and booleans that have been through YAML
+    # and Jinja on this side. Comparing whole representations would report a
+    # change on every run: a realm comes back with well over a hundred keys,
+    # nearly all of them Keycloak defaults this file says nothing about, and
+    # writing them back would revert anything set in the console.
+    - name: main | Update an existing realm to match this definition
+      when:
+        - _reg_keycloak_realm_current['status'] == 200
+        - _keycloak_realm_have != _keycloak_realm_want
+      changed_when: true
+      no_log: "{{ keycloak_realm_no_log | bool }}"
+      vars:
+        _keycloak_realm_want: >-
+          {{ _var_keycloak_realm_compared
+             | map('extract', _var_keycloak_realm_definition)
+             | map('default', '') | map('string') | list }}
+        _keycloak_realm_have: >-
+          {{ _var_keycloak_realm_compared
+             | map('extract', _reg_keycloak_realm_current['json'])
+             | map('default', '') | map('string') | list }}
+      ansible.builtin.uri:
+        url: "{{ keycloak_realm_url }}/admin/realms/{{ keycloak_realm_name }}"
+        method: PUT
+        headers: "{{ _var_keycloak_realm_headers }}"
+        ca_path: "{{ keycloak_realm_ca_file }}"
+        body_format: json
+        body: "{{ _var_keycloak_realm_definition }}"
+        status_code: [204]
+
+    - name: main | Confirm the realm reads back
+      changed_when: false
+      no_log: "{{ keycloak_realm_no_log | bool }}"
+      register: _reg_keycloak_realm_final
+      ansible.builtin.uri:
+        url: "{{ keycloak_realm_url }}/admin/realms/{{ keycloak_realm_name }}"
+        headers: "{{ _var_keycloak_realm_headers }}"
+        ca_path: "{{ keycloak_realm_ca_file }}"
+
+    - name: main | Assert the realm is enabled and is not master
+      vars:
+        _keycloak_realm_read: "{{ _reg_keycloak_realm_final['json'] }}"
+      ansible.builtin.assert:
+        that:
+          - (_keycloak_realm_read['enabled'] | bool)
+          - _keycloak_realm_read['realm'] != 'master'
+        fail_msg: >-
+          The application realm is either disabled or is master itself.
+          Applications must not be federated into master: it administers every
+          other realm, and Keycloak's own break-glass administrator lives
+          there.
+        quiet: true
+
+    - name: main | Report the realm
+      ansible.builtin.debug:
+        msg: >-
+          Realm '{{ keycloak_realm_name }}' present and enabled at
+          {{ keycloak_realm_url }}/realms/{{ keycloak_realm_name }}
+        verbosity: 0

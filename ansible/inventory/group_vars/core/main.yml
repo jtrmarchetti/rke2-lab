@@ -1,0 +1,152 @@
+---
+ansible_user: "{{ lookup('env', 'VM_USERNAME') | default('root', true) }}"
+ansible_password: "{{ lookup('env', 'VM_USER_PASSWORD') }}"
+ansible_ssh_common_args: >-
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+
+inventory_base_host_manage_hostname: true
+inventory_base_host_target_hostname: core.dev.lo
+
+# core01 has no internet route. Packages come from the repo01 proxy;
+# everything else comes from the repo01 artifact host.
+inventory_base_host_apt_proxy_enabled: true
+inventory_base_host_apt_proxy_url: http://192.168.2.99:3142
+
+# No split DNS here. core01 resolves through its own FreeIPA instance on
+# 127.0.0.1 and has nowhere else to ask, which is the intended isolation.
+inventory_base_host_split_dns_enabled: false
+
+# Time chain: repo01 syncs from the internet and serves the internal subnet,
+# core01 takes time from repo01, and every other internal host takes time from
+# core01. This host is therefore both client and server, which is why it allows
+# the internal network as well as naming an upstream.
+#
+# `local stratum 8` keeps core01 serving a common clock to the cluster if
+# repo01 goes away — repo01 is decommissioned after the build, per OVERVIEW.md,
+# so that is an expected end state rather than a failure. Kerberos tolerates a
+# shared clock that drifts; it does not tolerate hosts drifting apart.
+inventory_time_sync_enabled: true
+inventory_time_sync_source_directive: server
+inventory_time_sync_sources:
+  - 192.168.2.99 iburst
+inventory_time_sync_allow_networks:
+  - 192.168.2.0/24
+inventory_time_sync_local_stratum: 8
+
+inventory_freeipa_server_enabled: true
+inventory_freeipa_server_domain: dev.lo
+inventory_freeipa_server_realm: DEV.LO
+inventory_freeipa_server_hostname: core.dev.lo
+inventory_freeipa_server_ip_address: 192.168.2.4
+# Secrets sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+inventory_freeipa_server_admin_password: "{{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}"
+inventory_freeipa_server_directory_manager_password: >-
+  {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
+
+# DNS is authoritative for dev.lo only, with no forwarders: there is no upstream
+# resolver reachable from this network.
+inventory_freeipa_server_setup_dns: true
+inventory_freeipa_server_forwarders_enabled: false
+
+# Reverse zone for the internal subnet. FreeIPA is the only authority for this
+# address space, so PTR queries must terminate here rather than going upstream.
+inventory_freeipa_server_dns_zones:
+  - name: 2.168.192.in-addr.arpa
+
+# Service names Phase 3 depends on. GitLab runs on repo01 and is reached from
+# the internal network at its internal address, so both names point there.
+# Published here rather than in the role: which names exist is environment
+# state, not role behavior.
+inventory_freeipa_server_dns_records:
+  - name: gitlab
+    value: 192.168.2.99
+  - name: registry.gitlab
+    value: 192.168.2.99
+  # Phase 6b. The delegation of the cluster's subdomain, and only the
+  # delegation: nothing under k8s.dev.lo is recorded here.
+  #
+  # Both records are needed and neither is enough alone. BIND answers from an
+  # authoritative zone before it consults a forwarder, so dev.lo returned an
+  # authoritative NXDOMAIN for every k8s.dev.lo name while the forward zone sat
+  # there unused. The NS record is what makes the subdomain someone else's to
+  # answer; the A record is the glue that says where that someone is.
+  - name: k8s-dns
+    value: 192.168.2.40
+  - name: k8s
+    type: NS
+    value: k8s-dns.dev.lo.
+  # Phase 4 control plane. The node records exist so the nodes can be reached
+  # and named by something other than an address; addresses come from
+  # plan/TARGETS.md and must stay equal to the Pulumi VM definitions.
+  - name: kubecp01
+    value: 192.168.2.21
+  - name: kubecp02
+    value: 192.168.2.22
+  - name: kubecp03
+    value: 192.168.2.23
+
+  # Phase 5 workers. Same reasoning as the control plane records above, and the
+  # same requirement that these stay equal to the Pulumi VM definitions.
+  - name: kubewk01
+    value: 192.168.2.31
+  - name: kubewk02
+    value: 192.168.2.32
+  - name: kubewk03
+    value: 192.168.2.33
+
+  # The API server endpoint, and the only name anything should use to reach the
+  # cluster. It resolves to the kube-vip VIP rather than to any one node, so a
+  # kubeconfig or a joining node does not depend on which server is up. The VIP
+  # is inside 192.168.2.0/24 but is deliberately not any node's address; see
+  # plan/PHASE4_IMPLEMENTATION.md.
+  - name: kube
+    value: 192.168.2.20
+
+inventory_freeipa_server_container_name: freeipa-server
+inventory_freeipa_server_container_image: freeipa/freeipa-server:almalinux-8
+# Tarball URL and checksum come from the role defaults, which follow the
+# artifact host document root layout (freeipa/) and verify against the .sha256
+# file published beside the tarball at staging time.
+inventory_freeipa_server_data_dir: /data1/freeipa
+
+# Declared in inventory rather than left to the role default because two roles
+# need the same value: freeipa_server creates the compose project here, and
+# container_storage has to stop it gracefully before relocating the container
+# daemons. A role default is not visible at play level, so the playbook could
+# not pass it otherwise.
+inventory_freeipa_server_compose_dir: /opt/rke2lab/freeipa
+
+# Phase 6b. The cluster's subdomain is the cluster's own: its DNS answers for
+# every name under k8s.dev.lo, and this domain forwards the whole zone there
+# rather than holding records inside it. The address is the fixed
+# LoadBalancer address the cluster-dns Service requests; see the cluster-state
+# repository.
+inventory_freeipa_server_dns_forward_zones:
+  - name: k8s.dev.lo
+    forwarder: 192.168.2.40
+    policy: only
+
+# Off, so the cluster's subdomain can be delegated at all. dev.lo is under a
+# TLD the public root denies, so nothing resolved rather than served from local
+# zone data can build a chain of trust, and BIND 9.11 has no per-zone
+# exception. See roles/freeipa_server/tasks/named_options.yml.
+inventory_freeipa_server_dnssec_validation: false
+
+# base_host
+inventory_base_host_split_dns_domains:
+  - dev.lo
+
+# freeipa_server
+# Air-gapped image delivery. core01 cannot reach a registry, so the image
+# arrives as a tarball from the Apache artifact host and is loaded locally.
+#
+# The path matches the artifact host document root layout: one directory per
+# consumer, named for the phase that consumes it. The staging role publishes
+# this tarball from the manifest entry in group_vars/repo/artifacts.yml.
+inventory_freeipa_server_image_tarball_url: >-
+  http://192.168.2.99/freeipa/freeipa-server-almalinux-8.tar
+# Verified against the .sha256 file published next to the artifact rather than
+# a value pinned here. A `docker save` tarball has no reproducible checksum, so
+# the only correct expected value is the one generated at staging time.
+inventory_freeipa_server_image_tarball_checksum: >-
+  sha256:http://192.168.2.99/freeipa/freeipa-server-almalinux-8.tar.sha256

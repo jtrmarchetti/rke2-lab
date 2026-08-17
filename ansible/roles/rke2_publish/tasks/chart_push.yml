@@ -1,0 +1,41 @@
+---
+# Pushes one staged chart tarball into the GitLab container registry.
+#
+# `helm push` is the only way in: a chart pushed as an OCI artifact carries the
+# media types the source-controller looks for, and uploading the same tarball
+# as a blob by hand would produce something the cluster cannot read. There is
+# no Ansible module for it.
+
+- name: chart_push | Confirm the staged chart tarball is present
+  register: _reg_rke2_publish_chart_stat
+  ansible.builtin.stat:
+    path: "{{ _var_rke2_publish_chart_file }}"
+    get_checksum: false
+
+- name: chart_push | Fail when the chart is neither staged nor published
+  ansible.builtin.assert:
+    that:
+      - _reg_rke2_publish_chart_stat['stat']['exists']
+    fail_msg: >-
+      {{ _item_rke2_publish_chart['name'] }} {{ _item_rke2_publish_chart['version'] }}
+      is missing from the registry and from {{ _var_rke2_publish_chart_file }}.
+      The registry is the authority on what is published, so this means the
+      chart was never staged: add it to the artifact manifest and run the
+      staging role first.
+    quiet: true
+
+- name: chart_push | Push the chart into the registry
+  changed_when: _reg_rke2_publish_chart_pushed['rc'] == 0
+  register: _reg_rke2_publish_chart_pushed
+  ansible.builtin.command:
+    cmd: >-
+      {{ rke2_publish_helm_binary }} push {{ _var_rke2_publish_chart_file }}
+      oci://{{ _var_rke2_publish_charts_prefix }}
+
+- name: chart_push | Report the push
+  ansible.builtin.debug:
+    msg: >-
+      pushed {{ _item_rke2_publish_chart['name'] }}
+      {{ _item_rke2_publish_chart['version'] }} to
+      oci://{{ _var_rke2_publish_charts_prefix }}
+    verbosity: 0

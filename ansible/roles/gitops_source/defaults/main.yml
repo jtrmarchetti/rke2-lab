@@ -1,0 +1,138 @@
+---
+gitops_source_enabled: true
+
+# --- Where the repository lives -------------------------------------------
+
+gitops_source_gitlab_url: null
+# The GitLab host the admin token is minted on. No default: minting runs
+# `gitlab-rails` inside that host's container, and doing it on the wrong host
+# would either fail or mint a token for the wrong GitLab.
+# gitops_source_gitlab_host:
+gitops_source_group: platform
+gitops_source_project: cluster-state
+gitops_source_branch: main
+
+# Flux's entry point within the repository, and therefore the path the
+# Kustomization in gotk-sync.yaml reconciles. A cluster of a different name
+# would change this and the directory it names together.
+gitops_source_cluster_path: ./clusters/dev-lo
+
+# --- What the rendered tree is rendered for -------------------------------
+#
+# Environment identity, and nothing else. Component versions and resource
+# sizing stay literal in the templates: those are decisions about the cluster,
+# not facts about where it runs, and hoisting them here would turn a readable
+# manifest into a variable lookup with no reader.
+
+gitops_source_domain: null
+# The cluster's own subdomain. FreeIPA forwards the whole zone to the cluster
+# and holds no records inside it; see group_vars/core/main.yml.
+gitops_source_cluster_domain: null
+
+# The Keycloak realm the cluster's own services authenticate against. Every
+# OIDC endpoint in the rendered tree is built from it, so it is environment
+# identity in exactly the way the domain is — and it is deliberately not
+# `master`, for the reason the keycloak_realm role sets out.
+gitops_source_keycloak_realm: null
+
+gitops_source_registry_host: null
+# The OCI repository every HelmRelease installs from, as group/project. Keep
+# equal to rke2_publish_group and rke2_publish_charts_project or the charts are
+# pushed to one path and read from another.
+gitops_source_charts_repo: rke2/charts
+
+# The LoadBalancer pool, and the two addresses in it that are requested by name
+# because something outside the cluster is configured to reach them: FreeIPA
+# forwards to the DNS address, and every ingress hostname resolves to the
+# ingress address.
+gitops_source_lb_range: null
+gitops_source_dns_address: null
+gitops_source_ingress_address: null
+
+# The domain CA, as installed in this host's trust store by controller_trust.
+# Read at render time rather than pasted, so reissuing the domain CA changes
+# the committed Secret without anyone remembering to re-copy it.
+gitops_source_domain_ca_file: null
+
+# The trust store Ansible's own Python verifies against, which is not the one
+# `update-ca-certificates` writes for curl and git.
+#
+# Ansible runs on Homebrew's Python here, and that build reads its CA bundle
+# from `$(brew --prefix)/etc/openssl@3/cert.pem` rather than from the system
+# store — so every `uri` task against an internal HTTPS endpoint fails
+# verification even though the domain CA is installed and `git` is perfectly
+# happy with it. Naming the system bundle explicitly is the fix, and it is the
+# same one controller_trust and openbao_config already carry. See
+# plan/CONTROLLER.md.
+gitops_source_ca_file: /etc/ssl/certs/ca-certificates.crt
+
+# --- Local paths ----------------------------------------------------------
+
+# The working clone. A stable path rather than a temporary directory, so a
+# second run pushes a commit onto the history it already has instead of
+# re-cloning to discover the same thing.
+gitops_source_work_dir: >-
+  {{ ansible_facts['env']['HOME'] }}/.cache/rke2lab/cluster-state
+
+gitops_source_bin_dir: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+
+# The Sealed Secrets sealing key, backed up out of the cluster. Sealing reads
+# the certificate half of it.
+#
+# The backup rather than `kubeseal --fetch-cert` on purpose, and this is the
+# case the whole design turns on: on a cold rebuild the Sealed Secrets
+# controller does not exist yet — Flux deploys it, from the repository this
+# role is in the middle of writing. Fetching a cert from the cluster would make
+# the first push depend on the cluster the push is what creates.
+gitops_source_sealing_key_file: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/sealed-secrets-key.yaml
+
+# The intermediate CA ipa_sub_ca writes. Same directory that role's
+# ipa_sub_ca_output_dir names; the key never leaves it in plaintext.
+gitops_source_ca_dir: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/k8s-ca
+gitops_source_ca_common_name: null
+
+# --- Commit ---------------------------------------------------------------
+
+# The review gate. False renders the tree, seals into it, reports the diff, and
+# stops before the commit — which is the only way to see what Flux is about to
+# be told without telling it. Worth reaching for whenever a change touches a
+# component that is already running:
+#
+#   ansible-playbook playbooks/gitops.yml -e gitops_source_push=false
+#
+# ANSIBLE_STANDARDS.md permits extra vars for explicit safety gates, and this is
+# one. It is not a way to configure the environment.
+gitops_source_push: true
+
+gitops_source_commit_message: >-
+  Render cluster state from Ansible
+gitops_source_commit_name: rke2lab automation
+gitops_source_commit_email: null
+
+# --- Secrets --------------------------------------------------------------
+#
+# Only what has to be sealed. Every runtime secret this role used to take —
+# Keycloak's credentials, Garage's cluster tokens, Grafana's administrator —
+# now goes into OpenBao through the openbao_secrets role and reaches the
+# cluster as an ExternalSecret. What is left is the material a cluster needs
+# before it can reach the vault at all; see vars/main.yml for the test an entry
+# has to pass to belong here.
+#
+# The unseal keys are the one input with a default, and the default is
+# "absent".
+#
+# All five unseal shares, comma separated, as openbao_init recorded them. Empty
+# is a real state rather than a mistake: on a cold rebuild the vault is deployed
+# by Flux from the tree this role is pushing, so it cannot have been initialised
+# yet. The entry is omitted while this is empty and sealed in on the next run.
+gitops_source_openbao_unseal_keys: ""
+
+# The registry pull credential Flux reads charts with. Read from the file
+# rke2_publish recorded it in, on the GitLab host, rather than from env.sh:
+# GitLab returns a deploy token's value once, and that file is the only copy.
+gitops_source_deploy_token_file: /data1/gitlab/rke2-deploy-token.yml
+
+# Set false only when debugging; it exposes every secret above.
+gitops_source_no_log: true

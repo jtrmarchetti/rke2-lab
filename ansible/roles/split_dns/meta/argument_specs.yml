@@ -1,0 +1,53 @@
+---
+argument_specs:
+  main:
+    short_description: Split-horizon DNS with dnsmasq.
+    description:
+      - Resolves an internal domain through its own authority and everything
+        else through upstream resolvers.
+      - Replaces the host resolver, because one host has one resolver and this
+        role owns it.
+    options:
+      split_dns_enabled:
+        type: bool
+        required: false
+      split_dns_upstream_servers:
+        description: Resolvers for names outside the forwarded zones.
+        type: list
+        elements: str
+        required: false
+      split_dns_forward_zones:
+        description: >-
+          Zones answered by a specific nameserver. Each entry needs domain and
+          server. Forwarded with dnsmasq server=, never address=, so the real
+          authority answers each name.
+        type: list
+        elements: dict
+        required: false
+      split_dns_listen_addresses:
+        description: Addresses dnsmasq answers on.
+        type: list
+        elements: str
+        required: false
+      split_dns_manage_resolver:
+        description: >-
+          Stop and mask systemd-resolved and point /etc/resolv.conf at dnsmasq.
+        type: bool
+        required: false
+      split_dns_search_domain:
+        description: Search domain for /etc/resolv.conf. Empty writes none.
+        type: str
+        required: false
+      split_dns_verify_zones:
+        description: >-
+          Query each forwarded zone through the local resolver after
+          configuring, so a daemon that runs but answers nothing fails here.
+        type: bool
+        required: false
+      split_dns_cache_size:
+        type: int
+        required: false
+      split_dns_packages:
+        type: list
+        elements: str
+        required: false

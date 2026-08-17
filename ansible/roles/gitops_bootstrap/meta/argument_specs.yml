@@ -1,0 +1,123 @@
+---
+argument_specs:
+  main:
+    short_description: Attach the cluster to the cluster-state repository
+    description:
+      - Does the half of `flux bootstrap` that is still needed once Ansible
+        owns the repository content - installs the vendored Flux components,
+        gives Flux a read-only credential for the repository, and applies the
+        GitRepository and root Kustomization gitops_source rendered.
+      - Creates that credential as a project deploy token rather than reading a
+        personal access token from the environment, so nothing in the reconcile
+        path depends on a secret that was made by hand.
+      - Restores the Sealed Secrets sealing key first, because the controller
+        Flux is about to deploy generates its own if it finds none, and every
+        secret in the repository was sealed against the backed-up one.
+    options:
+      gitops_bootstrap_ca_file:
+        type: str
+        description:
+          - CA bundle Ansible's Python verifies internal HTTPS against.
+            Homebrew's Python does not read the system trust store, so this
+            has to be named rather than assumed.
+      gitops_bootstrap_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      gitops_bootstrap_gitlab_url:
+        type: str
+        description: Base URL of the GitLab instance.
+      gitops_bootstrap_gitlab_host:
+        type: str
+        required: true
+        description:
+          - Inventory name of the host GitLab runs on. The admin token is
+            minted there with gitlab-rails, which has no REST equivalent.
+      gitops_bootstrap_group:
+        type: str
+        default: platform
+        description: Group holding the cluster-state project.
+      gitops_bootstrap_project:
+        type: str
+        default: cluster-state
+        description: Project the cluster reconciles from.
+      gitops_bootstrap_branch:
+        type: str
+        default: main
+        description: Branch the GitRepository tracks.
+      gitops_bootstrap_work_dir:
+        type: str
+        description:
+          - The working clone gitops_source left behind. The two files applied
+            here come from it, so what is installed is what was pushed.
+      gitops_bootstrap_cluster_dir:
+        type: str
+        default: clusters/dev-lo
+        description:
+          - Path within the repository holding this cluster's flux-system
+            directory.
+      gitops_bootstrap_deploy_token_name:
+        type: str
+        default: flux-cluster-state
+        description: Name and username of the project deploy token.
+      gitops_bootstrap_deploy_token_scopes:
+        type: list
+        elements: str
+        description:
+          - Scopes on that token. Widening this list replaces the token on the
+            next run.
+      gitops_bootstrap_deploy_token_file:
+        type: str
+        description:
+          - Where the token value is recorded. GitLab returns it once, so this
+            is the only copy.
+      gitops_bootstrap_domain_ca_file:
+        type: str
+        description:
+          - The domain CA, which becomes the caFile in the Secret. Without it
+            the source controller rejects the repository's certificate and
+            reports what looks like a network fault.
+      gitops_bootstrap_namespace:
+        type: str
+        default: flux-system
+        description: Namespace Flux is installed into.
+      gitops_bootstrap_sealing_key_file:
+        type: str
+        description:
+          - Backup of the Sealed Secrets key pair, restored before Flux
+            deploys the controller.
+      gitops_bootstrap_sealing_key_label:
+        type: str
+        description:
+          - Label selector the controller finds its keys by, and therefore how
+            this role decides whether the cluster already has one.
+      gitops_bootstrap_kubectl:
+        type: str
+        description: The client and kubeconfig this role drives the cluster with.
+      gitops_bootstrap_force_install:
+        type: bool
+        default: false
+        description:
+          - Reinstall the Flux components even when they are already present.
+            For repairing a wedged installation; normally Flux reconciles its
+            own components from the repository.
+      gitops_bootstrap_controllers:
+        type: list
+        elements: str
+        description:
+          - Deployments waited on after the components are applied. Named
+            rather than discovered - waiting for whatever is present is
+            satisfied by an empty namespace.
+      gitops_bootstrap_ready_timeout:
+        type: int
+        default: 600
+        description:
+          - Seconds allowed for the controllers and the first repository
+            fetch. Generous on purpose - this is four image pulls through a
+            mirror onto storage at etcd's fsync floor.
+      gitops_bootstrap_no_log:
+        type: bool
+        default: true
+        description:
+          - Set false only when debugging; it exposes the repository
+            credential and the sealing key.

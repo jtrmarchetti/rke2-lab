@@ -1,0 +1,74 @@
+---
+# One commit per run that changed something, and none at all otherwise.
+#
+# "Otherwise" is the case worth protecting. A role that commits unconditionally
+# fills the reconcile source with empty commits, and Flux notices every one of
+# them: a new revision on the GitRepository restarts the reconcile of every
+# Kustomization that depends on it. On storage already at etcd's fsync floor
+# that is not free, and it makes the repository's history useless for the one
+# question it should answer — when did the cluster's declared state last
+# actually change.
+
+- name: commit | Stage the rendered tree # noqa: command-instead-of-module
+  changed_when: true
+  ansible.builtin.command:
+    cmd: "git -C {{ gitops_source_work_dir }} add --all"
+
+- name: commit | Look for a difference # noqa: command-instead-of-module
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_diff
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} diff --cached --quiet
+
+- name: commit | Summarise the difference # noqa: command-instead-of-module
+  when: _reg_gitops_source_diff['rc'] != 0
+  changed_when: false
+  register: _reg_gitops_source_diffstat
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} diff --cached --stat
+
+- name: commit | Show it
+  ansible.builtin.debug:
+    msg: >-
+      {{ _reg_gitops_source_diffstat['stdout_lines']
+         if _reg_gitops_source_diff['rc'] != 0
+         else 'cluster-state is already in sync with the template tree' }}
+    verbosity: 0
+
+- name: commit | Say so when the push is gated off
+  when:
+    - _reg_gitops_source_diff['rc'] != 0
+    - not (gitops_source_push | bool)
+  ansible.builtin.debug:
+    msg: >-
+      gitops_source_push is false — the diff above was rendered but not
+      committed. The working tree is at {{ gitops_source_work_dir }}.
+    verbosity: 0
+
+- name: commit | Commit and push
+  when:
+    - _reg_gitops_source_diff['rc'] != 0
+    - (gitops_source_push | bool)
+  block:
+    - name: commit | Create the commit # noqa: command-instead-of-module
+      changed_when: true
+      ansible.builtin.command:
+        cmd: >-
+          git -C {{ gitops_source_work_dir }} commit
+          -m "{{ gitops_source_commit_message }}"
+
+    # The branch is named on both sides rather than relying on a push default,
+    # because the working clone of an empty project has no upstream to infer
+    # one from and `git push` would fail on the very first run — the run where
+    # failing is least useful.
+    - name: commit | Push it # noqa: command-instead-of-module
+      changed_when: true
+      no_log: "{{ gitops_source_no_log | bool }}"
+      ansible.builtin.command:
+        cmd: >-
+          git -C {{ gitops_source_work_dir }} push
+          {{ _var_gitops_source_push_url }}
+          {{ gitops_source_branch }}:{{ gitops_source_branch }}

@@ -1,0 +1,118 @@
+---
+controller_runtime_enabled: true
+
+# --- system packages -------------------------------------------------------
+#
+# The same set bootstrap/controller-bootstrap.sh installs, declared again here
+# on purpose. The script runs once on a bare host; this role runs on every
+# pass, so a package removed or a host built some other way is corrected rather
+# than discovered later by a task that shells out to something missing.
+#
+# dnsmasq is not here: the split_dns role owns the resolver, including its
+# package, and two roles installing one package is how a conflict starts.
+controller_runtime_packages:
+  - ca-certificates
+  - curl
+  - git
+  - openssh-client
+  - python3-pip
+  - python3-venv
+  - rsync
+  # The tunnel to repo01. wg-quick and its unit come from here; the
+  # configuration comes from playbooks/tunnel_controller_access.yml.
+  - wireguard-tools
+
+# --- the automation virtual environment ------------------------------------
+#
+# The interpreter this repository's Ansible runs on. plan/CONTROLLER.md records
+# the alternative as the most fragile thing on this host: Ansible pip-installed
+# into Homebrew's Python, where `brew upgrade` moving python@3.14 to 3.15 takes
+# Ansible with it, and where the trust store is Homebrew's rather than the
+# system's — which is why controller_trust and openbao_config both have to pass
+# ca_path explicitly.
+#
+# Overridable with the same name the bootstrap script reads, so the two cannot
+# disagree about where it is.
+controller_runtime_venv: >-
+  {{ lookup('env', 'RKE2LAB_VENV')
+     | default(ansible_facts['env']['HOME'] ~ '/.venvs/rke2lab', true) }}
+# Named, not resolved: `python3` is whatever leads PATH, and on a host with
+# Homebrew that is Homebrew's Python. Ansible built on it segfaults inside
+# libpython during long runs. Keep this equal to the bootstrap script's PYTHON.
+controller_runtime_venv_command: /usr/bin/python3 -m venv
+
+# Pinned versions, in pip's own format, shared with the bootstrap script. One
+# file, two consumers, no drift.
+controller_runtime_requirements: bootstrap/requirements-controller.txt
+
+# The Ansible version the file above pins. Declared separately because the role
+# proves the virtual environment actually holds it rather than assuming the
+# install worked.
+controller_runtime_ansible_version: "13.4.0"
+
+# --- collections -----------------------------------------------------------
+#
+# One declared path. The controller has had each collection installed twice —
+# once here and once inside Homebrew's site-packages — with only the first ever
+# loaded. Identical versions made it harmless and invisible at the same time,
+# which is the condition under which one of them eventually gets upgraded alone.
+controller_runtime_collections_path: >-
+  {{ ansible_facts['env']['HOME'] }}/.ansible/collections
+controller_runtime_collections_requirements: ansible/requirements.yml
+
+# Whether the role refuses to run unless it was invoked from the virtual
+# environment it manages. Defaults to true: the failure this catches is a
+# controller that reconciles a virtual environment it is not itself using, so
+# the pins are correct and the Ansible actually running the lab is some other
+# copy entirely.
+controller_runtime_require_managed_venv: true
+
+# --- Pulumi ----------------------------------------------------------------
+#
+# The IaC half of the rebuild path: every VM in the environment is created by
+# it, so a controller without it can configure the lab but cannot create it.
+#
+# Pinned and checksummed like every other artifact in this repository. The
+# checksum is the one Pulumi publishes in pulumi-<version>-checksums.txt.
+#
+# Installed from upstream rather than staged on repo01, and that is not a hole
+# in the artifact rule: repo01 is a VM this tool creates, so a Pulumi that came
+# from repo01 could never build the host serving it. The rule constrains
+# internal nodes, and this host is outside the Proxmox environment.
+controller_runtime_pulumi_enabled: true
+controller_runtime_pulumi_version: 3.256.0
+controller_runtime_pulumi_url: null
+controller_runtime_pulumi_sha256: >-
+  fe4afd4cda48f7fe06961268834caf78fb1efa8b31ee61ad00ee2e6cfa91caea
+controller_runtime_pulumi_home: >-
+  {{ ansible_facts['env']['HOME'] }}/.pulumi
+
+# The project's own virtual environment, separate from the automation one above
+# because they pin different things for different reasons: this one tracks the
+# Proxmox provider, that one tracks Ansible.
+controller_runtime_pulumi_project_dir: infra/pulumi
+controller_runtime_pulumi_project_venv: infra/pulumi/.venv
+controller_runtime_pulumi_project_requirements: infra/pulumi/requirements.txt
+
+# --- shell integration -----------------------------------------------------
+#
+# Written to a file this role owns and sourced from the user's startup files by
+# one marked block, the same shape kube_cli_controller uses. Export lines
+# written straight into a personal dotfile cannot be updated or removed cleanly
+# later, and those files belong to the user rather than to this repository.
+controller_runtime_shell_enabled: true
+controller_runtime_config_dir: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab
+
+# The file this role writes and the startup files source. Named as its own
+# input so the shell snippet that references it twice stays readable.
+controller_runtime_env_file: >-
+  {{ controller_runtime_config_dir | trim }}/controller-env.sh
+
+# Both files, for the reason kube_cli_controller documents: Ubuntu's ~/.bashrc
+# returns at the top for a non-interactive shell, so only ~/.profile covers
+# `ssh controller ...` and cron, while an interactive non-login shell reads only
+# ~/.bashrc. Neither alone covers both, and the snippet is safe to source twice.
+controller_runtime_shell_rc_files:
+  - "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+  - "{{ ansible_facts['env']['HOME'] }}/.profile"

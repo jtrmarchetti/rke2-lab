@@ -1,0 +1,3 @@
+---
+# No handlers. What this role installs is reconciled by Flux from that point
+# on, so there is nothing here whose change another task should react to.

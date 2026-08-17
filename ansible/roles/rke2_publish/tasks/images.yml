@@ -1,0 +1,33 @@
+---
+# Works out what the GitLab registry already holds, then hands each image set to
+# image_set.yml. The tarballs are hundreds of megabytes and loading one costs
+# minutes, so a set whose images are all present is never opened at all — which
+# is what makes a second run of this role fast as well as clean.
+
+- name: images | Read what the registry already holds
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_existing
+  until: _reg_rke2_publish_existing['status'] | default(0) == 200
+  retries: "{{ rke2_publish_api_retries }}"
+  delay: "{{ rke2_publish_api_delay }}"
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: >-
+      {{ _var_rke2_publish_api }}/projects/{{ _var_rke2_publish_images_path
+      }}/registry/repositories?tags=true&per_page={{
+      _var_rke2_publish_page_size }}
+    headers: "{{ _var_rke2_publish_headers }}"
+
+- name: images | Report what the registry holds
+  ansible.builtin.debug:
+    msg: >-
+      registry holds {{ _var_rke2_publish_existing_refs | length }} tags across
+      {{ _reg_rke2_publish_existing['json'] | length }} repositories
+    verbosity: 0
+
+- name: images | Publish each image set
+  loop: "{{ rke2_publish_image_sets + rke2_publish_extra_images }}"
+  loop_control:
+    loop_var: _item_rke2_publish_set
+    label: "{{ _item_rke2_publish_set['name'] }}"
+  ansible.builtin.include_tasks: image_set.yml

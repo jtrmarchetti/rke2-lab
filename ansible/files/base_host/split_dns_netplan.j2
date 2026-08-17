@@ -1,0 +1,25 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+# Managed by Ansible (base_host role). Do not edit by hand.
+#
+# Split DNS. Upstream names resolve through the resolvers configured by cloud-init on
+# the default route. Queries for the domains listed below are routed to the internal
+# resolvers reachable on {{ base_host_split_dns_interface }} instead.
+#
+# This is required because core01 runs FreeIPA with no external forwarders, so it can
+# answer for {{ base_host_split_dns_domains | join(', ') }} and nothing else. A host that
+# needs both internal and upstream resolution must therefore split the two, rather than
+# list both resolvers and rely on fallback that never happens: a resolver returning
+# NXDOMAIN is treated as authoritative, so the second entry is never consulted.
+network:
+  version: 2
+  ethernets:
+    {{ base_host_split_dns_interface }}:
+      nameservers:
+        addresses:
+        {% for _item_base_host_server in base_host_split_dns_servers %}
+          - {{ _item_base_host_server }}
+        {% endfor %}
+        search:
+        {% for _item_base_host_domain in base_host_split_dns_domains %}
+          - {{ _item_base_host_domain }}
+        {% endfor %}

@@ -1,0 +1,92 @@
+---
+# Read before create, rather than creating and treating the resulting 400 as
+# success. A create-then-ignore-the-error shape reports `changed` on every run
+# and cannot tell "already exists" apart from "the request was malformed".
+- name: gitlab_project | Look for the group
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_group_get
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: "{{ _var_rke2_publish_api }}/groups/{{ _var_rke2_publish_group_path }}"
+    headers: "{{ _var_rke2_publish_headers }}"
+    status_code: [200, 404]
+
+- name: gitlab_project | Create the group
+  when: _reg_rke2_publish_group_get['status'] == 404
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_group_new
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: "{{ _var_rke2_publish_api }}/groups"
+    method: POST
+    headers: "{{ _var_rke2_publish_headers }}"
+    body_format: form-urlencoded
+    body:
+      name: "{{ rke2_publish_group }}"
+      path: "{{ rke2_publish_group }}"
+      visibility: private
+      description: >-
+        RKE2 artifact set mirrored from repo01. Phase 4.
+    status_code: [201]
+
+- name: gitlab_project | Re-read the group
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_group_final
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: "{{ _var_rke2_publish_api }}/groups/{{ _var_rke2_publish_group_path }}"
+    headers: "{{ _var_rke2_publish_headers }}"
+
+- name: gitlab_project | Look for each project
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_projects_get
+  loop:
+    - "{{ rke2_publish_images_project }}"
+    - "{{ rke2_publish_packages_project }}"
+    - "{{ rke2_publish_charts_project }}"
+  loop_control:
+    loop_var: _item_rke2_publish_project
+    label: "{{ rke2_publish_group }}/{{ _item_rke2_publish_project }}"
+  vars:
+    _rke2_publish_project_path: >-
+      {{ (rke2_publish_group ~ '/' ~ _item_rke2_publish_project) | replace('/', '%2F') }}
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: "{{ _var_rke2_publish_api }}/projects/{{ _rke2_publish_project_path }}"
+    headers: "{{ _var_rke2_publish_headers }}"
+    status_code: [200, 404]
+
+- name: gitlab_project | Create the missing projects
+  when: _item_rke2_publish_lookup['status'] == 404
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  loop: "{{ _reg_rke2_publish_projects_get['results'] }}"
+  loop_control:
+    loop_var: _item_rke2_publish_lookup
+    label: "{{ rke2_publish_group }}/{{ _item_rke2_publish_lookup['_item_rke2_publish_project'] }}"
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: "{{ _var_rke2_publish_api }}/projects"
+    method: POST
+    headers: "{{ _var_rke2_publish_headers }}"
+    body_format: form-urlencoded
+    body:
+      name: "{{ _item_rke2_publish_lookup['_item_rke2_publish_project'] }}"
+      path: "{{ _item_rke2_publish_lookup['_item_rke2_publish_project'] }}"
+      namespace_id: "{{ _reg_rke2_publish_group_final['json']['id'] }}"
+      visibility: private
+      # Nothing is developed in these projects; they are distribution points.
+      # Leaving the features on would advertise issue trackers and merge
+      # requests that no one will ever read.
+      issues_enabled: false
+      merge_requests_enabled: false
+      wiki_enabled: false
+    status_code: [201]
+
+- name: gitlab_project | Read the packages project identifier
+  no_log: "{{ rke2_publish_no_log | bool }}"
+  register: _reg_rke2_publish_packages_project_get
+  ansible.builtin.uri:
+    timeout: "{{ rke2_publish_api_timeout }}"
+    url: >-
+      {{ _var_rke2_publish_api }}/projects/{{ _var_rke2_publish_packages_path }}
+    headers: "{{ _var_rke2_publish_headers }}"

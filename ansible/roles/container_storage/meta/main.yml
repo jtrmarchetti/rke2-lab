@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: container_storage
+  author: devops
+  description: >-
+    Keep the Docker and containerd data roots on the data volume rather than
+    the OS disk, relocating existing state when it is found in place.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []
+
+collections:
+  - ansible.posix

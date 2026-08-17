@@ -1,0 +1,10 @@
+---
+- name: config | Render the RKE2 server configuration
+  no_log: true
+  notify: Restart the RKE2 server
+  ansible.builtin.template:
+    src: "{{ _var_rke2_server_files_dir }}/config.yaml.j2"
+    dest: /etc/rancher/rke2/config.yaml
+    owner: root
+    group: root
+    mode: "0600"

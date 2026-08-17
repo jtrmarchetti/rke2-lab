@@ -1,0 +1,119 @@
+---
+- name: main | Assert the data directory is present
+  when: (kube_cli_node_enabled | bool)
+  register: _reg_kube_cli_node_bin
+  ansible.builtin.stat:
+    path: "{{ kube_cli_node_data_dir }}/bin"
+
+- name: main | Fail early if RKE2 has not been installed yet
+  when: (kube_cli_node_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - _reg_kube_cli_node_bin['stat']['exists'] | default(false)
+    fail_msg: >-
+      {{ kube_cli_node_data_dir }}/bin does not exist, so there are no binaries
+      to link. This role configures access to an RKE2 installation; it does not
+      install one. Run the rke2_node role first.
+    quiet: true
+
+# Only the binaries that are actually there. ctr ships with the server and the
+# agent, but linking a name that does not exist would leave a broken symlink
+# that reports "No such file or directory" for the link rather than for the
+# target, which is a needlessly confusing way to find out.
+- name: main | Check which RKE2 binaries this node has
+  when: (kube_cli_node_enabled | bool)
+  register: _reg_kube_cli_node_present
+  loop: "{{ kube_cli_node_binaries }}"
+  loop_control:
+    loop_var: _item_kube_cli_node_binary
+  ansible.builtin.stat:
+    path: "{{ kube_cli_node_data_dir }}/bin/{{ _item_kube_cli_node_binary }}"
+
+- name: main | Link the RKE2 binaries onto the default PATH
+  when:
+    - (kube_cli_node_enabled | bool)
+    - _item_kube_cli_node_stat['stat']['exists'] | default(false)
+  loop: "{{ _reg_kube_cli_node_present['results'] | default([]) }}"
+  loop_control:
+    loop_var: _item_kube_cli_node_stat
+    label: "{{ _item_kube_cli_node_stat['_item_kube_cli_node_binary'] }}"
+  ansible.builtin.file:
+    src: "{{ kube_cli_node_data_dir }}/bin/{{ _item_kube_cli_node_stat['_item_kube_cli_node_binary'] }}"
+    dest: "{{ kube_cli_node_link_dir }}/{{ _item_kube_cli_node_stat['_item_kube_cli_node_binary'] }}"
+    state: link
+    owner: root
+    group: root
+
+# So crictl needs no --runtime-endpoint. RKE2 puts containerd's socket somewhere
+# crictl does not guess, which is why every crictl line in this repository's
+# runbooks carries the flag.
+- name: main | Configure crictl to find containerd
+  when: (kube_cli_node_enabled | bool)
+  ansible.builtin.template:
+    src: "{{ _var_kube_cli_node_files_dir }}/crictl.yaml.j2"
+    dest: /etc/crictl.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Install the interactive shell environment
+  when: (kube_cli_node_enabled | bool)
+  ansible.builtin.template:
+    src: "{{ _var_kube_cli_node_files_dir }}/rke2-cli.sh.j2"
+    dest: /etc/profile.d/rke2-cli.sh
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: main | Ensure the completion directory exists
+  when:
+    - (kube_cli_node_enabled | bool)
+    - (kube_cli_node_kubeconfig | length) > 0
+  ansible.builtin.file:
+    path: /etc/bash_completion.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Generated from the binary rather than shipped as a file, so it always matches
+# the installed version. Servers only: an agent has no kubeconfig, so it has
+# nothing for kubectl to complete against.
+#
+# Regenerated every run and then copied, rather than guarded with `creates`.
+# `creates` would be idempotent but would also never notice an RKE2 upgrade, so
+# the completion would silently describe the previous version's kubectl. The
+# copy is what keeps the run honest about whether anything changed.
+- name: main | Generate the kubectl shell completion
+  when:
+    - (kube_cli_node_enabled | bool)
+    - (kube_cli_node_kubeconfig | length) > 0
+  changed_when: false
+  ansible.builtin.shell:
+    cmd: >-
+      {{ kube_cli_node_link_dir }}/kubectl completion bash
+      > /tmp/kubectl-completion.new
+
+- name: main | Install the completion only if it changed
+  when:
+    - (kube_cli_node_enabled | bool)
+    - (kube_cli_node_kubeconfig | length) > 0
+  ansible.builtin.copy:
+    src: /tmp/kubectl-completion.new
+    dest: /etc/bash_completion.d/kubectl
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+# changed_when: false because this removes a file this role created moments
+# ago, not anything describing the state of the host. Reporting it as a change
+# would make every run report changed forever and hide real drift.
+- name: main | Remove the generated scratch file
+  when:
+    - (kube_cli_node_enabled | bool)
+    - (kube_cli_node_kubeconfig | length) > 0
+  changed_when: false
+  ansible.builtin.file:
+    path: /tmp/kubectl-completion.new
+    state: absent

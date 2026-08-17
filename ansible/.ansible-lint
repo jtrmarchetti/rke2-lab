@@ -1,0 +1,31 @@
+---
+exclude_paths:
+  # Vendored upstream Flux component set, pinned and copied verbatim. Its
+  # formatting is upstream's business, and reformatting it would defeat the
+  # point of pinning it.
+  - files/gitops_source/cluster-state-static/
+
+skip_list:
+  # This repository orders task keys name -> controls -> module -> vars, so the
+  # module and its arguments stay one unbroken block and a reader sees whether
+  # a task runs before reading what it does. ansible-lint prescribes a
+  # different order. See plan/ANSIBLE_STANDARDS.md.
+  - key-order[task]
+
+  # Task names are prefixed with the file they live in — `main | Ensure ...` —
+  # so a failure names the file to open. That makes the first character
+  # lowercase, which this rule reads as a sentence-casing mistake.
+  - name[casing]
+
+  # Internal role variables are spelled `_var_`, `_reg_` and `_item_` by their
+  # role rather than by the role name alone, so where a value comes from is
+  # readable at the point of use. This rule expects the role name first. The
+  # role's public parameters — the ones this rule exists to protect — do carry
+  # the role prefix. See plan/ANSIBLE_STANDARDS.md.
+  - var-naming[no-role-prefix]
+
+  # The naming scheme above makes some expressions unavoidably wide — a task
+  # that indexes a registered result by the producing loop's variable cannot be
+  # written short. Readability of the name wins over the column limit.
+  - yaml[line-length]
+  - line-length

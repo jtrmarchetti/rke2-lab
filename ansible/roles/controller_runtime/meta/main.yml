@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: controller_runtime
+  author: rke2lab
+  description: >-
+    Puts the automation controller's own runtime under automation: system
+    packages, the pinned Ansible virtual environment and collections, the
+    Pulumi CLI and its project environment, and the shell that finds them.
+    Everything a rebuild needs on the host that performs the rebuild.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - bootstrap
+    - python
+    - pulumi
+
+dependencies: []

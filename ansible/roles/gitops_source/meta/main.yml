@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: gitops_source
+  author: rke2lab
+  description: >-
+    Renders the cluster-state GitOps tree from this repository and pushes it
+    into GitLab, so that the automation repository is the source of truth for
+    what the cluster runs and GitLab holds a rendering of it. Creates the
+    project, wipes and re-renders the working tree so deletions propagate,
+    seals every secret at play time from plaintext held on the controller, and
+    commits only when something actually changed.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - gitops
+    - flux
+    - gitlab
+    - kubernetes
+
+dependencies: []

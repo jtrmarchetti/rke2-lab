@@ -1,0 +1,184 @@
+---
+# Every SealedSecret in the tree, produced here rather than carried as
+# ciphertext.
+#
+# The alternative — committing the sealed files into this repository the way
+# the manifests are committed — looks equivalent and is not. Ciphertext is only
+# ever decryptable by the sealing key that produced it, so a cluster rebuilt
+# with a fresh Sealed Secrets key would find every secret in its own history
+# useless, and the rebuild would stop at the first component that needs a
+# credential. Sealing at play time makes the plaintext the source and the
+# ciphertext a build product, which is the same relationship every other file
+# in the rendered tree has with its template.
+#
+# It costs idempotence unless something is done about it: sealing is randomised
+# — a fresh session key per invocation — so re-sealing unchanged values would
+# produce a different ciphertext and therefore a commit on every single run.
+# The fix is available only because this host holds the sealing key backup:
+# the committed ciphertext is decrypted and compared, and re-sealed only when
+# the plaintext actually differs. A run that changes nothing pushes nothing.
+
+- name: seal | Write the sealing certificate where kubeseal can read it
+  register: _reg_gitops_source_cert_file
+  ansible.builtin.tempfile:
+    state: file
+    suffix: .crt
+
+- name: seal | Populate it from the backed-up key pair
+  ansible.builtin.copy:
+    content: "{{ _var_gitops_source_sealing_cert }}"
+    dest: "{{ _reg_gitops_source_cert_file['path'] }}"
+    mode: "0600"
+
+- name: seal | Read the committed ciphertext # noqa: command-instead-of-module
+  changed_when: false
+  # Absent on the first run, when there is no HEAD, and absent for any entry
+  # added since the last one. Both are ordinary, so neither is an error.
+  failed_when: false
+  no_log: "{{ gitops_source_no_log | bool }}"
+  register: _reg_gitops_source_prev
+  loop: "{{ _var_gitops_source_sealed_secrets }}"
+  loop_control:
+    loop_var: _item_gitops_source_secret
+    label: "{{ _item_gitops_source_secret['path'] }}"
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} show
+      HEAD:{{ _item_gitops_source_secret['path'] }}
+
+- name: seal | Decrypt it with the backed-up private key
+  when: _item_gitops_source_result['rc'] == 0
+  changed_when: false
+  # A committed file this key cannot decrypt is not a failure either: it means
+  # the sealing key was rotated out from under it, and the answer is to re-seal
+  # rather than to stop.
+  failed_when: false
+  no_log: "{{ gitops_source_no_log | bool }}"
+  register: _reg_gitops_source_prev_plain
+  loop: "{{ _reg_gitops_source_prev['results'] }}"
+  loop_control:
+    loop_var: _item_gitops_source_result
+    label: >-
+      {{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}
+  ansible.builtin.command:
+    cmd: >-
+      {{ gitops_source_bin_dir }}/kubeseal --recovery-unseal
+      --recovery-private-key {{ gitops_source_sealing_key_file }}
+      -o yaml
+    stdin: "{{ _item_gitops_source_result['stdout'] }}"
+
+# Reset first. The list below is built by appending to itself, and a fact
+# outlives the play that set it — so a second run of this role in the same
+# invocation starts from the first run's answers and appends to them. That is
+# not hypothetical: playbooks/site.yml imports gitops.yml twice, deliberately,
+# and the second pass exists because the vault keys were sealed in between. The
+# indexes would then address the first pass's decisions, and a secret that
+# changed between the two would keep its stale ciphertext.
+- name: seal | Forget any decisions from an earlier pass
+  ansible.builtin.set_fact:
+    _gitops_source_reuse: []
+
+# Booleans only. The comparison needs the plaintext on both sides, and a fact
+# is the wrong place for that, so what is kept is the answer and not the
+# working.
+- name: seal | Decide which entries can keep their committed ciphertext
+  no_log: "{{ gitops_source_no_log | bool }}"
+  loop: >-
+    {{ _var_gitops_source_sealed_secrets
+       | zip(_reg_gitops_source_prev_plain['results']) | list }}
+  loop_control:
+    loop_var: _item_gitops_source_result
+    label: "{{ _item_gitops_source_result[0]['path'] }}"
+  vars:
+    _gitops_source_entry: "{{ _item_gitops_source_result[0] }}"
+    _gitops_source_was: >-
+      {{ (_item_gitops_source_result[1]['stdout'] | default('') | from_yaml) | default({}, true) }}
+    _gitops_source_want: >-
+      {{ dict(_gitops_source_entry['data'].keys()
+              | zip(_gitops_source_entry['data'].values()
+                    | map('string') | map('b64encode'))) }}
+  ansible.builtin.set_fact:
+    _gitops_source_reuse: >-
+      {{ (_gitops_source_reuse | default([]))
+         + [_item_gitops_source_result[1]['rc'] | default(1) == 0
+            and _gitops_source_was.get('data', {})
+                == _gitops_source_want
+            and _gitops_source_was.get('metadata', {}).get('name')
+                == _gitops_source_entry['name']
+            and _gitops_source_was.get('metadata', {}).get('namespace')
+                == _gitops_source_entry['namespace']
+            and _gitops_source_was.get('type', 'Opaque')
+                == _gitops_source_entry['type']] }}
+
+- name: seal | Report what will be re-sealed
+  ansible.builtin.debug:
+    msg: >-
+      {{ _var_gitops_source_sealed_secrets | length }} sealed secrets:
+      {{ _gitops_source_reuse | select | list | length }} unchanged,
+      {{ _gitops_source_reuse | reject | list | length }} re-sealed
+    verbosity: 0
+
+# The unchanged ones go back exactly as they were, ciphertext and header
+# together. Re-encrypting them would be correct and would still churn the
+# commit, which is the thing being avoided.
+- name: seal | Restore the ciphertext that has not changed
+  when: _gitops_source_reuse[loop_index] | bool
+  no_log: "{{ gitops_source_no_log | bool }}"
+  loop: "{{ _reg_gitops_source_prev['results'] }}"
+  loop_control:
+    loop_var: _item_gitops_source_result
+    label: >-
+      {{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}
+    index_var: loop_index
+  ansible.builtin.copy:
+    content: "{{ _item_gitops_source_result['stdout'] }}\n"
+    dest: "{{ gitops_source_work_dir }}/{{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}"
+    mode: "0644"
+
+- name: seal | Seal the ones that changed
+  when: not (_gitops_source_reuse[loop_index] | bool)
+  changed_when: true
+  no_log: "{{ gitops_source_no_log | bool }}"
+  register: _reg_gitops_source_sealed
+  loop: "{{ _var_gitops_source_sealed_secrets }}"
+  loop_control:
+    loop_var: _item_gitops_source_secret
+    label: "{{ _item_gitops_source_secret['path'] }}"
+    index_var: loop_index
+  vars:
+    _gitops_source_secret:
+      apiVersion: v1
+      kind: Secret
+      type: "{{ _item_gitops_source_secret['type'] }}"
+      metadata:
+        name: "{{ _item_gitops_source_secret['name'] }}"
+        namespace: "{{ _item_gitops_source_secret['namespace'] }}"
+      stringData: "{{ _item_gitops_source_secret['data'] }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ gitops_source_bin_dir }}/kubeseal
+      --cert {{ _reg_gitops_source_cert_file['path'] }} -o yaml
+    stdin: "{{ _gitops_source_secret | to_nice_yaml }}"
+
+# The comment is prepended here rather than passed through kubeseal, which
+# emits bare YAML and would drop it. Without this the generated files are the
+# only ones in the repository that arrive with no explanation of what they are.
+- name: seal | Write the sealed output with its header
+  when: not (_item_gitops_source_result['skipped'] | default(false))
+  no_log: "{{ gitops_source_no_log | bool }}"
+  loop: "{{ _reg_gitops_source_sealed['results'] }}"
+  loop_control:
+    loop_var: _item_gitops_source_result
+    label: >-
+      {{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}
+  ansible.builtin.copy:
+    content: |
+      {{ _item_gitops_source_result['_item_gitops_source_secret']['comment'] }}
+      {{ _item_gitops_source_result['stdout'] }}
+    dest: "{{ gitops_source_work_dir }}/{{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}"
+    mode: "0644"
+
+- name: seal | Remove the sealing certificate
+  ansible.builtin.file:
+    path: "{{ _reg_gitops_source_cert_file['path'] }}"
+    state: absent

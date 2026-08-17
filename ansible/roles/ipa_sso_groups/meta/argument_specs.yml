@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: Create the FreeIPA groups that authorise each application
+    description:
+      - Creates two groups per federated application, an administrator group
+        and a user group, in the directory that already holds the accounts.
+      - Never adds or removes a member. Membership is a decision about people;
+        automation that asserted it would fight every change made in the
+        domain.
+      - Reads every group back and fails on any that is missing, because an
+        absent group presents downstream as a user who authenticates and is
+        then refused.
+    options:
+      ipa_sso_groups_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      ipa_sso_groups_ipa_host:
+        type: str
+        required: true
+        description: Inventory name of the identity host.
+      ipa_sso_groups_ipa_container:
+        type: str
+        required: true
+        description: Container the directory tools run in.
+      ipa_sso_groups_admin_user:
+        type: str
+        default: admin
+        description: IPA account the groups are created as.
+      ipa_sso_groups_admin_password:
+        type: str
+        required: true
+        description:
+          - IPA admin password, from FREEIPA_ADMIN_PASSWORD in the
+            controller's env.sh.
+      ipa_sso_groups_applications:
+        type: list
+        elements: dict
+        default: []
+        description:
+          - The applications to create groups for. Each entry takes `name`, the
+            slug the group names and the Keycloak client id are derived from,
+            and `description`, written into the group description.
+          - The element shape is deliberately not declared as sub-options. This
+            is the same list keycloak_clients is given, and that role needs
+            several more keys per entry — redirect URIs, a client secret —
+            which argument spec validation would reject here as unsupported
+            parameters. One list passed to both roles is the point; a spec that
+            forced two lists would defeat it.
+      ipa_sso_groups_admin_suffix:
+        type: str
+        default: admins
+        description:
+          - Suffix appended to a slug for the administrator group. Must match
+            keycloak_clients, which derives the same names.
+      ipa_sso_groups_user_suffix:
+        type: str
+        default: users
+        description: Suffix appended to a slug for the user group.
+      ipa_sso_groups_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints the password.

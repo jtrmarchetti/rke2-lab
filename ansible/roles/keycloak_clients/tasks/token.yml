@@ -1,0 +1,35 @@
+---
+# A fresh administrator token.
+#
+# Included repeatedly rather than obtained once, and that is not defensiveness:
+# **Keycloak's `master` realm issues access tokens with a 60 second lifespan by
+# default**, and this role makes roughly a dozen API calls per application. Held
+# from the start of the run, the token expires partway through and Keycloak
+# answers 401 — on whichever call happens to be in flight when the minute runs
+# out, which moves with the number of applications and with how fast the
+# directory answers. It is the least reproducible shape a failure can have, and
+# it leaves the realm half configured: earlier applications complete, later ones
+# do not, and the run reports a failure that looks like a permissions problem.
+#
+# Refreshing costs one cheap call at each point where a slow step might have
+# just happened. Raising `accessTokenLifespan` on `master` would also work and
+# is the wrong fix — that realm's token lifetime is a security property of the
+# administrative realm, not a knob for this role's convenience.
+#
+# Always against `master`, whatever realm is being configured: that is where
+# Keycloak's local break-glass administrator lives.
+
+- name: token | Obtain an admin token
+  no_log: "{{ keycloak_clients_no_log | bool }}"
+  register: _reg_keycloak_clients_token
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_clients_url }}/realms/master/protocol/openid-connect/token
+    method: POST
+    ca_path: "{{ keycloak_clients_ca_file }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_clients_admin_user }}"
+      password: "{{ keycloak_clients_admin_password }}"

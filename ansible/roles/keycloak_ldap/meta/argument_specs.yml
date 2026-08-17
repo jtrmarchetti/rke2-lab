@@ -1,0 +1,113 @@
+---
+argument_specs:
+  main:
+    short_description: Federate Keycloak to FreeIPA over LDAP
+    description:
+      - Creates a read-only bind system account under cn=sysaccounts in
+        FreeIPA, which has no POSIX identity and cannot log in anywhere.
+      - Proves the account can read the user tree, because an account that
+        exists and cannot search presents as a successful connection to an
+        empty directory.
+      - Configures Keycloak's user federation provider and asks Keycloak to
+        test both the connection and the bind.
+    options:
+      keycloak_ldap_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      keycloak_ldap_ipa_host:
+        type: str
+        default: core01
+        description: Inventory name of the identity host.
+      keycloak_ldap_ipa_container:
+        type: str
+        default: freeipa-server
+        description: Container the directory tools run in.
+      keycloak_ldap_base_dn:
+        type: str
+        description: Base DN of the domain.
+      keycloak_ldap_users_dn:
+        type: str
+        description: Subtree Keycloak reads users from.
+      keycloak_ldap_groups_dn:
+        type: str
+        description:
+          - Subtree Keycloak reads groups from. In FreeIPA this is
+            cn=groups,cn=accounts, not beside the users.
+      keycloak_ldap_bind_user:
+        type: str
+        default: keycloak
+        description: uid of the bind system account.
+      keycloak_ldap_dir_manager_password:
+        type: str
+        required: true
+        description:
+          - Directory Manager password. The only operation in this repository
+            that needs it, because FreeIPA has no CLI for system accounts.
+      keycloak_ldap_bind_password:
+        type: str
+        required: true
+        description: Password set on, and used by, the bind account.
+      keycloak_ldap_configure_keycloak:
+        type: bool
+        default: true
+        description:
+          - Set false to create and verify the bind account without touching
+            Keycloak, for a cluster whose Keycloak is not yet running.
+      keycloak_ldap_url:
+        type: str
+        description: Keycloak's base URL.
+      keycloak_ldap_ca_file:
+        type: str
+        description: CA bundle Keycloak's certificate is verified against.
+      keycloak_ldap_realm:
+        type: str
+        description:
+          - Realm the federation is added to, created by keycloak_realm. Must
+            not be master; federated end users do not belong in the realm that
+            administers every other realm.
+      keycloak_ldap_admin_user:
+        type: str
+        default: admin
+        description: Keycloak admin account.
+      keycloak_ldap_admin_password:
+        type: str
+        description: Keycloak admin password, from OpenBao.
+      keycloak_ldap_provider_name:
+        type: str
+        default: freeipa
+        description: Name of the federation provider in Keycloak.
+      keycloak_ldap_connection_url:
+        type: str
+        description: LDAP URL of the directory.
+      keycloak_ldap_first_name_mapper:
+        type: str
+        default: first name
+        description: Name of the generated mapper to correct.
+      keycloak_ldap_first_name_attribute:
+        type: str
+        default: givenName
+        description:
+          - Directory attribute holding the given name. Keycloak's rhds default
+            is cn, which in FreeIPA is the full name.
+      keycloak_ldap_group_mapper_enabled:
+        type: bool
+        default: true
+        description:
+          - Federate FreeIPA's groups as well as its users. Without it Keycloak
+            can say who someone is and nothing about what they may do.
+      keycloak_ldap_group_mapper_name:
+        type: str
+        default: freeipa-groups
+        description: Name of the group mapper on the federation provider.
+      keycloak_ldap_group_sync:
+        type: bool
+        default: true
+        description:
+          - Import groups now rather than at a later synchronisation. Keycloak
+            imports on sync and not on login, so a group created moments ago is
+            otherwise invisible to keycloak_clients.
+      keycloak_ldap_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints credentials.

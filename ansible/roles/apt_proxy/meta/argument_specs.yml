@@ -1,0 +1,35 @@
+---
+argument_specs:
+  main:
+    short_description: Apt caching proxy inputs; never mirrors a repository.
+    options:
+      apt_proxy_enabled:
+        type: bool
+        required: false
+      apt_proxy_bind_addresses:
+        description: Addresses the proxy listens on. Internal and tunnel only.
+        type: list
+        elements: str
+        required: false
+      apt_proxy_bind_port:
+        type: int
+        required: false
+      apt_proxy_cache_dir:
+        description: On-demand cache location, placed on the data volume.
+        type: str
+        required: false
+      apt_proxy_log_dir:
+        type: str
+        required: false
+      apt_proxy_expire_days:
+        description: Days before unreferenced cached files are expired.
+        type: int
+        required: false
+      apt_proxy_keep_extra_versions:
+        description: Number of superseded package versions retained.
+        type: int
+        required: false
+      apt_proxy_passthrough_pattern:
+        description: Hosts permitted for CONNECT tunneling. Keep this narrow.
+        type: str
+        required: false

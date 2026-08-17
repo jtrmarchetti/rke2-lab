@@ -1,0 +1,13 @@
+---
+# The only tasks in this role that need root. Everything else is user-level and
+# lands under ~/.venvs, ~/.pulumi and ~/.config, so operating and rebuilding the
+# lab needs no privilege on this machine and nothing here is inherited by a
+# second user by accident.
+
+- name: packages | Ensure the controller's system packages are installed
+  become: true
+  ansible.builtin.apt:
+    name: "{{ controller_runtime_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600

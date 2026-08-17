@@ -1,0 +1,44 @@
+{{ ansible_managed | comment }}
+#
+# Values for RKE2's packaged Traefik chart. RKE2 deploys the chart itself once
+# `ingress-controller: traefik` selects it; this supplies values without taking
+# ownership of the chart.
+#
+# Traefik rather than ingress-nginx because ingress-nginx reached end of life in
+# March 2026 and RKE2 makes Traefik the default for new clusters at v1.36. See
+# plan/PHASE5_IMPLEMENTATION.md.
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # Ingress belongs on the workers. The control plane's CriticalAddonsOnly
+    # taint would keep Traefik off it in most cases anyway, but only if this
+    # chart happens not to tolerate that taint — which is a property of
+    # someone else's chart and not a thing to depend on. Stating the selector
+    # makes the placement a decision rather than a side effect.
+    nodeSelector:
+      {{ rke2_server_ingress_node_selector }}: "true"
+    # Phase 6b. A single address for every ingress hostname, allocated by
+    # kube-vip's cloud provider and requested by name so it does not move.
+    # The cluster's own DNS answers every single-label name under k8s.dev.lo
+    # with exactly this address, which is why it is pinned rather than taken
+    # from the pool in whatever order services happen to appear.
+    #
+    # The DaemonSet keeps its host ports as well. They are how ingress worked
+    # before this address existed, and a node address that still answers is
+    # worth keeping for the case where the announcement is the thing that has
+    # failed.
+    #
+    # `service.spec.type`, not `service.type`. This chart nests the Service's
+    # spec under a `spec` key and defaults it to ClusterIP; a value set at
+    # `service.type` is accepted, ignored, and leaves the Service exactly as it
+    # was, which reads as the annotation being wrong rather than the key.
+    service:
+      spec:
+        type: LoadBalancer
+      annotations:
+        kube-vip.io/loadbalancerIPs: "{{ rke2_server_ingress_address }}"

@@ -1,0 +1,180 @@
+{{ ansible_managed | comment }}
+# OpenBao 2.6.1, single node, Raft on the two-replica Longhorn class.
+#
+# OpenBao rather than Vault: it is the Linux Foundation's MPL-2.0 fork of
+# Vault's last open-licensed release, API-compatible, and the Enterprise-gated
+# features it lacks are not used here. Same reasoning that put GitLab CE in
+# this lab, and it matters more in a regulated environment rather than less.
+#
+# 2.6.1 rather than the newest release, and that is the seal decision showing
+# up as a version pin: PKCS#11 is compiled into the 2.6.x line and becomes a
+# separately distributed plugin from 2.7.0. Staying on 2.6.x keeps a future
+# move to a software or hardware HSM a configuration change rather than an
+# artifact this air-gapped cluster would have to already hold.
+#
+# Single node, not HA, and the reason is the storage. Raft fsyncs per commit —
+# the same write pattern that forced etcd's heartbeat and election timeouts up
+# in Phase 4 — and Longhorn replicates synchronously, so one commit is already
+# two fsyncs on storage measured at 32-50 fsync/s. An HA trio would multiply
+# that again to protect a dev lab against a failure a snapshot restore covers.
+#
+# It runs on `longhorn`, not `longhorn-single`. One replica would be the
+# fastest storage in this cluster and it is exactly the wrong place for the
+# thing holding every runtime secret: a single node loss would destroy it.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openbao
+---
+# The seal configuration, alone in its own object.
+#
+# It says nothing today, because a Shamir-sealed OpenBao has no seal stanza —
+# the absence of one *is* the software seal. That is precisely why the file
+# exists: when this moves to SoftHSM over PKCS#11, or to a hardware HSM after
+# that, the change is this ConfigMap and a pod restart with a migrate flag, and
+# it touches nothing else. A seal stanza folded into the main config would make
+# the same migration a rewrite of the whole configuration.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbao-seal
+  namespace: openbao
+data:
+  seal.hcl: |
+    # Seal configuration for OpenBao. Deliberately empty.
+    #
+    # Today: the Shamir seal, which is the absence of a seal stanza. The unseal
+    # keys are held as a SealedSecret in Git and applied by the unsealer loop
+    # after any restart, and a copy is in the controller's env.sh as the
+    # break-glass that survives losing the sealing key.
+    #
+    # Next: SoftHSM through PKCS#11, which is a seal "pkcs11" stanza here and
+    # nothing else — the image is a 2.6.x build, which has PKCS#11 compiled in
+    # rather than as the external plugin the 2.7.0 line moved to.
+    #
+    # Migration needs the current unseal keys presented once. Neither copy of
+    # them is cleanup to be tidied away when auto-unseal starts working.
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  interval: 30m
+  timeout: 15m
+  chart:
+    spec:
+      chart: openbao
+      version: 0.29.1
+      sourceRef:
+        kind: HelmRepository
+        name: gitlab-charts
+        namespace: flux-system
+  install:
+    remediation:
+      retries: 2
+  upgrade:
+    remediation:
+      retries: 2
+  values:
+    global:
+      enabled: true
+      tlsDisable: true
+    injector:
+      # The sidecar injector is a second way to get secrets into pods, and this
+      # cluster has already chosen the other one: External Secrets Operator,
+      # syncing into native Secrets. Running both would mean two mechanisms,
+      # two failure modes, and no rule about which to use.
+      enabled: false
+    server:
+      # `repository` is the path only. The chart supplies the registry from
+      # its own `registry` value, so a fully qualified reference here becomes
+      # quay.io/quay.io/openbao/openbao — which fails as an authorization
+      # error against a registry that has no such repository to authorize.
+      image:
+        registry: quay.io
+        repository: openbao/openbao
+        tag: 2.6.1
+      # The chart defaults a StatefulSet to OnDelete, which is the right choice
+      # for a vault someone unseals by hand and the wrong one here: it makes
+      # Flux report success on a change that has not been applied, because the
+      # running pod keeps the old spec until a human deletes it. With the
+      # unsealer loop restarting from Git, a restart costs nothing that is not
+      # already automatic.
+      updateStrategyType: RollingUpdate
+      standalone:
+        enabled: true
+        config: |
+          ui = true
+
+          listener "tcp" {
+            tls_disable = 1
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+          }
+
+          storage "raft" {
+            path = "/openbao/data"
+            node_id = "openbao-0"
+          }
+
+          # Reachable by services outside the cluster, which was the explicit
+          # requirement — so the address it advertises has to be a name those
+          # services can resolve, not a pod IP.
+          api_addr = "https://bao.{{ gitops_source_cluster_domain }}"
+          cluster_addr = "http://openbao-0.openbao-internal:8201"
+      ha:
+        enabled: false
+      dataStorage:
+        enabled: true
+        size: 8Gi
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+      auditStorage:
+        # An audit log is one of the reasons to run a vault rather than a pile
+        # of Secrets, and an audit device with nowhere to write blocks every
+        # request rather than degrading. It gets its own volume.
+        enabled: true
+        size: 4Gi
+        storageClass: longhorn
+      # The seal fragment, mounted beside the generated configuration. OpenBao
+      # reads every .hcl in its config directory, so an empty file is inert and
+      # a filled one takes effect on restart.
+      extraVolumes:
+        - type: configMap
+          name: openbao-seal
+          path: /openbao/userconfig
+      extraArgs: >-
+        -config=/openbao/userconfig/openbao-seal/seal.hcl
+      nodeSelector:
+        node-role.kubernetes.io/worker: "true"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+      # A sealed OpenBao is not ready and never will be without help, so the
+      # readiness probe must not treat sealed as failed forever — but it must
+      # report it, because the unsealer's whole job is to notice.
+      readinessProbe:
+        enabled: true
+        path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+      ingress:
+        enabled: true
+        ingressClassName: traefik
+        hosts:
+          - host: bao.{{ gitops_source_cluster_domain }}
+        tls:
+          - secretName: openbao-tls
+            hosts:
+              - bao.{{ gitops_source_cluster_domain }}
+        annotations:
+          cert-manager.io/cluster-issuer: k8s-ca
+      # The UI is how a human breaks glass. It is served through the same
+      # ingress and the same certificate.
+    ui:
+      enabled: true
+      serviceType: ClusterIP

@@ -1,0 +1,87 @@
+---
+# Attaches the cluster to the repository gitops_source writes.
+#
+# This is the half of `flux bootstrap` that is worth keeping. The CLI does two
+# things: it commits Flux's own manifests into the repository, and it installs
+# them into the cluster along with the credential that lets Flux read the
+# repository back. The first is now gitops_source's job — the manifests are
+# rendered from the template tree like everything else — so what remains is the
+# second, and it is done here with kubectl.
+#
+# Dropping the CLI from the path buys two things. The content of
+# clusters/dev-lo/flux-system stops depending on which Flux CLI version
+# happened to be installed on the controller, and there is no longer one
+# directory in the repository that Ansible does not own — which was the whole
+# complaint that started this change.
+#
+# It runs once per rebuild, and is safe to re-run: applying the components and
+# the sync objects again is exactly what Flux is already doing to itself from
+# Git.
+#
+# See plan/PHASE6_IMPLEMENTATION.md.
+
+- name: main | Assert the inputs this role cannot invent are present
+  when: (gitops_bootstrap_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (gitops_bootstrap_gitlab_host | length) > 0
+    fail_msg: >-
+      gitops_bootstrap needs the inventory name of the GitLab host, so it can
+      mint an admin token there.
+    quiet: true
+
+# The two files come from the working clone rather than from this role, so what
+# is installed is what was pushed. A missing clone means gitops_source has not
+# run, and saying that here is better than a kubectl error about a path.
+- name: main | Check the rendered tree is present
+  when: (gitops_bootstrap_enabled | bool)
+  failed_when: not _reg_gitops_bootstrap_inputs['stat']['exists']
+  register: _reg_gitops_bootstrap_inputs
+  loop:
+    - "{{ _var_gitops_bootstrap_component_file }}"
+    - "{{ _var_gitops_bootstrap_sync_file }}"
+    - "{{ gitops_bootstrap_domain_ca_file }}"
+  loop_control:
+    loop_var: _item_gitops_bootstrap_input
+    label: "{{ _item_gitops_bootstrap_input }}"
+  ansible.builtin.stat:
+    path: "{{ _item_gitops_bootstrap_input }}"
+    get_checksum: false
+
+- name: main | Install Flux and point it at the repository
+  when:
+    - (gitops_bootstrap_enabled | bool)
+    # Same gate the other GitLab-facing roles use: everything below either
+    # mints a credential or writes to the cluster.
+    - not ansible_check_mode
+  block:
+    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
+    # through a heredoc, which is shell syntax with no command equivalent.
+    - name: main | Mint an admin API token # noqa: command-instead-of-shell
+      changed_when: false
+      delegate_to: "{{ gitops_bootstrap_gitlab_host }}"
+      no_log: "{{ gitops_bootstrap_no_log | bool }}"
+      register: _reg_gitops_bootstrap_pat
+      ansible.builtin.shell:
+        cmd: "{{ _var_gitops_bootstrap_pat_script }}"
+
+    - name: main | Ensure the read-only repository token exists
+      ansible.builtin.include_tasks: deploy_token.yml
+
+    - name: main | Install the Flux components and the sync objects
+      ansible.builtin.include_tasks: install.yml
+  always:
+    - name: main | Revoke the admin API token
+      when:
+        - _reg_gitops_bootstrap_pat is defined
+        - "'stdout' in _reg_gitops_bootstrap_pat"
+      changed_when: false
+      no_log: "{{ gitops_bootstrap_no_log | bool }}"
+      ansible.builtin.uri:
+        ca_path: "{{ gitops_bootstrap_ca_file }}"
+        url: >-
+          {{ _var_gitops_bootstrap_api }}/personal_access_tokens/{{
+          _reg_gitops_bootstrap_pat['stdout'].split()[0] }}
+        method: DELETE
+        headers: "{{ _var_gitops_bootstrap_headers }}"
+        status_code: [204, 404]

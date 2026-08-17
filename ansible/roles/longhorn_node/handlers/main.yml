@@ -1,0 +1,9 @@
+---
+# Conditional on the unit existing: multipath-tools is not installed here by
+# default, and the blacklist is written for the case where something else
+# brings it in later.
+- name: Restart multipathd
+  failed_when: false
+  ansible.builtin.systemd_service:
+    name: multipathd
+    state: restarted

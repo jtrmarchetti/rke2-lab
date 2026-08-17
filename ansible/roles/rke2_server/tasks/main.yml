@@ -1,0 +1,47 @@
+---
+- name: main | Assert the required inputs are present
+  when: (rke2_server_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (rke2_server_token | default('') | length) > 0
+      - (rke2_server_node_ip | default('') | length) > 0
+      - (rke2_server_tls_san | length) > 0
+    fail_msg: >-
+      rke2_server needs a cluster token, this node's address, and the names the
+      API certificate must cover. The token comes from RKE2_TOKEN in
+      ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
+    quiet: true
+
+- name: main | Configure the RKE2 server
+  when: (rke2_server_enabled | bool)
+  ansible.builtin.include_tasks: config.yml
+
+# Only the bootstrap node writes these. RKE2's auto-deploy directory is
+# reconciled from every server, so three copies of the same manifest would be
+# three servers racing to apply identical objects.
+- name: main | Deploy the API virtual address
+  when:
+    - (rke2_server_enabled | bool)
+    - (rke2_server_kube_vip_enabled | bool)
+    - (rke2_server_bootstrap | bool)
+  ansible.builtin.include_tasks: kube_vip.yml
+
+# Bootstrap only, for the same reason as kube-vip above: the auto-deploy
+# directory is reconciled from every server.
+- name: main | Configure the packaged ingress controller
+  when:
+    - (rke2_server_enabled | bool)
+    - (rke2_server_ingress_controller | length) > 0
+    - (rke2_server_bootstrap | bool)
+  ansible.builtin.include_tasks: ingress.yml
+
+- name: main | Start the RKE2 server and wait for it to be usable
+  when: (rke2_server_enabled | bool)
+  ansible.builtin.include_tasks: service.yml
+
+- name: main | Publish a kubeconfig for the controller
+  when:
+    - (rke2_server_enabled | bool)
+    - (rke2_server_bootstrap | bool)
+    - (rke2_server_kubeconfig_dest | length) > 0
+  ansible.builtin.include_tasks: kubeconfig.yml

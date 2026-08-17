@@ -1,0 +1,9 @@
+---
+# No internal constants. Everything this role needs is either a public input in
+# defaults/main.yml or computed in task scope as a __ variable. The file exists
+# because plan/ANSIBLE_STANDARDS.md requires the role layout to be complete.
+
+# Templates for this role live in ansible/files/rke2_agent/ rather than
+# inside the role, so the tree that renders a host's configuration can
+# be read without opening the role.
+_var_rke2_agent_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_agent"

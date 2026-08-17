@@ -1,0 +1,8 @@
+---
+_var_base_host_apt_cache_valid_time: 3600
+_var_base_host_split_dns_netplan_path: /etc/netplan/99-split-dns.yaml
+
+# Templates for this role live in ansible/files/base_host/ rather than
+# inside the role, so the tree that renders a host's configuration can
+# be read without opening the role.
+_var_base_host_files_dir: "{{ role_path | dirname | dirname }}/files/base_host"

@@ -1,0 +1,34 @@
+---
+artifact_host_enabled: true
+
+# The document root lives on the data volume, not the 32 GB OS disk. The full
+# artifact set for phases 2 through 6 is measured in gigabytes.
+artifact_host_document_root: /data1/artifacts
+
+# One subdirectory per consumer, so an artifact's URL says which phase owns it.
+artifact_host_directories:
+  - freeipa
+  - gitlab
+  - runtime
+  - rke2
+  - charts
+
+artifact_host_listen_port: 80
+artifact_host_server_name: null
+
+# Who may read artifacts. Apache is bound to every interface, but access is
+# refused for any client outside these ranges. Binding to the internal and
+# tunnel addresses instead would make Apache fail to start whenever wg0 came up
+# after the web server, which is the normal boot order.
+artifact_host_allowed_networks: null
+
+# Directory indexes are on so an operator can browse what is staged. There is
+# no index.html anywhere under the document root.
+artifact_host_directory_index_enabled: true
+
+# Ownership of the tree. Apache only ever reads it; the staging role writes it
+# as root.
+artifact_host_owner: root
+artifact_host_group: root
+artifact_host_directory_mode: "0755"
+artifact_host_file_mode: "0644"

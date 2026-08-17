@@ -1,0 +1,75 @@
+---
+argument_specs:
+  main:
+    short_description: Container storage role inputs.
+    description: >-
+      Configures the Docker and containerd data roots to live on the data
+      volume, and relocates existing state found at the package-default paths.
+      Writing the configuration is always safe; the migration only acts on a
+      root that has not already been moved.
+    options:
+      container_storage_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether container storage is managed on this host.
+      container_storage_base:
+        type: str
+        required: false
+        default: /data1
+        description: >-
+          Mounted data volume the daemon roots must sit under. The role fails
+          if this is not a mountpoint.
+      container_storage_docker_root:
+        type: str
+        required: false
+        default: /data1/docker
+        description: Path the Docker daemon uses as its data root.
+      container_storage_containerd_root:
+        type: str
+        required: false
+        default: /data1/containerd
+        description: >-
+          Path containerd uses as its root. Holds the image content and
+          snapshot trees when Docker uses the containerd image store.
+      container_storage_docker_mode:
+        type: str
+        required: false
+        default: "0710"
+        description: Mode of the Docker root, matching what Docker itself sets.
+      container_storage_containerd_mode:
+        type: str
+        required: false
+        default: "0700"
+        description: Mode of the containerd root, matching what containerd sets.
+      container_storage_graceful_compose_dirs:
+        type: list
+        elements: str
+        required: false
+        default: []
+        description: >-
+          Compose project directories to stop gracefully before the daemons are
+          stopped for a migration. Daemon shutdown does not honour a
+          container's stop_grace_period.
+      container_storage_compose_stop_timeout:
+        type: int
+        required: false
+        default: 360
+        description: >-
+          Seconds allowed for each compose project to stop. Must exceed the
+          longest stop_grace_period among those projects.
+      container_storage_migrate:
+        type: bool
+        required: false
+        default: true
+        description: >-
+          Whether existing state may be relocated. False writes the
+          configuration only.
+      container_storage_remove_rollback:
+        type: bool
+        required: false
+        default: false
+        description: >-
+          Whether to delete the .migrated rollback copies left by a previous
+          relocation. Run with this only after the services are proven healthy
+          on the relocated roots.

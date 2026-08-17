@@ -1,0 +1,57 @@
+---
+argument_specs:
+  main:
+    short_description: Data volume role inputs.
+    description: >-
+      Creates a filesystem on the secondary disk and mounts it persistently.
+      The role never reformats a device that already carries a filesystem.
+    options:
+      data_volume_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether the data volume is managed on this host.
+      data_volume_device:
+        type: str
+        required: false
+        default: /dev/sdb
+        description: Block device backing the data volume.
+      data_volume_filesystem:
+        type: str
+        required: false
+        default: ext4
+        choices:
+          - ext3
+          - ext4
+          - xfs
+        description: Filesystem created on the device when it is empty.
+      data_volume_label:
+        type: str
+        required: false
+        default: data1
+        description: Filesystem label used as the persistent mount source.
+      data_volume_mount_path:
+        type: str
+        required: false
+        default: /data1
+        description: Absolute path the volume is mounted at.
+      data_volume_mount_options:
+        type: str
+        required: false
+        default: defaults,noatime
+        description: Mount options written to /etc/fstab.
+      data_volume_owner:
+        type: str
+        required: false
+        default: root
+        description: Owner of the mount point once mounted.
+      data_volume_group:
+        type: str
+        required: false
+        default: root
+        description: Group of the mount point once mounted.
+      data_volume_mode:
+        type: str
+        required: false
+        default: "0755"
+        description: Permissions on the mount point once mounted.

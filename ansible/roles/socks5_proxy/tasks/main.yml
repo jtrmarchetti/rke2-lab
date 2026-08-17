@@ -1,0 +1,24 @@
+---
+- name: main | Ensure dante server package is installed
+  when: (socks5_proxy_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ _var_socks5_proxy_package }}"
+    state: present
+
+- name: main | Ensure danted configuration is rendered
+  when: (socks5_proxy_enabled | bool)
+  notify:
+    - Restart danted
+  ansible.builtin.template:
+    src: "{{ _var_socks5_proxy_files_dir }}/danted.conf.j2"
+    dest: "{{ _var_socks5_proxy_config_path }}"
+    mode: "0644"
+
+- name: main | Ensure danted service is enabled and started
+  when:
+    - (socks5_proxy_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: "{{ _var_socks5_proxy_service }}"
+    enabled: true
+    state: started

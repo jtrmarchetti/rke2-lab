@@ -1,0 +1,316 @@
+---
+- name: main | Assert FreeIPA credentials are available
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - freeipa_server_admin_password | length >= 8
+      - freeipa_server_directory_manager_password | length >= 8
+    fail_msg: >-
+      FreeIPA passwords are missing or too short. They come from
+      ~/.config/rke2lab/env.sh; run `source ~/.config/rke2lab/env.sh` first.
+    quiet: true
+
+- name: main | Ensure the host name matches the FreeIPA server name
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.hostname:
+    name: "{{ freeipa_server_hostname }}"
+
+# The installer resolves its own name before FreeIPA is answering DNS, and
+# there is no external resolver on this network to fall back to.
+- name: main | Ensure the FreeIPA host name resolves locally
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ _var_freeipa_server_hosts_entry }}"
+    regexp: "^{{ freeipa_server_ip_address | regex_escape }}\\s"
+    state: present
+
+# Ubuntu ships a `127.0.1.1 <hostname>` line in /etc/hosts. It resolves before
+# the entry above, and ipa-server-install refuses a server whose own name maps
+# to a loopback address ("cannot use loopback IP address 127.0.1.1"), so the
+# install aborts during validation. Nothing else needs that line here: the
+# host's name resolves through the real address written above.
+- name: main | Ensure the FreeIPA host name does not resolve to a loopback address
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: >-
+      ^127\.0\.1\.1\s+.*{{ freeipa_server_hostname | regex_escape }}
+    state: absent
+
+# Must happen before the container starts: named binds port 53 as the domain
+# comes up, and the installer's own client step resolves the new server through
+# this file. See freeipa_server_manage_resolver in defaults for the reasoning.
+- name: main | Ensure systemd-resolved is not holding port 53
+  when:
+    - (freeipa_server_enabled | bool)
+    - (freeipa_server_manage_resolver | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: stopped
+    enabled: false
+    masked: true
+
+# follow: false replaces the stub-resolv.conf symlink itself rather than
+# writing through it to a file systemd-resolved owns and rewrites.
+- name: main | Ensure the host resolves through its own FreeIPA instance
+  when:
+    - (freeipa_server_enabled | bool)
+    - (freeipa_server_manage_resolver | bool)
+  ansible.builtin.template:
+    src: "{{ _var_freeipa_server_files_dir }}/resolv.conf.j2"
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: "0644"
+    follow: false
+
+- name: main | Ensure container runtime packages are installed
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.apt:
+    name: "{{ freeipa_server_runtime_packages }}"
+    state: present
+
+- name: main | Ensure the container runtime is running
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: main | Ensure the FreeIPA compose directory exists
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ freeipa_server_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# The data directory needs the world-execute bit, unlike the compose directory.
+# The container relocates /etc/krb5.conf, /etc/ipa and other configuration into
+# /data through symlinks, and its services run as non-root users (ipaapi, apache)
+# that must traverse this directory to read them. At 0750 they cannot: kinit
+# fails with "Permission denied while initializing Kerberos 5 library" and every
+# API login returns HTTP 500. Only the traverse bit is granted here; the
+# sensitive material below keeps the permissions FreeIPA gives it.
+- name: main | Ensure the FreeIPA data directory exists
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.file:
+    path: "{{ freeipa_server_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: main | Check whether the FreeIPA image is already loaded
+  when: (freeipa_server_enabled | bool)
+  register: _reg_freeipa_server_image_check
+  community.docker.docker_image_info:
+    name: "{{ freeipa_server_container_image }}"
+
+- name: main | Download the FreeIPA image tarball from the repo01 artifact host
+  when:
+    - (freeipa_server_enabled | bool)
+    - (_reg_freeipa_server_image_check.images | default([]) | length) == 0
+    - (freeipa_server_image_tarball_url | length > 0)
+  ansible.builtin.get_url:
+    url: "{{ freeipa_server_image_tarball_url }}"
+    dest: "{{ freeipa_server_image_tarball_path }}"
+    checksum: "{{ freeipa_server_image_tarball_checksum | default(omit, true) }}"
+    mode: "0640"
+
+- name: main | Load the FreeIPA image from the artifact tarball
+  when:
+    - (freeipa_server_enabled | bool)
+    - (_reg_freeipa_server_image_check.images | default([]) | length) == 0
+    - not ansible_check_mode
+  community.docker.docker_image_load:
+    path: "{{ freeipa_server_image_tarball_path }}"
+
+# A tarball built from a differently tagged image loads under that other tag,
+# and compose would then try to pull an image that does not exist on an
+# air-gapped host. Fail here instead of timing out on a pull.
+- name: main | Verify the expected image tag is present after loading
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_freeipa_server_image_verify
+  community.docker.docker_image_info:
+    name: "{{ freeipa_server_container_image }}"
+
+- name: main | Assert the expected FreeIPA image tag is present
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - (_reg_freeipa_server_image_verify.images | default([]) | length) > 0
+    fail_msg: >-
+      The staged tarball did not provide
+      {{ freeipa_server_container_image }}. Check that the manifest entry in
+      group_vars/repo/artifacts.yml uses the same tag this role expects.
+    quiet: true
+
+- name: main | Ensure the FreeIPA environment file is present
+  when: (freeipa_server_enabled | bool)
+  no_log: true
+  ansible.builtin.template:
+    src: "{{ _var_freeipa_server_files_dir }}/freeipa.env.j2"
+    dest: "{{ _var_freeipa_server_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: main | Ensure the FreeIPA compose file is present
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.template:
+    src: "{{ _var_freeipa_server_files_dir }}/docker-compose.freeipa.yml.j2"
+    dest: "{{ _var_freeipa_server_compose_file }}"
+    owner: root
+    group: root
+    mode: "0640"
+
+# Compose adopts an existing container only if it carries this project's label.
+# One created any other way — a hand-run `docker run`, or an attempt aborted
+# before compose ever managed it — holds the name and makes every subsequent
+# run fail with a name conflict. Remove that one. A container this project
+# already owns is left for compose to reconcile.
+- name: main | Check which compose project owns an existing FreeIPA container
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_freeipa_server_container_state
+  community.docker.docker_container_info:
+    name: "{{ freeipa_server_container_name }}"
+
+- name: main | Remove a FreeIPA container that this compose project does not own
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+    - (_reg_freeipa_server_container_state.exists | default(false))
+    - >-
+      (_reg_freeipa_server_container_state.container.Config.Labels
+       | default({})).get('com.docker.compose.project', '')
+      != (_var_freeipa_server_compose_project | trim)
+  community.docker.docker_container:
+    name: "{{ freeipa_server_container_name }}"
+    state: absent
+    force_kill: true
+
+- name: main | Ensure the FreeIPA container is running
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  community.docker.docker_compose_v2:
+    project_src: "{{ freeipa_server_compose_dir }}"
+    state: present
+    pull: never
+    wait: true
+    wait_timeout: "{{ freeipa_server_install_timeout }}"
+
+# A container that cannot start at all restarts forever under `unless-stopped`,
+# and the bootstrap poll below would then sit through its entire timeout before
+# saying so. Catch it here instead.
+#
+# The wait is this long because a failing install is not always quick: the
+# installer's DNS pre-checks alone spend about 70 seconds timing out before
+# named exists, so one full crash cycle runs to roughly 90 seconds. A shorter
+# wait sees zero restarts and lets a doomed run proceed to the 30-minute poll.
+- name: main | Allow the FreeIPA container a moment to settle
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.wait_for:
+    timeout: "{{ freeipa_server_settle_timeout }}"
+
+- name: main | Read the FreeIPA container restart count
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_freeipa_server_restart_state
+  community.docker.docker_container_info:
+    name: "{{ freeipa_server_container_name }}"
+
+- name: main | Assert the FreeIPA container is not crash-looping
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_reg_freeipa_server_restart_state.container.RestartCount
+         | default(0) | int) <= 2
+    fail_msg: >-
+      The FreeIPA container has restarted
+      {{ _reg_freeipa_server_restart_state.container.RestartCount | default('?') }}
+      times
+      and is not staying up. The domain bootstrap cannot run. Inspect with:
+      docker logs {{ freeipa_server_container_name }}
+    quiet: true
+
+# First boot runs the full domain bootstrap inside the container, which takes
+# several minutes and finishes long after `docker compose up` returns.
+- name: main | Wait for the domain bootstrap to complete
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  register: _reg_freeipa_server_status
+  until: "'RUNNING' in (_reg_freeipa_server_status.stdout | default(''))"
+  retries: "{{ (freeipa_server_install_timeout | int / 30) | round | int }}"
+  delay: 30
+  community.docker.docker_container_exec:
+    container: "{{ freeipa_server_container_name }}"
+    command: ipactl status
+
+- name: main | Assert the FreeIPA services are running
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - "'RUNNING' in (_reg_freeipa_server_status.stdout | default(''))"
+    fail_msg: >-
+      FreeIPA did not reach a running state within
+      {{ freeipa_server_install_timeout }}s. Inspect with:
+      docker logs {{ freeipa_server_container_name }}
+    quiet: true
+
+# Everything above proves the container is up. This proves the domain serves,
+# which is a different claim and the one callers depend on.
+- name: main | Include the readiness checks
+  when: (freeipa_server_enabled | bool)
+  ansible.builtin.include_tasks: readiness.yml
+
+# Safe to write records only after readiness: they go through the IPA API, which
+# is the last thing to become usable.
+- name: main | Include the service DNS zone and record tasks
+  when:
+    - (freeipa_server_enabled | bool)
+    - ((freeipa_server_dns_records | length) > 0)
+      or ((freeipa_server_dns_zones | length) > 0)
+  ansible.builtin.include_tasks: dns_records.yml
+
+# Before the forward zone below, because the forward zone is what needs it: a
+# delegated subdomain cannot be resolved while DNSSEC validation is on.
+- name: main | Include the BIND options tasks
+  when:
+    - (freeipa_server_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.include_tasks: named_options.yml
+
+# After the records, and for the same reason: this goes through the IPA CLI,
+# which is only usable once the domain serves.
+- name: main | Include the DNS forward zone tasks
+  when:
+    - (freeipa_server_enabled | bool)
+    - ((freeipa_server_dns_forward_zones | length) > 0)
+    - not ansible_check_mode
+  ansible.builtin.include_tasks: dns_forwarders.yml

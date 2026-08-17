@@ -1,0 +1,209 @@
+---
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env:
+      - WIREGUARD_REPO_PRIVATE_KEY
+
+- name: Configure phase1 repo01 services
+  hosts: repo
+  gather_facts: true
+  become: true
+  # Without this, a task that fails late in the play discards the handlers
+  # queued by earlier roles. The config file is then correct on disk while the
+  # running service still holds the old one, and the next run sees no change
+  # and never restarts it — so the fix looks applied but is not. That exact
+  # failure left apt-cacher-ng listening on the external address after a run
+  # that aborted in a later role.
+  force_handlers: true
+  tasks:
+    - name: repo01 | Include base host role
+      tags:
+        - base_host
+      vars:
+        base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
+        base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
+        base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
+        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
+        base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
+      ansible.builtin.include_role:
+        name: base_host
+        apply:
+          tags:
+            - base_host
+
+    # Runs before every service role. The apt cache, the artifact document
+    # root, and the GitLab data directory all live on /data1; if it is not
+    # mounted first, those roles quietly fill the 32 GB OS disk instead.
+    - name: repo01 | Include data volume role
+      tags:
+        - data_volume
+      vars:
+        data_volume_device: "{{ inventory_data_volume_device }}"
+        data_volume_enabled: "{{ inventory_data_volume_enabled }}"
+        data_volume_filesystem: "{{ inventory_data_volume_filesystem }}"
+        data_volume_label: "{{ inventory_data_volume_label }}"
+        data_volume_mount_path: "{{ inventory_data_volume_mount_path }}"
+      ansible.builtin.include_role:
+        name: data_volume
+        apply:
+          tags:
+            - data_volume
+
+    # Immediately after the data volume and before anything that runs a
+    # container. Docker and containerd default to /var/lib, which is the 32 GB
+    # OS disk, and GitLab's image traffic filled it to 79% by Phase 5 while
+    # /data1 sat at 8%. When that disk fills, GitLab, the apt proxy, Apache and
+    # the tunnel gateway all stop together.
+    #
+    # On a fresh build this writes two config files before either daemon is
+    # installed and moves nothing, which is the whole point of it being here
+    # rather than in the phase that discovered the problem.
+    - name: repo01 | Include container storage role
+      tags:
+        - container_storage
+      vars:
+        container_storage_graceful_compose_dirs:
+          - "{{ inventory_gitlab_compose_dir }}"
+      ansible.builtin.include_role:
+        name: container_storage
+        apply:
+          tags:
+            - container_storage
+
+    # Split DNS is deliberately not here. repo01 forwards dev.lo to FreeIPA on
+    # core01, which does not exist during Phase 1, so configuring it here would
+    # point this host at an authority that cannot answer. It is applied in
+    # Phase 2 instead — playbooks/core01.yml, matching "Point resolvers at
+    # core01" in PHASE2_IMPLEMENTATION.md — once the domain is serving.
+    #
+    # Time does belong here: repo01 synchronizes from the internet and depends
+    # on nothing internal. A wrong clock breaks TLS to the upstreams this host
+    # downloads from, as surely as it breaks Kerberos later.
+    - name: repo01 | Include time synchronization role
+      tags:
+        - time_sync
+      vars:
+        time_sync_allow_networks: "{{ inventory_time_sync_allow_networks }}"
+        time_sync_enabled: "{{ inventory_time_sync_enabled }}"
+        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
+        time_sync_sources: "{{ inventory_time_sync_sources }}"
+      ansible.builtin.include_role:
+        name: time_sync
+        apply:
+          tags:
+            - time_sync
+
+    - name: repo01 | Include WireGuard gateway role
+      tags:
+        - wireguard_gateway
+      vars:
+        wireguard_gateway_address: "{{ inventory_wireguard_gateway_address }}"
+        wireguard_gateway_enabled: "{{ inventory_wireguard_gateway_enabled }}"
+        wireguard_gateway_interface: "{{ inventory_wireguard_gateway_interface }}"
+        wireguard_gateway_internal_subnet: >-
+          {{ inventory_wireguard_gateway_internal_subnet }}
+        wireguard_gateway_ip_forward_enabled: >-
+          {{ inventory_wireguard_gateway_ip_forward_enabled }}
+        wireguard_gateway_listen_port: >-
+          {{ inventory_wireguard_gateway_listen_port }}
+        wireguard_gateway_manage_firewall_nat: >-
+          {{ inventory_wireguard_gateway_manage_firewall_nat }}
+        wireguard_gateway_nat_out_interface: >-
+          {{ inventory_wireguard_gateway_nat_out_interface }}
+        wireguard_gateway_nat_source_cidr: >-
+          {{ inventory_wireguard_gateway_nat_source_cidr }}
+        wireguard_gateway_peer_allowed_ips: >-
+          {{ inventory_wireguard_gateway_peer_allowed_ips }}
+        wireguard_gateway_peer_endpoint: >-
+          {{ inventory_wireguard_gateway_peer_endpoint }}
+        wireguard_gateway_peer_persistent_keepalive: >-
+          {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
+        wireguard_gateway_peer_public_key: >-
+          {{ inventory_wireguard_gateway_peer_public_key }}
+        wireguard_gateway_private_key: >-
+          {{ inventory_wireguard_gateway_private_key }}
+      ansible.builtin.include_role:
+        name: wireguard_gateway
+        apply:
+          tags:
+            - wireguard_gateway
+
+    - name: repo01 | Include SOCKS5 proxy role
+      tags:
+        - socks5_proxy
+      vars:
+        socks5_proxy_allowed_client_networks: >-
+          {{ inventory_socks5_proxy_allowed_client_networks }}
+        socks5_proxy_enabled: "{{ inventory_socks5_proxy_enabled }}"
+        socks5_proxy_external_interface: >-
+          {{ inventory_socks5_proxy_external_interface }}
+        socks5_proxy_internal_interface: >-
+          {{ inventory_socks5_proxy_internal_interface }}
+        socks5_proxy_listen_address: "{{ inventory_socks5_proxy_listen_address }}"
+        socks5_proxy_listen_port: "{{ inventory_socks5_proxy_listen_port }}"
+      ansible.builtin.include_role:
+        name: socks5_proxy
+        apply:
+          tags:
+            - socks5_proxy
+
+    - name: repo01 | Include apt proxy role
+      tags:
+        - apt_proxy
+      vars:
+        apt_proxy_bind_addresses: "{{ inventory_apt_proxy_bind_addresses }}"
+        apt_proxy_bind_port: "{{ inventory_apt_proxy_bind_port }}"
+        apt_proxy_cache_dir: "{{ inventory_apt_proxy_cache_dir }}"
+        apt_proxy_enabled: "{{ inventory_apt_proxy_enabled }}"
+        apt_proxy_expire_days: "{{ inventory_apt_proxy_expire_days }}"
+        apt_proxy_keep_extra_versions: >-
+          {{ inventory_apt_proxy_keep_extra_versions }}
+      ansible.builtin.include_role:
+        name: apt_proxy
+        apply:
+          tags:
+            - apt_proxy
+
+    - name: repo01 | Include artifact host role
+      tags:
+        - artifact_host
+      vars:
+        artifact_host_allowed_networks: >-
+          {{ inventory_artifact_host_allowed_networks }}
+        artifact_host_directories: "{{ inventory_artifact_host_directories }}"
+        artifact_host_document_root: "{{ inventory_artifact_host_document_root }}"
+        artifact_host_enabled: "{{ inventory_artifact_host_enabled }}"
+        artifact_host_server_name: "{{ inventory_artifact_host_server_name }}"
+      ansible.builtin.include_role:
+        name: artifact_host
+        apply:
+          tags:
+            - artifact_host
+
+    # Last, because it writes into the document root the artifact host role
+    # creates, and because it is the only step that reaches upstream.
+    #
+    # The role finds the .published markers itself and skips those entries, so
+    # a transit artifact that GitLab already holds is not re-downloaded even
+    # though its local copy is gone. That discovery used to live here, in this
+    # playbook alone — which meant every other playbook that staged artifacts
+    # re-downloaded the entire transit set.
+    - name: repo01 | Include artifact staging role
+      tags:
+        - artifact_stage
+      vars:
+        artifact_stage_enabled: "{{ inventory_artifact_stage_enabled }}"
+        artifact_stage_manifest: "{{ inventory_artifact_stage_manifest }}"
+        artifact_stage_root: "{{ inventory_artifact_stage_root }}"
+      ansible.builtin.include_role:
+        name: artifact_stage
+        apply:
+          tags:
+            - artifact_stage
+
+    # GitLab is deliberately not here. It is Phase 3 and it depends on Phase 2:
+    # its certificates are issued by the FreeIPA CA and its service names are
+    # published in dev.lo, neither of which exists while this playbook runs.
+    # See playbooks/gitlab.yml.

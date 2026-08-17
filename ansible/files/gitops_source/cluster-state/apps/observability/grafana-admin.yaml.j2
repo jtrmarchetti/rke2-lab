@@ -1,0 +1,34 @@
+{{ ansible_managed | comment }}
+# Grafana's local administrator, out of OpenBao.
+#
+# Previously a SealedSecret; see apps/keycloak/secrets.yaml for why every
+# runtime secret moved to the vault and which three did not.
+#
+# It exists as the way in when the identity provider Grafana federates to is
+# the thing that is broken — which is also why it is worth having in a store
+# that can rotate it rather than in a commit that cannot.
+#
+# The chart reads this Secret by name through `admin.existingSecret`, so the
+# target name below and the value in metrics.yaml are one fact written twice.
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-admin
+  namespace: observability
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: grafana-admin
+  data:
+    - secretKey: username
+      remoteRef:
+        key: grafana
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: grafana
+        property: password

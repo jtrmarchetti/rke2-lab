@@ -1,0 +1,15 @@
+#
+# Ansible managed.
+#
+# Points containerd's state at the data volume. Only `root` is set, so
+# containerd applies its compiled-in defaults for everything else — writing a
+# full `containerd config default` dump here would freeze this host's plugin
+# configuration at whatever the version shipped on the day it was generated.
+#
+# `state` is deliberately left alone. It holds runtime state that does not
+# survive a reboot, it is small, and it lives on tmpfs-like paths under /run in
+# normal operation.
+#
+version = 2
+
+root = "{{ container_storage_containerd_root }}"

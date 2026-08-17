@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: artifact_stage
+  author: devops
+  description: >-
+    Download, verify, and publish manifest artifacts under the artifact host
+    document root.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []
+
+collections:
+  - community.docker
