@@ -13,6 +13,10 @@
       the rke2_publish role on the repo host; the playbook reads it from there.
     quiet: true
 
+- name: main | Raise the kernel inotify limits
+  when: (rke2_node_enabled | bool)
+  ansible.builtin.include_tasks: inotify.yml
+
 - name: main | Trust the domain certificate authority
   when: (rke2_node_enabled | bool)
   ansible.builtin.include_tasks: trust.yml

@@ -25,6 +25,11 @@ data:
     datasources:
       - name: Loki
         type: loki
+        # Pinned rather than generated. A dashboard in Git has to name its
+        # datasource by uid, and an unpinned one is assigned at first
+        # provisioning — so every dashboard here would bind to a value that
+        # changes if Grafana is rebuilt from empty.
+        uid: loki
         access: proxy
         url: http://loki.observability.svc.cluster.local:3100
       # 3200, not 3100. Tempo's HTTP API does not share Loki's port, and a
@@ -33,5 +38,6 @@ data:
       # the URL.
       - name: Tempo
         type: tempo
+        uid: tempo
         access: proxy
         url: http://tempo.observability.svc.cluster.local:3200

@@ -165,15 +165,14 @@ spec:
       rules:
         enabled: false
 ---
-# Tempo does not start on this hardware yet, and it is the same fault Keycloak
-# found: the binary requires the x86-64-v2 microarchitecture and the VMs
-# present Proxmox's default kvm64, which predates it. It says so plainly —
-# "This program can only be run on AMD64 processors with v2 microarchitecture
-# support" — and the fix is the cpu_type field in the Pulumi VM definitions,
-# applied with a power cycle of the estate.
+# Tempo, running. It did not start when first declared, and the fault was the
+# one Keycloak had already found: the binary requires the x86-64-v2
+# microarchitecture and the VMs presented Proxmox's default kvm64, which
+# predates it. Fixed in the Pulumi VM factory — `cpu_type: x86-64-v2-AES` on
+# VmSpec — and applied with a power cycle of the estate on 2026-08-17.
 #
-# Left declared rather than removed. When the VMs are cycled it starts; taking
-# it out would mean remembering to put it back.
+# Worth keeping in mind when a new component will not start at all and logs one
+# line about the processor: this cluster has hit that twice.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:

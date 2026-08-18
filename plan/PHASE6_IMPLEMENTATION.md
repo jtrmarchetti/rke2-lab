@@ -1701,3 +1701,74 @@ account exists for a federated user until their first sign-in creates one — an
 what keeps it safe is `role_attribute_strict`, not the flag. The comment was
 rewritten to say so. It reaches the cluster on the next `gitops_source` render;
 nothing behavioural changes with it.
+
+## Run Record — 2026-08-18, 6c follow-up
+
+The observability stack was reported as "performance data only" — Grafana with
+numbers in it and nothing else, and alerts that were counts rather than
+messages. Every part of that turned out to be true, and none of it was a
+collection failure.
+
+| Finding | Reality |
+| --- | --- |
+| No logs visible | Loki held them all along — 10 namespaces, ~15k lines per 5 minutes. There were **no log dashboards**: all 29 Grafana had came from kube-prometheus-stack and all 29 are metrics |
+| Alerts are counts | The counts were the Alertmanager overview panels. 13 alerts were firing with full descriptions, readable only under Alerting → Active notifications with the datasource switched from Grafana to Alertmanager |
+| Alerts are wrong | 10 of the 13 were false. RKE2 binds etcd, the scheduler, the controller manager and kube-proxy to `127.0.0.1`; the chart's ServiceMonitors scrape node addresses |
+
+### The alerts described the scrape, not the cluster
+
+`etcdInsufficientMembers` fired — "insufficient members (0)" — while all three
+etcd members were `Ready` and serving. The scrape was refused, `up` was 0, and
+the rule cannot tell those apart.
+
+`KubeProxyDown` was a different failure wearing the same clothes. The chart's
+kube-proxy Service selects `k8s-app: kube-proxy`, which is kubeadm's label;
+RKE2's static pods carry `component: kube-proxy` and `tier: control-plane` and
+nothing else. The Service matched no pod and had no endpoints, so there was no
+`up` series at all — and `KubeProxyDown` alerts on the metric being *absent*,
+which fires with no failing target to point at. Fixed with
+`kubeProxy.service.selector` rather than by relabelling pods RKE2 recreates.
+
+The rest is `rke2_server_expose_metrics` and `rke2_agent_expose_metrics`, which
+add `etcd-expose-metrics` and the three `bind-address` arguments. All four flags
+were confirmed against `rke2 server --help` on the running v1.35.7 binary rather
+than taken from documentation. They bind to every interface: the scheduler and
+controller manager sit behind authn and refuse an unauthenticated scrape, etcd's
+2381 and kube-proxy's 10249 do not. Accepted on the lab segment; it would need a
+host firewall on a routable network.
+
+### The inotify limit, found by the dashboards it was added to build
+
+While this was in flight, `failed to create fsnotify watcher: too many open
+files` appeared in Loki. `fs.inotify.max_user_instances` was at the kernel
+default of **128** and UID 0 held **129** — and almost every container on a node
+runs as UID 0, so they share one allowance. Kubelet, containerd, Flux's four
+controllers, cert-manager, Longhorn, Grafana's sidecars and Alloy all watch
+files.
+
+**86 pods** were affected, some thousands of times an hour. Nothing had crashed,
+which is the dangerous part: a controller that cannot create a watcher may start
+anyway and never notice the change it exists to watch.
+
+The message names the wrong resource. The allocation fails with `EMFILE`, which
+usually does mean file descriptors, so it sends you to `ulimit` and `fs.file-max`
+where nothing is wrong. Raised to 8192 instances and 524288 watches by
+`rke2_node`, written to `/etc/sysctl.d/90-rke2-inotify.conf` **and** applied to
+the running kernel — the file alone fixes the next boot and not today. The error
+count went to zero within five minutes, across every pod.
+
+Worth recording that this was found by querying Loki, which is exactly the
+capability this change existed to expose. It had been happening for as long as
+the logs go back.
+
+### Alerting still has nowhere to go
+
+Alertmanager's route to the `null` receiver is left in place, because nothing on
+this network reaches a mail server or a webhook. The intended destination is
+Splunk or Elasticsearch taking alerts as events, reachable through Alertmanager's
+generic `webhook_config` — what is missing is an endpoint and credentials, not a
+change of shape.
+
+Noted where it will be needed: declaring `alertmanager.config` **replaces** the
+chart's default wholesale, and the default carries the inhibit rules that stop
+one critical alert arriving with the three warnings it caused.

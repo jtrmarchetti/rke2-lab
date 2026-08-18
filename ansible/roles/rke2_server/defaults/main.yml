@@ -94,6 +94,34 @@ rke2_server_etcd_args:
   - heartbeat-interval=1000
   - election-timeout=5000
 
+# Control plane metrics, exposed for Prometheus.
+#
+# RKE2 binds etcd, the scheduler and the controller manager to 127.0.0.1 by
+# default, which is the safe default and also the reason kube-prometheus-stack
+# reports the control plane as down on a cluster where it is fine: every
+# ServiceMonitor the chart ships resolves to the node address and is refused.
+# The alerts that follow — etcdInsufficientMembers, TargetDown,
+# KubeSchedulerInstanceUnreachable — describe the scrape, not the component,
+# and an alert list made of those is an alert list nobody reads.
+#
+# What this turns on, and what each one costs:
+#
+#   etcd            --listen-metrics-urls on 2381. A metrics-only listener; it
+#                   serves no key-value API and needs no client certificate,
+#                   which is why the chart scrapes it over plain HTTP.
+#   scheduler       --bind-address on 10259, HTTPS with the kubelet's own
+#   controller mgr  --bind-address on 10257, authn/authz in front of it. A
+#                   scrape without a bearer token gets 401.
+#   kube-proxy      --metrics-bind-address on 10249, plain HTTP and no auth.
+#                   The one genuinely open listener here.
+#
+# These bind to every interface, so they are reachable from anywhere that can
+# route to a node. On this network that is the WireGuard tunnel and the lab
+# segment, and the exposure is judged acceptable against an alert list that
+# means something. It would not be on a routable network without a host
+# firewall in front of 10249.
+rke2_server_expose_metrics: true
+
 # --- kube-vip -------------------------------------------------------------
 rke2_server_kube_vip_enabled: true
 # Pulled through the containerd mirror like everything else. The upstream name

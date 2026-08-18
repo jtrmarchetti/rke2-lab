@@ -73,6 +73,30 @@ etcd-arg:
 {% endfor %}
 {% endif %}
 
+{% if rke2_server_expose_metrics | bool %}
+# Control plane metrics, reachable from off the node.
+#
+# Each of these components binds to 127.0.0.1 unless told otherwise, and the
+# ServiceMonitors kube-prometheus-stack ships scrape the node address. Without
+# this the chart reports the entire control plane down on a cluster that is
+# healthy, which is worse than no alerting: etcdInsufficientMembers fires while
+# all three members are Ready. See the role defaults for what each listener
+# exposes.
+etcd-expose-metrics: true
+
+kube-controller-manager-arg:
+  - bind-address=0.0.0.0
+
+kube-scheduler-arg:
+  - bind-address=0.0.0.0
+
+# kube-proxy runs on every node, servers included, so this is set here and in
+# the agent configuration both. Unlike the two above it is plain HTTP with no
+# authentication in front of it.
+kube-proxy-arg:
+  - metrics-bind-address=0.0.0.0
+
+{% endif %}
 # The kubeconfig this file writes contains cluster-admin credentials. RKE2
 # defaults it to 0600 already; stated here so a change is a decision.
 write-kubeconfig-mode: "0600"

@@ -207,6 +207,8 @@
         rke2_server_data_dir: "{{ inventory_rke2_server_data_dir }}"
         rke2_server_disable: "{{ inventory_rke2_server_disable }}"
         rke2_server_enabled: "{{ inventory_rke2_server_enabled }}"
+        rke2_server_expose_metrics: >-
+          {{ inventory_rke2_server_expose_metrics }}
         rke2_server_ingress_address: "{{ inventory_rke2_server_ingress_address }}"
         rke2_server_ingress_controller: >-
           {{ inventory_rke2_server_ingress_controller }}

@@ -82,6 +82,14 @@ argument_specs:
         type: str
         default: /data1/rancher/rke2
         description: RKE2 data directory. Must match rke2_node_data_dir.
+      rke2_server_expose_metrics:
+        type: bool
+        default: true
+        description:
+          - Binds etcd, the scheduler, the controller manager and kube-proxy
+            metrics off 127.0.0.1 so kube-prometheus-stack can scrape them.
+            Left at RKE2's default the chart reports the whole control plane
+            down on a cluster that is healthy.
       rke2_server_etcd_snapshot_schedule:
         type: str
         default: "0 */6 * * *"

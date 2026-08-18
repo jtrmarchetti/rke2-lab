@@ -173,6 +173,12 @@ inventory_rke2_agent_data_dir: "{{ inventory_rke2_node_data_dir }}"
 inventory_rke2_agent_server_address: 192.168.2.20
 inventory_rke2_agent_supervisor_port: 9345
 
+# Phase 6c follow-up, the worker half of the same change made on the servers.
+# kube-proxy runs on every node, so the chart's kube-proxy ServiceMonitor has no
+# endpoint anywhere until both halves are set — and KubeProxyDown, which fires
+# on the metric being absent rather than on a target failing, stays firing.
+inventory_rke2_agent_expose_metrics: true
+
 # The host the readiness gate is asked from is inventory_kubewk_control_host, defined in
 # group_vars/all because playbooks/kubewk.yml also uses it as a play host
 # pattern and a pattern resolves before group variables are in scope.

@@ -155,3 +155,32 @@ and supplies the deploy token that pulls it.
    service start**, so any change to the mirror rules costs a rolling restart of
    all six nodes however correct the file on disk already is. Batch mirror
    additions into one pass.
+
+Kernel tuning
+=============
+
+One setting, and it is not optional on a Kubernetes node: the ``fs.inotify``
+limits. ``rke2_node`` writes ``/etc/sysctl.d/90-rke2-inotify.conf`` with 8192
+instances and 524288 watches, against kernel defaults of 128 and roughly 46000.
+
+The instance limit is the one that bites. It is **per-UID**, nearly every
+container here runs as UID 0, and this cluster measured 129 root-owned inotify
+instances against the default ceiling of 128 — kubelet, containerd, Flux's four
+controllers, cert-manager, Longhorn, Grafana's config sidecars and Alloy all
+watch files as a matter of course.
+
+.. code-block:: console
+
+   $ sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+
+.. note::
+
+   Over the limit the failure names the wrong resource — ``failed to create
+   fsnotify watcher: too many open files`` — because the allocation returns
+   ``EMFILE``, which usually does mean file descriptors. ``fs.file-max`` is not
+   the problem and raising ``ulimit`` does not help. See
+   :doc:`../tasks/common-issues`.
+
+The values are ceilings rather than allocations; nothing is reserved by raising
+them, and the kernel memory a fully used allowance would cost is well under a
+gigabyte.

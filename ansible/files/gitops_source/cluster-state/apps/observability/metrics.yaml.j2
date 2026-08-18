@@ -114,6 +114,40 @@ spec:
         ruleSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
 
+    # The control plane exporters. Their ServiceMonitors resolve to node
+    # addresses, which is why rke2_server and rke2_agent now bind etcd, the
+    # scheduler, the controller manager and kube-proxy off 127.0.0.1 — without
+    # that half, everything below still reports the control plane down.
+    #
+    # etcd, the scheduler and the controller manager need nothing here: the
+    # chart already targets 2381, 10259 and 10257, scrapes the latter two over
+    # HTTPS with the service account token, and sets insecureSkipVerify for
+    # certificates this cluster issued itself.
+    kubeProxy:
+      service:
+        # `component`, not `k8s-app`. The chart's default selector is kubeadm's
+        # label, and RKE2's static pods carry `component: kube-proxy` with
+        # `tier: control-plane` and nothing else — so the Service matched no
+        # pod, had no endpoints, and produced no `up` series at all. That is a
+        # different failure from a refused scrape: KubeProxyDown alerts on the
+        # metric being absent, so it fires with no failing target to point at.
+        selector:
+          component: kube-proxy
+
+    # No receiver, and that is the current state rather than an oversight.
+    # Nothing on this network can reach a mail server or a webhook endpoint, so
+    # the chart's default route to the `null` receiver is left in place and
+    # alerts are read in Grafana's Alerting section — with the datasource picker
+    # switched from Grafana to Alertmanager, since every rule here is a
+    # Prometheus rule and Grafana manages none of its own.
+    #
+    # The intended destination is Splunk or Elasticsearch, taking alerts as
+    # events. Alertmanager reaches either through its generic `webhook_config`,
+    # so what is missing is the endpoint and its credentials, not a change of
+    # shape here. Whoever adds it should set `alertmanager.config` whole rather
+    # than appending a receiver: declaring that key replaces the chart's default
+    # config, and the default carries the inhibit rules that stop one critical
+    # alert arriving alongside the three warnings it caused.
     alertmanager:
       alertmanagerSpec:
         nodeSelector:

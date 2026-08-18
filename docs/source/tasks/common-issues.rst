@@ -102,6 +102,31 @@ in ``describe``.
 **Running but not Ready, and its Ingress returns 503.** The readiness probe is
 failing, so the Service has no endpoints. The workload, not Traefik.
 
+**"failed to create fsnotify watcher: too many open files".** Not a file
+descriptor limit, despite what it says. The kernel's ``fs.inotify`` limits are
+**per-UID**, almost every container on a node runs as UID 0, and the default
+ceiling of 128 instances is one a Kubernetes node passes without doing anything
+unusual — kubelet, containerd, Flux's controllers, cert-manager, Longhorn,
+Grafana's sidecars and Alloy all watch files.
+
+The nodes are configured for this by ``rke2_node``, which sets 8192 instances
+and 524288 watches in ``/etc/sysctl.d/90-rke2-inotify.conf``. If the message
+appears anyway, check the node:
+
+.. code-block:: console
+
+   $ sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches
+
+   # what is actually holding them, by UID
+   $ for f in /proc/*/fd/*; do \
+       case $(readlink $f 2>/dev/null) in anon_inode:inotify) stat -c %u $f;; esac; \
+     done | sort | uniq -c | sort -rn | head
+
+A value of 128 means the drop-in is missing or the host was rebooted before it
+was written — re-run ``playbooks/kubecp.yml`` or ``playbooks/kubewk.yml``.
+Watch for the failure being silent: a controller that cannot create a watcher
+sometimes starts anyway and simply never notices the change it exists to watch.
+
 GitOps
 ======
 

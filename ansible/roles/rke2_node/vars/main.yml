@@ -6,3 +6,14 @@
 # inside the role, so the tree that renders a host's configuration can
 # be read without opening the role.
 _var_rke2_node_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_node"
+
+# Numbered 90 so it lands after the distribution's own drop-ins and wins. The
+# name says which role owns it, because a bare 90-inotify.conf on a node is a
+# setting with no author.
+_var_rke2_node_inotify_conf_path: /etc/sysctl.d/90-rke2-inotify.conf
+
+# Assembled from the two public inputs so the task loop and the template cannot
+# disagree about what is being set.
+_var_rke2_node_inotify_settings:
+  fs.inotify.max_user_instances: "{{ rke2_node_inotify_max_user_instances }}"
+  fs.inotify.max_user_watches: "{{ rke2_node_inotify_max_user_watches }}"

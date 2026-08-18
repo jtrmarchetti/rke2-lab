@@ -169,6 +169,13 @@ inventory_rke2_server_tls_san:
 
 inventory_rke2_server_cni: cilium
 
+# Phase 6c follow-up. RKE2 binds etcd, the scheduler, the controller manager and
+# kube-proxy to 127.0.0.1, and every ServiceMonitor kube-prometheus-stack ships
+# scrapes the node address — so the stack alerted that the control plane was
+# down while all three etcd members were Ready. The alerts described the scrape.
+# See the rke2_server role defaults for what each listener exposes.
+inventory_rke2_server_expose_metrics: true
+
 # Phase 5's decision, and it inverted Phase 4's note rather than confirming it.
 # Phase 4 recorded that RKE2's packaged default is ingress-nginx and that
 # plan/CLUSTER_COMPONENTS.md was wrong to say Traefik. Both halves were true at

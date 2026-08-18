@@ -18,3 +18,6 @@ galaxy_info:
     - airgap
 
 dependencies: []
+
+collections:
+  - ansible.posix

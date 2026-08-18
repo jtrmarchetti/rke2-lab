@@ -28,6 +28,13 @@ rke2_agent_supervisor_port: 9345
 # and not on the 32 GB OS disk.
 rke2_agent_data_dir: /data1/rancher/rke2
 
+# kube-proxy's metrics listener, which is the only control plane component an
+# agent runs. Bound to 127.0.0.1 by default, which leaves the chart's kube-proxy
+# ServiceMonitor with no reachable endpoint on this node and KubeProxyDown
+# firing for the whole cluster. Plain HTTP and unauthenticated on 10249 — see
+# the equivalent setting in the rke2_server role for the exposure this accepts.
+rke2_agent_expose_metrics: true
+
 # --- readiness ------------------------------------------------------------
 #
 # An agent has no kubeconfig and no kubectl: /etc/rancher/rke2/rke2.yaml is

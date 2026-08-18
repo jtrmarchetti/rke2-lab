@@ -38,6 +38,12 @@ argument_specs:
         description:
           - Where RKE2 keeps everything, containerd's image store included.
             Must equal rke2_node_data_dir.
+      rke2_agent_expose_metrics:
+        type: bool
+        default: true
+        description:
+          - Binds kube-proxy's metrics off 127.0.0.1 so the chart's kube-proxy
+            ServiceMonitor has an endpoint on this node.
       rke2_agent_control_host:
         type: str
         required: true

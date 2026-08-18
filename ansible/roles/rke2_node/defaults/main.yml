@@ -15,6 +15,25 @@ rke2_node_version: 1.35.7+rke2r1
 # fill the 32 GB OS disk.
 rke2_node_data_dir: /data1/rancher/rke2
 
+# --- inotify --------------------------------------------------------------
+#
+# Both limits are per-UID, and on a Kubernetes node nearly every container runs
+# as UID 0, so they share one allowance. The kernel default for instances is
+# 128 and this cluster sat at 129 — kubelet, containerd, Flux's controllers,
+# cert-manager, Longhorn, Grafana's sidecars and Alloy all watch files.
+#
+# Over the limit, a watcher allocation fails with EMFILE and the process
+# reports "failed to create fsnotify watcher: too many open files", which names
+# open files and sends you to ulimit, where nothing is wrong.
+#
+# 8192 instances and 524288 watches are the values Longhorn and the Flux
+# documentation both ask for. The cost is kernel memory and it is small: an
+# instance is a few hundred bytes and a watch about a kilobyte, so the ceiling
+# here is well under a gigabyte on a node that would have to be in serious
+# trouble to approach it. These are ceilings, not allocations.
+rke2_node_inotify_max_user_instances: 8192
+rke2_node_inotify_max_user_watches: 524288
+
 # Scratch directory the installer runs against. Holds only the binary tarball
 # and the release checksum file; see the note in install.yml about why the
 # airgap image tarball is deliberately absent.
