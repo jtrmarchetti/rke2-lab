@@ -120,8 +120,13 @@
           {{ inventory_wireguard_gateway_peer_endpoint }}
         wireguard_gateway_peer_persistent_keepalive: >-
           {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
+        # Derived on the controller from the key in the environment, not pasted
+        # here. controller_tunnel set this fact in the play above; the gateway
+        # takes the controller's public key from it. Same pattern as
+        # playbooks/tunnel_controller_access.yml.
         wireguard_gateway_peer_public_key: >-
-          {{ inventory_wireguard_gateway_peer_public_key }}
+          {{ hostvars[inventory_wireguard_gateway_controller_host]
+             ['controller_tunnel_local_public_key'] }}
         wireguard_gateway_private_key: >-
           {{ inventory_wireguard_gateway_private_key }}
       ansible.builtin.include_role:
