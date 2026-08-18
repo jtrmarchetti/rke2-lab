@@ -65,8 +65,14 @@ inventory_wireguard_gateway_internal_subnet: 192.168.2.0/24
 inventory_socks5_proxy_enabled: true
 inventory_socks5_proxy_listen_address: 0.0.0.0
 inventory_socks5_proxy_listen_port: 1080
-inventory_socks5_proxy_internal_interface: eth0
-inventory_socks5_proxy_external_interface: eth0
+# Both NICs, because this is the dual-homed host: eth0 is 192.168.1.20 on the
+# external network, eth1 is 192.168.2.99 on the internal one. The proxy exists
+# to reach internal services from outside, so those connections must leave via
+# eth1 and carry an internal source address; naming eth0 alone sourced them
+# from 192.168.1.20 and the artifact host refused them.
+inventory_socks5_proxy_external_interfaces:
+  - eth0
+  - eth1
 inventory_socks5_proxy_allowed_client_networks:
   - 192.168.1.0/24
 

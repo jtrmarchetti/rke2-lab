@@ -2,6 +2,12 @@
 socks5_proxy_enabled: true
 socks5_proxy_listen_address: 0.0.0.0
 socks5_proxy_listen_port: 1080
-socks5_proxy_internal_interface: eth0
-socks5_proxy_external_interface: eth0
+
+# Every interface the proxy may source outgoing connections from. On a
+# dual-homed host this must list both, or destinations reached through the
+# interface that is not named here are sourced from the wrong address and any
+# service filtering on source address refuses them. See the template for the
+# failure this caused on repo01.
+socks5_proxy_external_interfaces:
+  - eth0
 socks5_proxy_allowed_client_networks: null

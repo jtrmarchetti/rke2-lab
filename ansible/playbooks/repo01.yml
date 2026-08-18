@@ -137,10 +137,8 @@
         socks5_proxy_allowed_client_networks: >-
           {{ inventory_socks5_proxy_allowed_client_networks }}
         socks5_proxy_enabled: "{{ inventory_socks5_proxy_enabled }}"
-        socks5_proxy_external_interface: >-
-          {{ inventory_socks5_proxy_external_interface }}
-        socks5_proxy_internal_interface: >-
-          {{ inventory_socks5_proxy_internal_interface }}
+        socks5_proxy_external_interfaces: >-
+          {{ inventory_socks5_proxy_external_interfaces }}
         socks5_proxy_listen_address: "{{ inventory_socks5_proxy_listen_address }}"
         socks5_proxy_listen_port: "{{ inventory_socks5_proxy_listen_port }}"
       ansible.builtin.include_role:

@@ -75,6 +75,19 @@ Alternatively, from a host that already has the tunnel:
 
    $ ssh -D 1080 root@192.168.1.20
 
+.. note::
+
+   ``repo01`` is dual-homed, so the proxy is configured with both of its
+   interfaces and picks the source address per destination
+   (``external.rotation: route`` in ``/etc/danted.conf``). If it is ever
+   reduced to one interface, proxied requests to the internal network leave
+   with the external address ``192.168.1.20`` and services that filter on
+   source address answer ``403 Forbidden`` — the artifact host at
+   ``http://192.168.2.99/`` allows the internal subnet and the tunnel only.
+   The same URL keeps working over the tunnel, which is what makes the fault
+   look like a browser problem. Check the source address in
+   ``/var/log/apache2/artifact-host-access.log`` on ``repo01``.
+
 Trusting the certificates
 =========================
 

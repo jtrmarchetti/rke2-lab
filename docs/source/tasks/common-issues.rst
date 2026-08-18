@@ -19,6 +19,16 @@ A WireGuard peer with a stale key brings the interface up, lists the peer and
 reports green from systemd. The handshake is the only symptom. Re-run
 ``playbooks/tunnel_controller_access.yml``.
 
+**A browser gets "Forbidden" from an internal service, but curl over the
+tunnel gets the page.** The proxy is sourcing the connection from the wrong
+address. ``repo01`` is dual-homed, and dante binds its source address per
+destination only when ``/etc/danted.conf`` names both interfaces with
+``external.rotation: route``. With one interface named, everything the proxy
+reaches leaves as ``192.168.1.20``, which the artifact host's ``Require ip``
+list does not include. Confirm from the source address in
+``/var/log/apache2/artifact-host-access.log`` on ``repo01``, then re-run
+``playbooks/repo01.yml --tags socks5_proxy``.
+
 **Everything on repo01 stops at once — GitLab, APT, artifacts, the tunnel.**
 Its 32 GB root filesystem is full. ``df -h /`` on ``repo01``. Everything that
 grows belongs on ``/data1``; find what is not.
