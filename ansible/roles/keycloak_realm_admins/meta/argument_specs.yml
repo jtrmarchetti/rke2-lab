@@ -1,0 +1,76 @@
+---
+argument_specs:
+  main:
+    short_description: Delegate realm administration to a directory group
+    description:
+      - Grants the FreeIPA group imported as `keycloak-admins` the
+        `realm-admin` role on the application realm's `realm-management`
+        client, so its members administer that realm as themselves at
+        /admin/<realm>/console.
+      - Grants client roles when a client is named and realm roles when it is
+        not, which is the difference between administering an application
+        realm and administering master.
+      - Grants are additive, and the group is never created here — it is
+        created in FreeIPA and imported by the federation.
+    options:
+      keycloak_realm_admins_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      keycloak_realm_admins_url:
+        type: str
+        required: true
+        description: Keycloak's base URL.
+      keycloak_realm_admins_ca_file:
+        type: str
+        description: CA bundle Keycloak's certificate is verified against.
+      keycloak_realm_admins_admin_user:
+        type: str
+        default: admin
+        description: Keycloak's local administrator, always in master.
+      keycloak_realm_admins_admin_realm:
+        type: str
+        default: master
+        description: The realm that administrator authenticates against.
+      keycloak_realm_admins_admin_password:
+        type: str
+        required: true
+        description: That administrator's password, from the vault.
+      keycloak_realm_admins_realm:
+        type: str
+        required: true
+        description:
+          - The realm administration is delegated over. Must not be master.
+      keycloak_realm_admins_allow_master_realm:
+        type: bool
+        default: false
+        description:
+          - Permit delegating administration of master. Only alongside a
+            federation of master filtered to this group; keycloak_ldap
+            asserts that half.
+      keycloak_realm_admins_group:
+        type: str
+        default: keycloak-admins
+        description:
+          - The FreeIPA group whose members administer that realm. Created by
+            ipa_sso_groups and imported by keycloak_ldap.
+      keycloak_realm_admins_client:
+        type: str
+        default: realm-management
+        description:
+          - The client holding the realm's administrative roles. Keycloak
+            creates it with every realm except master.
+          - Empty grants realm roles instead, which is how master is
+            administered.
+      keycloak_realm_admins_roles:
+        type: list
+        elements: str
+        default:
+          - realm-admin
+        description:
+          - Roles granted on that client. `realm-admin` is the composite that
+            holds all of them.
+      keycloak_realm_admins_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints the password.

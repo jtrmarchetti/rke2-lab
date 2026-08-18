@@ -31,6 +31,20 @@ ipa_sso_groups_admin_user: admin
 # not name would put entries in the domain that nothing ever removes.
 ipa_sso_groups_applications: []
 
+# The services whose access model has an administrator tier and nothing below
+# it. Each produces one group, `<name>-admins`, and no user group.
+#
+# Keycloak itself is the case this exists for, and it is not a special case so
+# much as the shape of the thing: every account in the domain can already sign
+# in to Keycloak and reach its own account console, because that is what being
+# federated *is*. There is nothing a `keycloak-users` group could grant. A
+# group that grants nothing is worse than no group at all — it reads as access
+# in `ipa group-find`, is asked for by name, and is then found to do nothing.
+#
+# Same two keys as above, and the same rule about membership: this role creates
+# the group and never puts anyone in it.
+ipa_sso_groups_admin_only_applications: []
+
 # The suffixes that turn a slug into a group name. Configurable because they
 # are a naming convention rather than a fact, and fixed in practice because
 # keycloak_clients derives the same names from the same slugs — change one and

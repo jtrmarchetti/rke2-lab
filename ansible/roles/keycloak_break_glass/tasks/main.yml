@@ -1,0 +1,223 @@
+---
+# Keycloak's own administrator: local, permanent, and the only way in when the
+# directory is what is broken.
+#
+# ## The account Keycloak creates is not one you can keep
+#
+# `KC_BOOTSTRAP_ADMIN_USERNAME` and `KC_BOOTSTRAP_ADMIN_PASSWORD` create an
+# administrator on the first start of a Keycloak whose `master` realm does not
+# exist yet. Since 26 that account is **temporary**: Keycloak stamps it with the
+# user attribute `is_temporary_admin`, the console shows every session as one
+# that ought to end — "create a permanent admin account and delete the
+# temporary one" — and the account is expected to exist only long enough to
+# create a real one.
+#
+# That expectation does not fit an account that is deployed rather than
+# clicked. Here the password is authored in `env.sh`, held in the vault at
+# `kv/keycloak`, and delivered to the pod by External Secrets; the account is
+# reachable only through the cluster's ingress; and four Ansible roles
+# authenticate as it. It is not a value someone typed at a terminal to get
+# started with, which is the thing the flag is a warning about.
+#
+# So this role keeps the account and removes the marker. What makes it
+# permanent is not the deletion of an attribute — it is that the credential has
+# a source of record, and the deletion is what stops the console from saying
+# otherwise.
+#
+# ## Why the marker cannot simply be written away
+#
+# `is_temporary_admin` is an *unmanaged* attribute: it is not in the realm's
+# user profile, and a realm whose `unmanagedAttributePolicy` is unset — which
+# is Keycloak's default — ignores unmanaged attributes on every write through
+# the admin API. A `PUT` of the user with the attribute removed returns 204 and
+# changes nothing, which is the most convincing kind of no-op. promote.yml
+# therefore enables the policy, writes, and restores it, and does the restoring
+# in an `always` so that a failure between the two does not leave the realm
+# accepting arbitrary attributes on its accounts.
+#
+# The alternative — create a second administrator and delete this one — is what
+# Keycloak's documentation describes, and it is the wrong shape here: it
+# renames the account four roles, the vault key and the runbooks all refer to,
+# to arrive at an account with the same name, the same password and the same
+# role.
+#
+# ## What else must be true of the administrative realm
+#
+# It holds administrators and nothing else, which is a statement about *which*
+# federation may be there rather than about whether any may. A provider
+# admitting only the members of the group that administers Keycloak puts
+# administrators in the administrative realm, which is what it is for; an
+# unfiltered one puts the domain there. So this role removes every provider
+# that is not named in `keycloak_break_glass_allowed_federation`, and the
+# accounts an absent provider left behind — accounts belonging to a provider
+# that is still standing are left alone.
+
+- name: main | Assert the required inputs are present
+  when: (keycloak_break_glass_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (keycloak_break_glass_url | length) > 0
+      - (keycloak_break_glass_realm | length) > 0
+      - (keycloak_break_glass_admin_password | length) > 0
+    fail_msg: >-
+      keycloak_break_glass needs Keycloak's URL, the administrative realm, and
+      the admin password (KEYCLOAK_ADMIN_PASSWORD from
+      ~/.config/rke2lab/env.sh, and in the vault at kv/keycloak). See
+      plan/SECRETS.md.
+    quiet: true
+
+- name: main | Make the local administrator permanent
+  when:
+    - (keycloak_break_glass_enabled | bool)
+    # uri has no dry run, and every read below needs a token this role would
+    # have to obtain anyway. Same gate the other Keycloak roles use.
+    - not ansible_check_mode
+  block:
+    - name: main | Obtain an admin token
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_token
+      ansible.builtin.uri:
+        url: >-
+          {{ keycloak_break_glass_url }}/realms/{{
+          keycloak_break_glass_realm }}/protocol/openid-connect/token
+        method: POST
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_break_glass_admin_user }}"
+          password: "{{ keycloak_break_glass_admin_password }}"
+
+    # `exact`, because without it Keycloak searches on a prefix and an
+    # environment that later grows an `admin.svc` account would find two.
+    - name: main | Read the administrator account
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_user
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users?username={{
+          keycloak_break_glass_admin_user }}&exact=true
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+    - name: main | Assert the administrator account exists and is enabled
+      ansible.builtin.assert:
+        that:
+          - (_var_keycloak_break_glass_current | length) > 0
+          - (_var_keycloak_break_glass_current['enabled'] | default(false)
+             | bool)
+        fail_msg: >-
+          No enabled account named '{{ keycloak_break_glass_admin_user }}' in
+          the {{ keycloak_break_glass_realm }} realm. The token above was
+          issued, so something answered for that name and then did not read
+          back — which on a rebuilt Keycloak means the bootstrap credentials
+          in the Deployment do not match KEYCLOAK_ADMIN_PASSWORD.
+        quiet: true
+
+    - name: main | Read the realm roles the administrator holds
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_roles
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users/{{
+          _var_keycloak_break_glass_user_id | trim }}/role-mappings/realm
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+    # Read, and granted if absent, rather than asserted. An account created
+    # through bootstrap already holds this; an account that lost it is an
+    # account nobody can restore it with, which is the one failure this role
+    # exists to make impossible.
+    - name: main | Read the administrator role
+      when: >-
+        keycloak_break_glass_admin_role not in
+        (_reg_keycloak_break_glass_roles['json'] | map(attribute='name')
+         | list)
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_role
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/roles/{{
+          keycloak_break_glass_admin_role }}
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+    - name: main | Grant the administrator role
+      when: >-
+        keycloak_break_glass_admin_role not in
+        (_reg_keycloak_break_glass_roles['json'] | map(attribute='name')
+         | list)
+      changed_when: true
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users/{{
+          _var_keycloak_break_glass_user_id | trim }}/role-mappings/realm
+        method: POST
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+        body_format: json
+        body: "{{ [_reg_keycloak_break_glass_role['json']] }}"
+        status_code: [204]
+
+    - name: main | Remove the temporary marker from the administrator
+      when: (_var_keycloak_break_glass_temporary | bool)
+      ansible.builtin.include_tasks: promote.yml
+
+    - name: main | Remove any federation from the administrative realm
+      when: (keycloak_break_glass_remove_federation | bool)
+      ansible.builtin.include_tasks: federation.yml
+
+    - name: main | Read the administrator account back
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_user
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users?username={{
+          keycloak_break_glass_admin_user }}&exact=true
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+    - name: main | Read the realm roles the administrator holds back
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      register: _reg_keycloak_break_glass_roles
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users/{{
+          _var_keycloak_break_glass_user_id | trim }}/role-mappings/realm
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+    - name: main | Assert the administrator is permanent and privileged
+      ansible.builtin.assert:
+        that:
+          - not (_var_keycloak_break_glass_temporary | bool)
+          - >-
+            keycloak_break_glass_admin_role in
+            (_reg_keycloak_break_glass_roles['json'] | map(attribute='name')
+             | list)
+          - >-
+            (_var_keycloak_break_glass_current['federationLink']
+             | default('') | length) == 0
+        fail_msg: >-
+          '{{ keycloak_break_glass_admin_user }}' is still marked temporary,
+          or does not hold the {{ keycloak_break_glass_admin_role }} role, or
+          is federated. A federated administrator is the failure this whole
+          arrangement is against: Keycloak would be administrable only while
+          the directory it federates is working.
+        quiet: true
+
+    - name: main | Report the administrator
+      ansible.builtin.debug:
+        msg: >-
+          '{{ keycloak_break_glass_admin_user }}' is a permanent, local
+          administrator of {{ keycloak_break_glass_realm }} at
+          {{ keycloak_break_glass_url }}. Its password is
+          KEYCLOAK_ADMIN_PASSWORD in env.sh and kv/keycloak in the vault.
+        verbosity: 0

@@ -8,8 +8,15 @@
 # is refused. keycloak_clients derives exactly these names from exactly these
 # slugs; the two roles agree because they share the suffixes, not because
 # anyone keeps two lists aligned.
+# The administrator-only services contribute one name each, which is why they
+# cannot simply be concatenated onto the list above before the product is
+# taken: that would invent a user group for a service that has no user tier.
 _var_ipa_sso_groups_all: >-
-  {{ ipa_sso_groups_applications
-     | map(attribute='name')
-     | product([ipa_sso_groups_admin_suffix, ipa_sso_groups_user_suffix])
-     | map('join', '-') | list }}
+  {{ (ipa_sso_groups_applications
+      | map(attribute='name')
+      | product([ipa_sso_groups_admin_suffix, ipa_sso_groups_user_suffix])
+      | map('join', '-') | list)
+     + (ipa_sso_groups_admin_only_applications
+        | map(attribute='name')
+        | product([ipa_sso_groups_admin_suffix])
+        | map('join', '-') | list) }}

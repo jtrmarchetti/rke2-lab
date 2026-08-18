@@ -29,7 +29,87 @@ Applications and federated users live in the **``dev-lo``** realm. The
 ``master`` realm administers every other realm and holds Keycloak's own local
 administrator, which stays local deliberately: a Keycloak whose administrators
 were themselves federated would be unadministrable exactly when FreeIPA is what
-is broken.
+is broken. No clients live there, and the only federation permitted is the
+filtered one described below — ``keycloak_break_glass`` removes anything else
+that appears.
+
+Administering Keycloak
+======================
+
+Two ways in, and they are not interchangeable.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 34 46
+
+   * - Who
+     - Where
+     - What they can do
+   * - ``keycloak-admins`` in FreeIPA
+     - ``/admin/dev-lo/console`` and ``/admin/master/console``
+     - Everything. ``realm-admin`` on ``dev-lo``, and the ``admin`` realm role
+       in ``master`` — so realms can be created and master itself edited.
+       Signed in as themselves, with their own domain password
+   * - Local ``admin``
+     - ``https://sso.k8s.dev.lo/admin/master/console``
+     - The same, and it keeps working when FreeIPA does not. One shared
+       password, in ``env.sh`` and ``kv/keycloak``
+
+Everyday administration is the first row, and it is granted the way every other
+grant in this lab is granted:
+
+.. code-block:: console
+
+   $ ipa group-add-member keycloak-admins --users alice
+
+``keycloak-admins`` is the one group with no ``-users`` counterpart. Every
+account in the domain can already sign in to Keycloak — that is what being
+federated is — so there would be nothing for a user tier to grant.
+
+The second row is break-glass and is meant to be rare: it is one shared
+password that names nobody in an audit log. What it buys is availability — it
+does not depend on FreeIPA, so it is the way in on the day the directory is
+what is broken.
+
+Master is federated, and narrowly
+---------------------------------
+
+Granting the ``admin`` realm role in ``master`` needs the group to exist in
+``master``, which needs a federation there. That is the arrangement the realm
+split exists to avoid, so it is narrowed rather than granted whole. The
+provider in ``master`` carries two filters:
+
+.. code-block:: text
+
+   users:  (&(!(nsAccountLock=TRUE))(memberOf=cn=keycloak-admins,cn=groups,cn=accounts,dc=dev,dc=lo))
+   groups: (cn=keycloak-admins)
+
+So ``master`` holds the people who administer Keycloak and the one group that
+says so — not the domain. Keycloak's guidance is that master holds
+administrators rather than application users and business identities, and a
+filtered provider is on the right side of that; an unfiltered one is not.
+``keycloak_ldap`` refuses to touch ``master`` unless both filters are set, and
+``keycloak_break_glass`` will delete any provider there that is not named in
+``keycloak_break_glass_allowed_federation``.
+
+.. warning::
+
+   This is a real trade and it is worth knowing which half you gave up. An
+   account in ``keycloak-admins`` can now disable or delete the local
+   ``admin`` — master's account is no longer protected *from* the directory.
+   What survives is that it stays local and unfederated, so it still works
+   when the directory does not.
+
+.. note::
+
+   The account Keycloak creates from ``KC_BOOTSTRAP_ADMIN_*`` is **temporary**:
+   it carries the user attribute ``is_temporary_admin`` and the console warns on
+   every session. ``keycloak_break_glass`` removes that attribute, because the
+   password here has a source of record rather than being something someone
+   typed to get started. It takes three writes, not one — the attribute is
+   unmanaged, and a realm ignores unmanaged attributes on write unless its
+   ``unmanagedAttributePolicy`` is open, so the role opens it, writes, and
+   restores it.
 
 Health
 ======
@@ -94,8 +174,24 @@ about users already in the realm; a **full** sync is required.
 timestamp, which correcting a mapper on Keycloak's side does not touch, so
 every user is skipped and it looks exactly like a successful sync.
 
-**A stale LDAP federation provider still exists in the ``master`` realm.**
-Nothing prunes it; it should be removed by hand.
+**A group added in FreeIPA is invisible until Keycloak's user cache is
+dropped.** This is the one that looks least like its cause. Neither the group
+sync nor the user sync invalidates the cache holding an already-imported user,
+so ``ipa group-add-member keycloak-admins --users alice`` leaves Alice listed
+as a member when you ask the group who is in it — that query goes to the
+directory — and absent from her own group list, which is served from the cache.
+Every role mapping derived from the group is missing with it, and she is
+refused at the console with *You do not have permission to access this
+resource* against a realm where every mapping reads back correctly.
+``keycloak_ldap`` now posts ``clear-user-cache`` after its syncs; by hand it is
+``Realm settings → Sessions`` or a ``POST`` to
+``/admin/realms/<realm>/clear-user-cache``.
+
+**An *unfiltered* federation provider in ``master`` is not a leftover to live
+with.** One sat there from before the realm split, still enabled, still binding
+over plain LDAP, importing every domain account into the realm that administers
+every other realm. ``keycloak_break_glass`` removes any provider there that is
+not explicitly allowed, and the accounts an absent provider left behind.
 
 **Keycloak needs an x86-64-v2 CPU.** The VMs run ``cpu_type: x86-64-v2-AES``
 for this reason. ``/proc/cpuinfo``'s model name still reads ``QEMU Virtual CPU

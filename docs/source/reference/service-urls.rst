@@ -20,7 +20,9 @@ Web and API
      - ``rke2/images``, ``rke2/charts``, ``rke2/packages``
    * - Keycloak
      - ``https://sso.k8s.dev.lo``
-     - Realms ``master`` (admins) and ``dev-lo`` (apps)
+     - Realm consoles at ``/admin/dev-lo/console`` and
+       ``/admin/master/console``. Both take domain accounts in
+       ``keycloak-admins``; the local ``admin`` is break-glass
    * - OpenBao
      - ``https://bao.k8s.dev.lo``
      - Also ``bao login -method=oidc`` via ``localhost:8250``

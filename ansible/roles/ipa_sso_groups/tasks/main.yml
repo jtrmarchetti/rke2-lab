@@ -29,12 +29,14 @@
       - (ipa_sso_groups_ipa_host | length) > 0
       - (ipa_sso_groups_ipa_container | length) > 0
       - (ipa_sso_groups_admin_password | length) >= 8
-      - (ipa_sso_groups_applications | length) > 0
+      - (_var_ipa_sso_groups_all | length) > 0
     fail_msg: >-
       ipa_sso_groups needs the identity host, the container the directory
       tools run in, the IPA admin password (FREEIPA_ADMIN_PASSWORD from
-      ~/.config/rke2lab/env.sh) and at least one application to create groups
-      for. See plan/SECRETS.md.
+      ~/.config/rke2lab/env.sh) and at least one application — in either
+      ipa_sso_groups_applications or
+      ipa_sso_groups_admin_only_applications — to create groups for. See
+      plan/SECRETS.md.
     quiet: true
 
 # One invocation per application rather than one per group, so the pair is
@@ -96,6 +98,45 @@
         echo "changed=${changed}"'
     stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
 
+# The administrator-only services, which get one group rather than a pair.
+# Separate from the loop above rather than folded into it, because that loop's
+# whole point is that a pair is created together: an application holding
+# `grafana-admins` and not `grafana-users` is a state no reader expects. There
+# is no pair to keep together here, and pretending there is would mean a task
+# that creates one group and reports on two.
+- name: main | Ensure each administrator-only service has an administrator group # noqa: risky-shell-pipe
+  when:
+    - (ipa_sso_groups_enabled | bool)
+    - (ipa_sso_groups_admin_only_applications | length) > 0
+  changed_when: "'changed=0' not in _reg_ipa_sso_groups_admin_only['stdout']"
+  delegate_to: "{{ ipa_sso_groups_ipa_host }}"
+  no_log: "{{ ipa_sso_groups_no_log | bool }}"
+  register: _reg_ipa_sso_groups_admin_only
+  loop: "{{ ipa_sso_groups_admin_only_applications }}"
+  loop_control:
+    loop_var: _item_ipa_sso_groups_admin_only
+    label: "{{ _item_ipa_sso_groups_admin_only['name'] }}"
+  vars:
+    _ipa_sso_groups_group: >-
+      {{ _item_ipa_sso_groups_admin_only['name'] }}-{{
+      ipa_sso_groups_admin_suffix }}
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -i {{ ipa_sso_groups_ipa_container }} bash -c '
+        set -e -o pipefail
+        cat | base64 -d | kinit {{ ipa_sso_groups_admin_user }} >/dev/null
+        changed=0
+        if ! ipa group-show {{ _ipa_sso_groups_group | trim }} \
+             >/dev/null 2>&1
+        then
+          ipa group-add {{ _ipa_sso_groups_group | trim }} \
+            --desc "Administrators of {{
+              _item_ipa_sso_groups_admin_only['description'] }}" >/dev/null
+          changed=1
+        fi
+        echo "changed=${changed}"'
+    stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
+
 # Read back rather than trusted, because the failure this catches is silent at
 # every other layer: a group that does not exist appears in Keycloak as an
 # absent group mapping, and in the service as a user who authenticates
@@ -140,7 +181,8 @@
   when: (ipa_sso_groups_enabled | bool)
   ansible.builtin.debug:
     msg: >-
-      {{ ipa_sso_groups_applications | length }} applications,
-      {{ _var_ipa_sso_groups_all | length }} groups:
+      {{ (ipa_sso_groups_applications
+          + ipa_sso_groups_admin_only_applications) | length }}
+      applications, {{ _var_ipa_sso_groups_all | length }} groups:
       {{ _var_ipa_sso_groups_all | join(', ') }}
     verbosity: 0

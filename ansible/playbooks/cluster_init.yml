@@ -69,9 +69,13 @@
     - openbao_secrets
     - garage_init
     - ipa_sso_groups
+    - keycloak_break_glass
     - keycloak_realm
     - keycloak_ldap
+    - keycloak_ldap_master
     - keycloak_clients
+    - keycloak_realm_admins
+    - keycloak_realm_admins_master
     - openbao_oidc
   tasks:
     - name: cluster_init | Include the OpenBao initialisation role
@@ -162,22 +166,37 @@
 
     # --- Single sign-on ---------------------------------------------------
     #
-    # Five roles, and the order between them is the only thing here that is not
-    # free to change:
+    # Seven roles, and the order between them is the only thing here that is
+    # not free to change:
     #
     #   1. ipa_sso_groups creates the groups, in the domain, where identity
     #      already lives. It runs whatever the cluster is doing, because
     #      FreeIPA is up long before Keycloak.
-    #   2. keycloak_realm creates the realm the clients live in — not master,
-    #      which administers every other realm and holds Keycloak's own local
-    #      break-glass administrator.
-    #   3. keycloak_ldap federates the directory into that realm and imports
-    #      the groups from it.
-    #   4. keycloak_clients creates a client per service and binds each group
+    #   2. keycloak_break_glass makes Keycloak's own administrator permanent —
+    #      the account bootstrap creates is marked temporary — and clears the
+    #      administrative realm of federation. First of the Keycloak roles,
+    #      because it is the account every one of them authenticates as.
+    #   3. keycloak_realm creates the realm the clients live in — not master,
+    #      which administers every other realm and holds that administrator.
+    #   4. keycloak_ldap federates the directory into that realm and imports
+    #      the groups from it. It runs a second time against `master`, with a
+    #      user filter admitting only the members of `keycloak-admins` and a
+    #      group filter naming only that group — which is what makes
+    #      administering Keycloak itself a domain group rather than a shared
+    #      password, without putting the domain in the administrative realm.
+    #   5. keycloak_clients creates a client per service and binds each group
     #      to a client role. It needs the groups to have been imported, which
     #      is why keycloak_ldap forces a synchronisation rather than waiting
     #      for a periodic one.
-    #   5. openbao_oidc adds a sign-in path to the vault, beside the root
+    #   6. keycloak_realm_admins grants the directory's `keycloak-admins`
+    #      group administration of that realm, so that administering Keycloak
+    #      is a domain group like every other grant rather than a shared local
+    #      password. It needs the group imported, so it follows the
+    #      federation for the same reason keycloak_clients does. It too runs
+    #      twice: `realm-admin` on the application realm's
+    #      `realm-management` client, and the `admin` realm role in master,
+    #      which has no such client.
+    #   7. openbao_oidc adds a sign-in path to the vault, beside the root
     #      token and never instead of it.
     #
     # What is *not* in this ordering is any dependency on a client secret being
@@ -195,6 +214,8 @@
         ipa_sso_groups_admin_password: >-
           {{ inventory_ipa_sso_groups_admin_password }}
         ipa_sso_groups_applications: "{{ inventory_keycloak_applications }}"
+        ipa_sso_groups_admin_only_applications: >-
+          {{ inventory_keycloak_admin_only_applications }}
         ipa_sso_groups_ipa_container: >-
           {{ inventory_ipa_sso_groups_ipa_container }}
         ipa_sso_groups_ipa_host: "{{ inventory_ipa_sso_groups_ipa_host }}"
@@ -203,6 +224,22 @@
         apply:
           tags:
             - ipa_sso_groups
+
+    - name: cluster_init | Include the Keycloak break-glass role
+      when: (keycloak_ready | default(false) | bool)
+      tags:
+        - keycloak_break_glass
+      vars:
+        keycloak_break_glass_admin_password: >-
+          {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        keycloak_break_glass_allowed_federation: >-
+          {{ inventory_keycloak_break_glass_allowed_federation }}
+        keycloak_break_glass_url: "{{ inventory_keycloak_ldap_url }}"
+      ansible.builtin.include_role:
+        name: keycloak_break_glass
+        apply:
+          tags:
+            - keycloak_break_glass
 
     - name: cluster_init | Include the Keycloak realm role
       when: (keycloak_ready | default(false) | bool)
@@ -247,6 +284,42 @@
           tags:
             - keycloak_ldap
 
+    # The same role, the same directory, the administrative realm — and two
+    # filters, which are the whole difference between delegating
+    # administration of Keycloak and federating the domain into the realm that
+    # administers every other realm. The role refuses master without both.
+    #
+    # `keycloak_ldap_manage_sysaccount: false` because the bind account is the
+    # one the invocation above already created; creating it twice is two
+    # Directory Manager binds for one outcome.
+    - name: cluster_init | Include the Keycloak LDAP federation role for master
+      when: (keycloak_ready | default(false) | bool)
+      tags:
+        - keycloak_ldap_master
+      vars:
+        keycloak_ldap_allow_master_realm: true
+        keycloak_ldap_admin_password: >-
+          {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        keycloak_ldap_bind_password: >-
+          {{ lookup('env', 'KEYCLOAK_LDAP_BIND_PASSWORD') }}
+        keycloak_ldap_connection_url: >-
+          {{ inventory_keycloak_ldap_connection_url }}
+        keycloak_ldap_dir_manager_password: >-
+          {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
+        keycloak_ldap_groups_dn: "{{ inventory_keycloak_ldap_groups_dn }}"
+        keycloak_ldap_groups_filter: >-
+          {{ inventory_keycloak_admin_groups_filter }}
+        keycloak_ldap_manage_sysaccount: false
+        keycloak_ldap_realm: master
+        keycloak_ldap_url: "{{ inventory_keycloak_ldap_url }}"
+        keycloak_ldap_user_search_filter: >-
+          {{ inventory_keycloak_admin_user_filter | trim }}
+      ansible.builtin.include_role:
+        name: keycloak_ldap
+        apply:
+          tags:
+            - keycloak_ldap_master
+
     - name: cluster_init | Include the Keycloak client role
       when: (keycloak_ready | default(false) | bool)
       tags:
@@ -263,6 +336,50 @@
         apply:
           tags:
             - keycloak_clients
+
+    - name: cluster_init | Include the Keycloak realm administrator role
+      when: (keycloak_ready | default(false) | bool)
+      tags:
+        - keycloak_realm_admins
+      vars:
+        keycloak_realm_admins_admin_password: >-
+          {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        keycloak_realm_admins_group: "{{ inventory_keycloak_admins_group }}"
+        keycloak_realm_admins_realm: "{{ inventory_keycloak_realm_name }}"
+        keycloak_realm_admins_url: "{{ inventory_keycloak_ldap_url }}"
+      ansible.builtin.include_role:
+        name: keycloak_realm_admins
+        apply:
+          tags:
+            - keycloak_realm_admins
+
+    # Administering master, which is a realm role rather than a role on a
+    # client — master has no `realm-management`, because administering it is
+    # not administering an application.
+    #
+    # This is the grant that lets a member of `keycloak-admins` create realms
+    # and edit master itself. It also means such an account can disable the
+    # local break-glass administrator, which is the cost of the arrangement and
+    # is recorded in the role's defaults rather than left to be discovered.
+    - name: cluster_init | Include the Keycloak master administrator role
+      when: (keycloak_ready | default(false) | bool)
+      tags:
+        - keycloak_realm_admins_master
+      vars:
+        keycloak_realm_admins_admin_password: >-
+          {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        keycloak_realm_admins_allow_master_realm: true
+        keycloak_realm_admins_client: ""
+        keycloak_realm_admins_group: "{{ inventory_keycloak_admins_group }}"
+        keycloak_realm_admins_realm: master
+        keycloak_realm_admins_roles: >-
+          {{ inventory_keycloak_master_admin_roles }}
+        keycloak_realm_admins_url: "{{ inventory_keycloak_ldap_url }}"
+      ansible.builtin.include_role:
+        name: keycloak_realm_admins
+        apply:
+          tags:
+            - keycloak_realm_admins_master
 
     # Last, because it is the one that has to be reasoned about rather than
     # ordered: the vault holds Keycloak's own database password, so this adds a

@@ -201,6 +201,16 @@ variable. Single-quote everything.
 Sign-in
 =======
 
+**A user added to a FreeIPA group is refused anyway**, with *You do not have
+permission to access this resource*, while the Keycloak console shows them as a
+member of the group and the group holding the right roles. Keycloak caches an
+imported user together with their resolved groups, and neither the group sync
+nor the user sync invalidates it — the group-members view queries the directory
+and agrees with you, the user's own group list is served from the cache and
+does not. Re-run ``keycloak_ldap`` (it posts ``clear-user-cache`` after the
+syncs), or ``POST /admin/realms/<realm>/clear-user-cache``. Then sign out and
+in again: roles are mapped when the token is issued.
+
 **oauth2-proxy returns HTTP 500 after Keycloak accepted the login**, saying the
 email is not verified. FreeIPA has no notion of a verified address, so Keycloak
 imports federated users with ``emailVerified`` false. Fixed realm-wide by a
@@ -250,5 +260,6 @@ Things that look broken and are not
 * ``/proc/cpuinfo`` reporting ``QEMU Virtual CPU version 2.5+`` — the model name
   never changed; the **flags** did (``sse4_2``, ``popcnt``, ``ssse3``).
 * A ``kubectl edit`` being reverted.
-* An LDAP federation provider still sitting in Keycloak's ``master`` realm —
-  stale, harmless, and should be removed by hand.
+* Only ``keycloak-admins`` and its members appearing in Keycloak's ``master``
+  realm. That federation is filtered to exactly those on purpose — see
+  :doc:`../components/identity`.

@@ -1,0 +1,65 @@
+---
+keycloak_realm_admins_enabled: true
+
+# Keycloak's base URL and the CA its certificate is verified against.
+keycloak_realm_admins_url: null
+keycloak_realm_admins_ca_file: /etc/ssl/certs/ca-certificates.crt
+
+# The administrator this role authenticates as, which is always in master —
+# that is where Keycloak's local break-glass account lives — even though
+# everything it grants is in the application realm below.
+keycloak_realm_admins_admin_user: admin
+keycloak_realm_admins_admin_realm: master
+# keycloak_realm_admins_admin_password:
+
+# The realm administration is delegated over.
+keycloak_realm_admins_realm: null
+
+# Whether this invocation may delegate administration of `master`.
+#
+# False by default and set deliberately, because the consequence is not
+# reversible by the group's own members: an account in the directory group can
+# then disable or delete the local break-glass administrator. What survives is
+# the availability half — that account stays local and unfederated, so it still
+# works when the directory does not.
+#
+# It is on the right side of Keycloak's own guidance, which is that master
+# holds administrators rather than application users, *provided* the federation
+# into master is filtered to this group. keycloak_ldap asserts that separately;
+# neither flag is sufficient alone.
+keycloak_realm_admins_allow_master_realm: false
+
+# The FreeIPA group whose members administer that realm.
+#
+# Created by ipa_sso_groups as an administrator-only application and imported
+# by keycloak_ldap's group mapper, exactly like every `<app>-admins` group.
+# What is different is the far end: the other groups are granted a role on a
+# client this repository creates, and this one is granted roles on a client
+# Keycloak creates for every realm.
+keycloak_realm_admins_group: keycloak-admins
+
+# The client those roles belong to. `realm-management` exists in every realm
+# but master, is created by Keycloak, and is what the admin console reads to
+# decide what a signed-in user may do in this realm.
+#
+# Empty selects the other shape: master has no such client, because
+# administering master is a realm role rather than a role on an application.
+# The role grants realm roles instead, and nothing else about it changes.
+keycloak_realm_admins_client: realm-management
+
+# The roles granted.
+#
+# `realm-admin` is the composite that holds every other role on that client, so
+# a member of the group administers this realm completely — its clients, its
+# users, its federation, its sessions.
+#
+# It is deliberately not administration of *Keycloak*. Nothing here reaches
+# master, so a member of this group cannot create a realm, cannot edit master,
+# and cannot revoke the local administrator. That is the line this role draws:
+# everyday administration comes from the directory and can be granted and taken
+# away with `ipa group-add-member`; the last way in does not.
+keycloak_realm_admins_roles:
+  - realm-admin
+
+# Set false only when debugging; it prints the admin password.
+keycloak_realm_admins_no_log: true

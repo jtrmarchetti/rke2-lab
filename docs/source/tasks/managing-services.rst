@@ -16,8 +16,9 @@ Where things are
      - ``https://gitlab.dev.lo``
      - Keycloak, or ``root`` locally
    * - Keycloak
-     - ``https://sso.k8s.dev.lo``
-     - ``admin`` in the **master** realm
+     - ``https://sso.k8s.dev.lo/admin``
+     - Your domain account, through ``keycloak-admins`` — which also
+       administers **master**. The local ``admin`` is break-glass
    * - OpenBao
      - ``https://bao.k8s.dev.lo``
      - Keycloak (OIDC), or the root token
@@ -57,12 +58,17 @@ Always in FreeIPA. Never in Keycloak, and never in the service:
    $ ipa user-add alice --first Alice --last Smith
    $ ipa group-add-member grafana-users  --users alice
    $ ipa group-add-member longhorn-admins --users alice
+   $ ipa group-add-member keycloak-admins --users alice   # administers SSO
 
    $ ipa group-show grafana-admins       # who has this today
 
 Groups follow the pattern ``<app>-admins`` and ``<app>-users`` for every
 federated application: ``grafana``, ``longhorn``, ``openbao``, ``gitlab``.
 Removal is ``ipa group-remove-member``.
+
+``keycloak-admins`` is the exception with no ``-users`` half: its members
+administer both Keycloak realms, and everyone else in the domain can already
+sign in to Keycloak without any group at all.
 
 .. note::
 
@@ -72,6 +78,11 @@ Removal is ``ipa group-remove-member``.
 
    New users need a full directory sync in Keycloak before they appear, if the
    periodic sync has not run yet.
+
+   A *new group membership* for a user Keycloak has already imported needs
+   more than a sync: its user cache has to be dropped, or the membership stays
+   invisible while the console shows it as correct. Re-running
+   ``keycloak_ldap`` does both.
 
 Restarting a workload
 =====================

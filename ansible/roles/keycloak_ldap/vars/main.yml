@@ -1,4 +1,9 @@
 ---
+# The default user search filter, named here so the assertion in main.yml can
+# say "narrower than the default" without repeating the string and drifting
+# from it.
+_var_keycloak_ldap_unfiltered_default: "(!(nsAccountLock=TRUE))"
+
 _var_keycloak_ldap_bind_dn: >-
   uid={{ keycloak_ldap_bind_user }},cn=sysaccounts,cn=etc,{{
   keycloak_ldap_base_dn }}
@@ -55,10 +60,12 @@ _var_keycloak_ldap_component:
     rdnLDAPAttribute: ["uid"]
     uuidLDAPAttribute: ["ipaUniqueID"]
     userObjectClasses: ["inetOrgPerson, organizationalPerson"]
-    # Only enabled accounts. FreeIPA marks a disabled account with
-    # nsAccountLock, and without this filter a disabled user keeps working
-    # through Keycloak after being locked out of everything else.
-    customUserSearchFilter: ["(!(nsAccountLock=TRUE))"]
+    # Which entries this provider may import. The default excludes disabled
+    # accounts only; the administrative realm passes a filter that also
+    # requires membership of the group that administers Keycloak. See the
+    # default for why that is the difference between federating master and
+    # federating the domain into master.
+    customUserSearchFilter: ["{{ keycloak_ldap_user_search_filter }}"]
     searchScope: ["1"]
     # Imported and cached rather than read on every request, so an identity
     # provider outage is not also a directory outage. The directory stays the
@@ -130,30 +137,41 @@ _var_keycloak_ldap_email_verified_matching: >-
 # drop.non.existing.groups.during.sync is false: this mapper is not the
 # authority on which groups Keycloak holds, and a sync that removed everything
 # it did not see would delete groups belonging to any other federation.
+# `groups.ldap.filter` when there is one, and no key at all when there is not.
+#
+# It cannot be written as an empty string: Keycloak discards config keys whose
+# value is empty, so a mapper declaring one never reads back matching what was
+# written, the comparison below sees a difference on every run, and the role
+# reports changed forever while changing nothing.
+_var_keycloak_ldap_groups_filter_config: >-
+  {{ {'groups.ldap.filter': [keycloak_ldap_groups_filter]}
+     if (keycloak_ldap_groups_filter | default('', true) | length) > 0
+     else {} }}
+
 _var_keycloak_ldap_group_mapper:
   name: "{{ keycloak_ldap_group_mapper_name }}"
   providerId: group-ldap-mapper
   providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
   parentId: "{{ _var_keycloak_ldap_provider_id | trim }}"
-  config:
-    groups.dn: ["{{ keycloak_ldap_groups_dn }}"]
-    group.name.ldap.attribute: ["cn"]
-    group.object.classes: ["groupOfNames"]
-    membership.ldap.attribute: ["member"]
-    membership.attribute.type: ["DN"]
-    membership.user.ldap.attribute: ["uid"]
-    # `groups.ldap.filter` is deliberately absent rather than set to an empty
-    # string. Keycloak discards config keys whose value is empty, so a mapper
-    # declaring one can never read back matching what was written — the
-    # comparison below sees a difference on every run, rewrites the mapper, and
-    # the role reports changed forever with nothing actually changing. An
-    # absent filter is the default and means the same thing.
-    mode: ["READ_ONLY"]
-    user.roles.retrieve.strategy: ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"]
-    preserve.group.inheritance: ["true"]
-    ignore.missing.groups: ["false"]
-    memberof.ldap.attribute: ["memberOf"]
-    drop.non.existing.groups.during.sync: ["false"]
+  config: >-
+    {{ _var_keycloak_ldap_group_mapper_config
+       | combine(_var_keycloak_ldap_groups_filter_config) }}
+
+# The mapper config without the optional filter, kept separate so the filter
+# can be merged in only when there is one.
+_var_keycloak_ldap_group_mapper_config:
+  groups.dn: ["{{ keycloak_ldap_groups_dn }}"]
+  group.name.ldap.attribute: ["cn"]
+  group.object.classes: ["groupOfNames"]
+  membership.ldap.attribute: ["member"]
+  membership.attribute.type: ["DN"]
+  membership.user.ldap.attribute: ["uid"]
+  mode: ["READ_ONLY"]
+  user.roles.retrieve.strategy: ["LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"]
+  preserve.group.inheritance: ["true"]
+  ignore.missing.groups: ["false"]
+  memberof.ldap.attribute: ["memberOf"]
+  drop.non.existing.groups.during.sync: ["false"]
 
 _var_keycloak_ldap_group_mapper_matching: >-
   {{ _reg_keycloak_ldap_mappers['json'] | default([])

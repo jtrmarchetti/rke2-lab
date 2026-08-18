@@ -1,0 +1,135 @@
+---
+# Administration of the application realm, granted from the directory.
+#
+# Keycloak's local `admin` is the account that works when everything else does
+# not, and it is the wrong account for ordinary work: it is one shared
+# password, it names nobody in an audit log, and every person who has to use it
+# is another person who knows it. What everyday administration should look like
+# here is what everyday access to every other service already looks like —
+# `ipa group-add-member keycloak-admins --users alice`, and nothing in a
+# console.
+#
+# That is what this role is. Members of the FreeIPA group `keycloak-admins`
+# hold `realm-admin` on the application realm's `realm-management` client, and
+# sign in to the admin console with their own domain credentials at
+#
+#     https://<keycloak>/admin/<realm>/console
+#
+# — which is a different URL from the one the local administrator uses, and the
+# most common surprise here: signing in to `/admin/master/console` with a
+# domain account fails with "no realm access", correctly, because the account
+# has none in master.
+#
+# ## Two shapes of grant, because there are two realms
+#
+# In the application realm the roles that matter belong to the
+# `realm-management` client, so the grant is a client role mapping. In master
+# there is no such client — administering master is a **realm** role, `admin` —
+# so the grant is a realm role mapping. Same role, same group, two endpoints;
+# `keycloak_realm_admins_client` empty selects the second.
+#
+# Granting in master is deliberate and it is gated. Keycloak's guidance is that
+# master holds administrators rather than application users, so a filtered
+# federation admitting only this group's members is on the right side of it —
+# but an unfiltered one is not, and neither is a caller that reached master by
+# accident. Hence `keycloak_realm_admins_allow_master_realm`.
+#
+# What it costs is worth stating where it will be read: after this, an account
+# in the directory group can disable or delete the local break-glass
+# administrator. Master's account is no longer protected *from* the directory.
+# It remains local and unfederated, so it still works when the directory does
+# not — which is the availability half, and the half people mean when they say
+# break-glass.
+#
+# ## What this role does not create
+#
+# The group. It is created in FreeIPA by ipa_sso_groups and imported by
+# keycloak_ldap's group mapper, for the reason keycloak_clients gives at
+# length: a group created in Keycloak is a second group with the same name and
+# no members, and it fails as "the mapping is there and nobody has it".
+
+- name: main | Assert the required inputs are present
+  when: (keycloak_realm_admins_enabled | bool)
+  ansible.builtin.assert:
+    that:
+      - (keycloak_realm_admins_url | length) > 0
+      - (keycloak_realm_admins_realm | length) > 0
+      - keycloak_realm_admins_realm != 'master'
+        or (keycloak_realm_admins_allow_master_realm | bool)
+      - (keycloak_realm_admins_group | length) > 0
+      - (keycloak_realm_admins_roles | length) > 0
+      - (keycloak_realm_admins_admin_password | length) > 0
+    fail_msg: >-
+      keycloak_realm_admins needs Keycloak's URL, the realm administration is
+      delegated over — which must not be master unless
+      keycloak_realm_admins_allow_master_realm is set — the directory group, at
+      least one role, and the admin password (KEYCLOAK_ADMIN_PASSWORD). See
+      plan/SECRETS.md.
+    quiet: true
+
+- name: main | Delegate administration of the realm to a directory group
+  when:
+    - (keycloak_realm_admins_enabled | bool)
+    # uri has no dry run and every step needs a token first. Same gate the
+    # other Keycloak roles use.
+    - not ansible_check_mode
+  block:
+    - name: main | Obtain an admin token
+      no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+      register: _reg_keycloak_realm_admins_token
+      ansible.builtin.uri:
+        url: >-
+          {{ keycloak_realm_admins_url }}/realms/{{
+          keycloak_realm_admins_admin_realm
+          }}/protocol/openid-connect/token
+        method: POST
+        ca_path: "{{ keycloak_realm_admins_ca_file }}"
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ keycloak_realm_admins_admin_user }}"
+          password: "{{ keycloak_realm_admins_admin_password }}"
+
+    - name: main | Read the groups the realm has imported from the directory
+      changed_when: false
+      no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+      register: _reg_keycloak_realm_admins_groups
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_realm_admins_admin_api
+          }}/groups?briefRepresentation=true&max=1000
+        headers: "{{ _var_keycloak_realm_admins_headers }}"
+        ca_path: "{{ keycloak_realm_admins_ca_file }}"
+
+    - name: main | Assert the directory group has been imported into the realm
+      ansible.builtin.assert:
+        that:
+          - (_var_keycloak_realm_admins_group_id | length) > 0
+        fail_msg: >-
+          The realm {{ keycloak_realm_admins_realm }} has not imported the
+          group '{{ keycloak_realm_admins_group }}'. Either ipa_sso_groups has
+          not created it — it is an entry in
+          ipa_sso_groups_admin_only_applications, not in the application list
+          — or keycloak_ldap's group mapper has not synchronised since it was
+          created. The federation imports groups on a sync, not on the next
+          login. Re-run keycloak_ldap.
+        quiet: true
+
+    - name: main | Grant the roles the realm holds them as
+      ansible.builtin.include_tasks: >-
+        {{ 'client_roles.yml'
+           if (keycloak_realm_admins_client | default('', true) | length) > 0
+           else 'realm_roles.yml' }}
+
+    - name: main | Report the delegation
+      ansible.builtin.debug:
+        msg: >-
+          Members of the FreeIPA group '{{ keycloak_realm_admins_group }}'
+          hold {{ keycloak_realm_admins_roles | join(', ') }} in the
+          {{ keycloak_realm_admins_realm }} realm, at
+          {{ keycloak_realm_admins_url }}/admin/{{
+          keycloak_realm_admins_realm }}/console. Granting it is
+          `ipa group-add-member {{ keycloak_realm_admins_group }} --users
+          <name>`; nothing is added in this console.
+        verbosity: 0

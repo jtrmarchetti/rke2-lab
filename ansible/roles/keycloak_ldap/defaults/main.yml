@@ -33,6 +33,20 @@ keycloak_ldap_ca_file: /etc/ssl/certs/ca-certificates.crt
 # caller that forgets to pass this would federate the domain into exactly the
 # place it must not go, and would do it silently.
 keycloak_ldap_realm: null
+
+# Whether this invocation is allowed to federate `master`.
+#
+# False, and the assertion it guards is not paranoia about a typo — it is the
+# whole reason keycloak_realm exists. What it permits when set true is one
+# deliberate case: a **filtered** federation whose user search filter admits
+# only the members of the group that administers Keycloak, so that master gains
+# a handful of platform administrators rather than the domain. Keycloak's own
+# guidance is that master holds administrators and not application users or
+# business identities, and a filtered provider is on the right side of that
+# line. An unfiltered one is not, which is why this flag is not enough on its
+# own — see keycloak_ldap_user_search_filter.
+keycloak_ldap_allow_master_realm: false
+
 keycloak_ldap_admin_user: admin
 # keycloak_ldap_admin_password:
 keycloak_ldap_provider_name: freeipa
@@ -62,6 +76,35 @@ keycloak_ldap_connection_url: null
 # actually lives.
 keycloak_ldap_first_name_mapper: first name
 keycloak_ldap_first_name_attribute: givenName
+
+# Which directory entries this provider may import.
+#
+# The default excludes nothing but disabled accounts: FreeIPA marks one with
+# nsAccountLock, and without this a user locked out of everything else keeps
+# working through Keycloak.
+#
+# It is a parameter rather than a constant because the administrative realm
+# needs a narrower one. Federating master unfiltered would put every account in
+# the domain into the realm that administers every other realm; filtered to
+# `(memberOf=cn=keycloak-admins,...)` it imports only the people who administer
+# Keycloak, which is what master is for. FreeIPA answers a memberOf filter for
+# the bind account — verified against this directory — even though it does not
+# publish the attribute freely enough for the group mapper to rely on it, which
+# is why that mapper still loads groups by member attribute.
+keycloak_ldap_user_search_filter: "(!(nsAccountLock=TRUE))"
+
+# Which directory groups the group mapper may import, as an LDAP filter.
+#
+# Empty by default, meaning every group under the groups DN — which is what the
+# application realm wants. The administrative realm wants exactly one, so that
+# master does not accumulate a copy of every group in the domain for the sake
+# of the one that grants administration.
+#
+# Left unset rather than set to an empty string when it is empty: Keycloak
+# discards config keys whose value is empty, so a mapper that declared one
+# could never read back matching what was written and the role would report
+# changed forever.
+keycloak_ldap_groups_filter: null
 
 # The email-verified mapper.
 #
@@ -125,5 +168,30 @@ keycloak_ldap_group_sync: true
 # sync selects on the directory's modify timestamp, and correcting a mapper on
 # Keycloak's side does not touch it. Every user would be skipped.
 keycloak_ldap_user_sync: true
+
+# Whether to drop Keycloak's user cache after the syncs above.
+#
+# True, and this is the step whose absence cost the most: a directory group
+# added to a user who is already in the realm is **not** visible to Keycloak
+# until the cache holding that user is dropped. Neither sync does it. The
+# symptom is as misleading as it gets — the group reads back correctly through
+# the admin API's group-members endpoint, which queries the directory, while
+# the user's own group list and every role mapping derived from it stay as they
+# were, so the person is refused with "You do not have permission to access
+# this resource" against a realm where every mapping is visibly correct.
+#
+# The cache repopulates from the database and the directory on next read, so
+# dropping it costs a little latency once and nothing else. Reported unchanged
+# for that reason: it leaves no state behind.
+keycloak_ldap_clear_user_cache: true
+
+# Whether this invocation manages the FreeIPA bind account.
+#
+# True, because a federation without a bind account is not a federation. Set
+# false on a second invocation against the same directory — the administrative
+# realm's provider uses the account the application realm's provider already
+# created, and creating it twice is two Directory Manager binds for one
+# outcome.
+keycloak_ldap_manage_sysaccount: true
 
 keycloak_ldap_no_log: true

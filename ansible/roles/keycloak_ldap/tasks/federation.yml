@@ -355,6 +355,37 @@
       {{ _reg_keycloak_ldap_user_sync['json']['status'] | default('no status') }}
     verbosity: 0
 
+# Drop the user cache, so a membership change made in the directory since the
+# last run is actually visible.
+#
+# This is the step whose absence looks least like its cause. Keycloak caches an
+# imported user together with the groups resolved for them, and neither sync
+# above invalidates that cache — the group subtree is re-read, the user
+# entries are re-read, and the *cached* association between the two survives
+# both. A person added to `keycloak-admins` in FreeIPA therefore appears in the
+# group when the admin API is asked who is in it, because that query goes to
+# the directory, and does not appear in their own group list, because that one
+# is served from the cache. Every role mapping derived from the group is
+# missing with it, and the person is refused at the console with "You do not
+# have permission to access this resource" against a realm in which every
+# mapping reads back correctly.
+#
+# Reported unchanged: the cache repopulates from the database and the directory
+# on the next read, so this leaves no state behind. It is the same argument the
+# two syncs above make for themselves.
+- name: federation | Drop the realm's user cache
+  when: (keycloak_ldap_clear_user_cache | bool)
+  changed_when: false
+  no_log: "{{ keycloak_ldap_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_ldap_url }}/admin/realms/{{ keycloak_ldap_realm
+      }}/clear-user-cache
+    method: POST
+    headers: "{{ _var_keycloak_ldap_headers }}"
+    ca_path: "{{ keycloak_ldap_ca_file }}"
+    status_code: [204]
+
 # Keycloak's own connection test, which is the only check that proves the
 # provider is usable rather than merely present.
 - name: federation | Ask Keycloak to test the connection and the bind

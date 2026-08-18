@@ -210,6 +210,58 @@ inventory_keycloak_applications:
       - https://gitlab.dev.lo/users/auth/openid_connect/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_GITLAB') }}"
 
+# Keycloak itself, which has an administrator tier and no user tier: every
+# account in the domain can already sign in to it, so a `keycloak-users` group
+# would grant nothing that being federated does not already grant.
+#
+# It is here rather than in the list above because it is not an OIDC client —
+# Keycloak does not federate to itself. ipa_sso_groups creates the one group;
+# keycloak_realm_admins is what gives that group administration of the realm.
+inventory_keycloak_admin_only_applications:
+  - name: keycloak
+    description: Keycloak itself, the single sign-on service
+
+# The same group, spelled out, because keycloak_realm_admins is given a group
+# name rather than a slug and a suffix. It is `<name>-admins` of the entry
+# above, and the two are one fact written twice — there is no way to make it
+# fewer without one role reading another role's variables.
+inventory_keycloak_admins_group: keycloak-admins
+
+# --- Administering Keycloak itself -----------------------------------------
+#
+# `keycloak-admins` administers both realms, and the two grants are different
+# objects: `realm-admin` on `dev-lo`'s `realm-management` client, and the
+# `admin` realm role in `master`. The second needs master to be federated,
+# which is the arrangement everything else here is arranged to avoid — so it is
+# narrowed rather than granted whole.
+#
+# The narrowing is these two filters. The provider in master admits only
+# accounts that are members of the group, and its group mapper imports only
+# that one group, so master gains the people who administer Keycloak rather
+# than the domain. Keycloak's guidance is that master holds administrators and
+# not application users; a filtered federation is on the right side of it and
+# an unfiltered one is not, which is why keycloak_ldap refuses master without
+# both of these set.
+#
+# FreeIPA answers a memberOf filter for the Keycloak bind account — verified
+# against this directory — even though the group mapper cannot rely on the
+# attribute being readable and loads groups by member attribute instead.
+inventory_keycloak_admin_user_filter: >-
+  (&(!(nsAccountLock=TRUE))(memberOf=cn=keycloak-admins,cn=groups,cn=accounts,dc=dev,dc=lo))
+inventory_keycloak_admin_groups_filter: (cn=keycloak-admins)
+
+# The one federation provider master is allowed to hold. keycloak_break_glass
+# removes anything else it finds there, which is what caught the provider left
+# behind by the realm split — name this and the two roles stop taking turns.
+inventory_keycloak_break_glass_allowed_federation:
+  - freeipa
+
+# The realm role that administers master. Keycloak creates it with the realm;
+# there is no `realm-management` client there, because administering master is
+# not administering an application.
+inventory_keycloak_master_admin_roles:
+  - admin
+
 # ipa_sso_groups
 inventory_ipa_sso_groups_ipa_host: core01
 inventory_ipa_sso_groups_ipa_container: freeipa-server

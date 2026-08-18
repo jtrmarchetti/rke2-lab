@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: keycloak_realm_admins
+  author: rke2lab
+  description: >-
+    Grants a FreeIPA group administration of the application realm, so that
+    everyday Keycloak administration is held in the directory alongside every
+    other grant rather than in a shared local password. Stops at the realm:
+    master, and the break-glass account in it, stay unfederated.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - keycloak
+    - freeipa
+    - sso
+
+dependencies: []

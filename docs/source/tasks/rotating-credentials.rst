@@ -41,9 +41,12 @@ The table
    * - ``RKE2_TOKEN``
      - ``env.sh``
      - Cluster rebuild — see below
-   * - Keycloak admin / DB password
+   * - Keycloak ``admin`` password
+     - Keycloak, then ``env.sh``
+     - ``playbooks/cluster_init.yml`` — see below
+   * - Keycloak DB password
      - ``env.sh``
-     - ``playbooks/cluster_init.yml``
+     - ``playbooks/cluster_init.yml``, then restart Keycloak and its database
    * - Grafana admin
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
@@ -110,6 +113,29 @@ refresh interval; restart them if you want it immediately.
 The cookie secret for the Longhorn proxy is different in kind: rotating
 ``OAUTH2_PROXY_COOKIE_SECRET`` signs everyone out and does nothing else. It
 must be exactly 16, 24 or 32 bytes.
+
+Keycloak's ``admin`` password
+=============================
+
+This one is not "change it in ``env.sh`` and re-run", and it is the row most
+likely to be read that way.
+
+``KC_BOOTSTRAP_ADMIN_PASSWORD`` in the Deployment sets the account's password
+**only on the first start of a Keycloak whose master realm does not exist**.
+On every start after that it is ignored. So a new value in ``env.sh`` reaches
+the vault and the pod's environment, changes nothing about the account, and the
+next play run fails to authenticate as it.
+
+Change it in Keycloak first — the account's own credentials, in
+``/admin/master/console`` — then in ``env.sh``, then re-run ``cluster_init.yml``
+so the vault holds what the account now uses. The order is the whole of it.
+
+.. note::
+
+   The Keycloak database password is the opposite case and is not free to
+   change on its own: rotating it in the vault without rotating it in
+   PostgreSQL leaves Keycloak unable to start, and the failure reads as a
+   broken PVC rather than a wrong password.
 
 Vault credentials
 =================

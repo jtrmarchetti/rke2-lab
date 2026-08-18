@@ -29,18 +29,46 @@
       # raising on `None | length` before anyone reads it.
       - not (keycloak_ldap_configure_keycloak | bool)
         or ((keycloak_ldap_realm | default('', true) | length) > 0
-            and keycloak_ldap_realm != 'master')
+            and (keycloak_ldap_realm != 'master'
+                 or (keycloak_ldap_allow_master_realm | bool)))
     fail_msg: >-
       keycloak_ldap needs the identity host, the Directory Manager password
       (FREEIPA_DIR_MANAGER_PASSWORD), and a bind password for the system
       account. All come from ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
-      When it is configuring Keycloak it also needs the application realm,
-      which must not be master — that realm administers every other realm and
-      holds Keycloak's own break-glass administrator, so federated end users
-      do not belong in it. See the keycloak_realm role.
+      When it is configuring Keycloak it also needs the realm, which must not
+      be master unless keycloak_ldap_allow_master_realm is set — that realm
+      administers every other realm and holds Keycloak's own break-glass
+      administrator, so federated end users do not belong in it. See the
+      keycloak_realm role.
+    quiet: true
+
+# Master unfiltered is the failure this exists to prevent, and it is not the
+# same mistake as federating master at all. A filtered provider puts the people
+# who administer Keycloak into the realm that administers Keycloak, which is
+# what master is for. An unfiltered one puts every account in the domain there,
+# which is what Keycloak's own guidance is about — and the flag above, on its
+# own, does not distinguish the two.
+- name: main | Assert a federation of the administrative realm is filtered
+  when:
+    - (keycloak_ldap_configure_keycloak | bool)
+    - keycloak_ldap_realm == 'master'
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_ldap_user_search_filter !=
+        (_var_keycloak_ldap_unfiltered_default)
+      - (keycloak_ldap_groups_filter | default('', true) | length) > 0
+    fail_msg: >-
+      Federating master needs both a user search filter narrower than the
+      default and a group filter. Without them this provider imports every
+      account and every group in the domain into the realm that administers
+      every other realm. Pass keycloak_ldap_user_search_filter restricted to
+      the administrator group's members — a memberOf filter — and
+      keycloak_ldap_groups_filter naming that one group.
     quiet: true
 
 - name: main | Ensure the LDAP bind system account exists
+  when: (keycloak_ldap_manage_sysaccount | bool)
   ansible.builtin.include_tasks: sysaccount.yml
 
 - name: main | Configure the Keycloak user federation

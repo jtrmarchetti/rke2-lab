@@ -126,6 +126,37 @@ argument_specs:
           - Re-import users after the mappers are written. A mapper shapes a
             user only as they are imported, so without this a corrected mapper
             leaves every user already in the realm exactly as they were.
+      keycloak_ldap_allow_master_realm:
+        type: bool
+        default: false
+        description:
+          - Permit federating the administrative realm. Only for a filtered
+            provider that admits the administrator group's members; the role
+            asserts both filters are set when the realm is master.
+      keycloak_ldap_user_search_filter:
+        type: str
+        default: "(!(nsAccountLock=TRUE))"
+        description:
+          - LDAP filter limiting which entries the provider imports. The
+            default excludes disabled accounts only.
+      keycloak_ldap_groups_filter:
+        type: str
+        description:
+          - LDAP filter limiting which groups the group mapper imports. Unset
+            means every group under the groups DN.
+      keycloak_ldap_clear_user_cache:
+        type: bool
+        default: true
+        description:
+          - Drop the realm's user cache after the syncs. Without it a group
+            added to an existing user in the directory stays invisible to
+            Keycloak, and the person is refused with every mapping correct.
+      keycloak_ldap_manage_sysaccount:
+        type: bool
+        default: true
+        description:
+          - Create and verify the FreeIPA bind account. Set false on a second
+            invocation against the same directory.
       keycloak_ldap_no_log:
         type: bool
         default: true

@@ -1772,3 +1772,171 @@ change of shape.
 Noted where it will be needed: declaring `alertmanager.config` **replaces** the
 chart's default wholesale, and the default carries the inhibit rules that stop
 one critical alert arriving with the three warnings it caused.
+
+## Keycloak had no permanent administrator and no administrators — 2026-08-18
+
+Two gaps, and they were the same gap seen from either end. The account that
+could administer Keycloak was the temporary one Keycloak created for itself,
+and no person in the domain could administer Keycloak at all.
+
+### The bootstrap account is temporary, and Keycloak means it
+
+`KC_BOOTSTRAP_ADMIN_USERNAME` and `KC_BOOTSTRAP_ADMIN_PASSWORD` create an
+administrator on the first start of a Keycloak whose `master` realm does not
+exist. Since 26 that account is stamped with the user attribute
+`is_temporary_admin`, and the console warns on every session it holds: *create
+a permanent admin account and delete the temporary one*. `AdminConsole.java`
+reads exactly that attribute to decide whether to warn, so the banner is not
+advice about the password — it is a property of the account.
+
+The documented remedy is to create a second administrator and delete the first,
+which here would rename the account four Ansible roles, the vault key
+`kv/keycloak`, `KEYCLOAK_ADMIN_PASSWORD` and the runbooks all refer to, in
+order to arrive at an account with the same name, the same password and the
+same role. What makes an account permanent is that its credential has a source
+of record. This one has two — `env.sh` and the vault — and reaches the pod
+through External Secrets. So `keycloak_break_glass` keeps the account and
+removes the marker.
+
+### Removing the marker takes three writes
+
+`is_temporary_admin` is not declared in the realm's user profile, so it is an
+**unmanaged** attribute, and a realm whose `unmanagedAttributePolicy` is unset —
+Keycloak's default, and this realm's state — silently drops unmanaged
+attributes from every write through the admin API. Confirmed against the live
+cluster before anything was written: a `PUT` of the user with the attribute
+removed answers `204`, and a re-read shows it still there. Nothing in the
+response distinguishes that from success.
+
+The role therefore opens the policy, writes the account, and restores the
+policy — with the restore in an `always`, because the open window accepts
+arbitrary attributes on any account in the administrative realm and a failure
+between the two steps would leave it that way silently.
+
+### Nobody in the domain could administer Keycloak
+
+Every other service in this lab is administered by a FreeIPA group. Keycloak
+was the exception: the only way in was one shared local password.
+
+`keycloak_realm_admins` grants the FreeIPA group `keycloak-admins` the
+`realm-admin` role on the `dev-lo` realm's `realm-management` client — the
+client Keycloak creates with every realm except master. Its members sign in at
+`/admin/dev-lo/console` as themselves and administer that realm completely.
+
+The grant stops at the realm, deliberately. A `dev-lo` administrator cannot
+create a realm, cannot edit `master`, and cannot revoke the local
+administrator. The alternative — federating the directory into `master` and
+granting its `admin` role — would make the break-glass realm depend on the
+directory it is break-glass *for*, and would put every account in the domain
+into the realm that administers every other realm in order to give
+administrative access to two of them.
+
+`keycloak-admins` is the one group with no `-users` counterpart, which is why
+`ipa_sso_groups` grew `ipa_sso_groups_admin_only_applications` rather than
+taking `keycloak` in the application list. Every federated account can already
+sign in to Keycloak — that is what being federated is — so a `keycloak-users`
+group would grant nothing, and a group that grants nothing is worse than no
+group: it reads as access in `ipa group-find` and is then found to do nothing.
+Keycloak is also not in the application list for a second reason: it is not an
+OIDC client of itself, and `keycloak_clients` would have created one.
+
+### The stale provider in `master` was worse than "harmless"
+
+It was carried in `identity.rst` and `common-issues.rst` as stale, harmless,
+and to be removed by hand — for as long as removing it by hand did not happen.
+What it actually was: a user federation provider still enabled in the realm
+that administers every other realm, binding over **plain `ldap://core.dev.lo:389`**
+— the unencrypted connection the LDAPS work of 2026-08-17 was supposed to have
+ended — and importing domain accounts into `master`. Two were there.
+
+`keycloak_break_glass` now removes any provider it finds in the administrative
+realm and then the accounts carrying a `federationLink`, in that order: while
+the provider exists, a deleted account is one Keycloak may satisfy from the
+directory again. Selection is on `federationLink` and never on a name, so the
+task cannot be the reason a local administrator stops existing. The directory
+entries themselves are untouched; both accounts keep every access they had,
+through `dev-lo`.
+
+### Verified on the live cluster
+
+| Check | Result |
+| --- | --- |
+| `admin` in master | Present, enabled, holds the `admin` realm role, **no** `is_temporary_admin` attribute |
+| master user profile | `unmanagedAttributePolicy` unset — the window closed behind the write |
+| master federation providers | 0 |
+| master accounts | 1, local, no `federationLink` |
+| `keycloak-admins` in FreeIPA | Created, imported into `dev-lo` |
+| Its role mapping | `realm-admin` on `realm-management` in `dev-lo` |
+
+### Still not proven
+
+No member of `keycloak-admins` has signed in to `/admin/dev-lo/console`. The
+group is empty, for the same reason `ipa_sso_groups` never adds a member: who
+administers Keycloak is a decision about people. Add someone and the console
+is the test.
+
+### Master was federated after all, deliberately — 2026-08-18
+
+The first version of this stopped at `dev-lo` on the argument that a federated
+master makes Keycloak unadministrable when FreeIPA is down. That argument was
+overstated, and it was presented as though it were Keycloak's guidance when it
+was this repository's convention.
+
+Keycloak's actual guidance is that master holds administrators rather than
+application users and business identities. `keycloak-admins` *are* platform
+administrators — master is what they are for. What the guidance is against is
+putting the domain there, and the answer to that is a filter, not a refusal:
+
+```text
+users:  (&(!(nsAccountLock=TRUE))(memberOf=cn=keycloak-admins,cn=groups,cn=accounts,dc=dev,dc=lo))
+groups: (cn=keycloak-admins)
+```
+
+Verified before building on it: FreeIPA answers a `memberOf` filter for the
+Keycloak bind account, returning exactly the group's members — even though the
+group mapper cannot rely on the attribute being freely readable, which is why
+it still loads groups by member attribute.
+
+Master now holds two accounts and one group: local `admin`, `jmarchetti.adm`,
+and `keycloak-admins` carrying the `admin` realm role. The rest of the domain
+is not there.
+
+The availability argument survives intact — `admin` is still local and
+unfederated, so it still works when the directory does not. What was given up
+is the other half, and it is recorded in the role defaults rather than left to
+be discovered: **a member of `keycloak-admins` can now disable or delete the
+local break-glass account.** Master's administrator is no longer protected
+*from* the directory.
+
+Three roles changed shape rather than gaining special cases:
+
+| Role | Change |
+| --- | --- |
+| `keycloak_ldap` | `keycloak_ldap_user_search_filter` and `keycloak_ldap_groups_filter`; `keycloak_ldap_allow_master_realm` to reach master at all, and a second assertion that refuses master unless *both* filters are set — the flag alone does not distinguish a filtered provider from an unfiltered one. Plus `keycloak_ldap_manage_sysaccount`, so the second invocation does not re-create the bind account |
+| `keycloak_realm_admins` | Grants realm roles when no client is named, because master has no `realm-management` client — administering master is not administering an application. Same group, same additive rule, two endpoints |
+| `keycloak_break_glass` | `remove_federation` became an allowlist. Accounts are matched to the providers that own them, so allowing a provider no longer means deleting everything it imported |
+
+### The cache, which cost a login
+
+A member of `keycloak-admins` was refused at `/admin/dev-lo/console` with *You
+do not have permission to access this resource* — with every mapping in the
+realm correct. The group's member list showed them. Their own group list did
+not.
+
+Keycloak caches an imported user together with the groups resolved for them,
+and **neither sync invalidates it**. The group subtree is re-read, the user
+entries are re-read, and the cached association between the two survives both.
+`/groups/{id}/members` queries the directory and therefore agreed; the user's
+own `/groups` is served from the cache and did not, and every role derived from
+the group was missing with it.
+
+`POST /admin/realms/dev-lo/clear-user-cache` fixed it instantly: 0 effective
+`realm-management` roles before, 22 after, with nothing else changed.
+`keycloak_ldap` now posts it after the syncs, guarded by
+`keycloak_ldap_clear_user_cache`. It is reported unchanged, because the cache
+repopulates from the database and the directory on the next read.
+
+Worth stating plainly, because the existing note in `managing-services.rst` was
+not enough: "a change takes effect at the user's next sign-in" is true and
+insufficient. A new *group membership* for an already-imported user is not
+visible to any number of sign-ins until the cache is dropped.

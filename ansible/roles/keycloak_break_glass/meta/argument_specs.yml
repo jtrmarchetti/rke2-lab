@@ -1,0 +1,67 @@
+---
+argument_specs:
+  main:
+    short_description: Make Keycloak's local administrator permanent
+    description:
+      - Keycloak marks an account created from KC_BOOTSTRAP_ADMIN_* as
+        temporary and warns about it in the console. This role removes that
+        marker from the account whose password has a source of record, rather
+        than creating a second administrator with the same name, password and
+        role in order to delete the first.
+      - The marker is an unmanaged attribute, which a realm ignores on write
+        by default. The role opens the realm's unmanaged attribute policy for
+        the length of one write and restores it in an `always`.
+      - Also removes any user federation provider from the administrative
+        realm, and the accounts it imported there. The directory entries
+        themselves are never touched.
+    options:
+      keycloak_break_glass_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      keycloak_break_glass_url:
+        type: str
+        required: true
+        description: Keycloak's base URL.
+      keycloak_break_glass_ca_file:
+        type: str
+        description: CA bundle Keycloak's certificate is verified against.
+      keycloak_break_glass_admin_user:
+        type: str
+        default: admin
+        description:
+          - The local administrator. Authenticated as, and made permanent —
+            they are the same account.
+      keycloak_break_glass_admin_password:
+        type: str
+        required: true
+        description: That administrator's password, from the vault.
+      keycloak_break_glass_realm:
+        type: str
+        default: master
+        description: The administrative realm.
+      keycloak_break_glass_admin_role:
+        type: str
+        default: admin
+        description:
+          - Realm role that administers every realm. Granted if the account
+            has lost it, because nothing else could restore it.
+      keycloak_break_glass_remove_federation:
+        type: bool
+        default: true
+        description:
+          - Remove any user federation provider from the administrative realm,
+            and the accounts it imported. A directory federated here would put
+            every account in the realm that administers every other realm.
+      keycloak_break_glass_allowed_federation:
+        type: list
+        elements: str
+        default: []
+        description:
+          - Federation providers permitted in the administrative realm, by
+            name. Empty means none. Accounts imported by a permitted provider
+            are kept; accounts whose provider is gone are deleted.
+      keycloak_break_glass_no_log:
+        type: bool
+        default: true
+        description: Set false only when debugging; it prints the password.

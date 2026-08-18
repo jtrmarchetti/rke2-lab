@@ -1,0 +1,20 @@
+---
+galaxy_info:
+  role_name: keycloak_break_glass
+  author: rke2lab
+  description: >-
+    Makes Keycloak's local administrator permanent rather than the temporary
+    account bootstrap creates, and keeps the administrative realm free of any
+    user federation it was not explicitly given. This is the account that still works when the directory
+    Keycloak federates is the thing that is broken.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - keycloak
+    - sso
+
+dependencies: []

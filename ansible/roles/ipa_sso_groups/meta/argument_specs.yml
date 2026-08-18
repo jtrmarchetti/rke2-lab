@@ -48,6 +48,17 @@ argument_specs:
             which argument spec validation would reject here as unsupported
             parameters. One list passed to both roles is the point; a spec that
             forced two lists would defeat it.
+      ipa_sso_groups_admin_only_applications:
+        type: list
+        elements: dict
+        default: []
+        description:
+          - Services with an administrator tier and no user tier. Each entry
+            takes the same `name` and `description` keys as above and produces
+            one group, `<name>-admins`.
+          - Keycloak itself is the case that needs this. Every federated
+            account can already sign in to it, so a `keycloak-users` group
+            would grant nothing.
       ipa_sso_groups_admin_suffix:
         type: str
         default: admins

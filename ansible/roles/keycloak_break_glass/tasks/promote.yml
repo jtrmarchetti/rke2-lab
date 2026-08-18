@@ -1,0 +1,75 @@
+---
+# Removing `is_temporary_admin` from the administrator, which takes three
+# writes rather than one.
+#
+# The attribute is not declared in the realm's user profile, so it is
+# *unmanaged*, and a realm with no `unmanagedAttributePolicy` — Keycloak's
+# default, and what this realm has — drops unmanaged attributes from every
+# write through the admin API. The `PUT` succeeds, answers 204, and the
+# attribute is still there afterwards. Nothing in the response distinguishes
+# that from having worked, which is why this file reads the account back and
+# main.yml asserts on what it finds.
+#
+# So the policy is opened, the account is written, and the policy is put back.
+# The restore is in `always` because the window is the only part of this that
+# is dangerous: while it is open, any attribute at all can be written onto any
+# account in the administrative realm, and a play that failed in between would
+# leave it that way with nothing to say so.
+
+- name: promote | Read the realm's user profile
+  changed_when: false
+  no_log: "{{ keycloak_break_glass_no_log | bool }}"
+  register: _reg_keycloak_break_glass_profile
+  ansible.builtin.uri:
+    url: "{{ _var_keycloak_break_glass_admin_api }}/users/profile"
+    headers: "{{ _var_keycloak_break_glass_headers }}"
+    ca_path: "{{ keycloak_break_glass_ca_file }}"
+
+- name: promote | Clear the temporary marker
+  block:
+    # Not a change: this is opened and closed within this file, and a run that
+    # reported it would report a change on the realm's user profile that no
+    # later run could ever converge.
+    - name: promote | Allow unmanaged attributes for the length of one write
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      ansible.builtin.uri:
+        url: "{{ _var_keycloak_break_glass_admin_api }}/users/profile"
+        method: PUT
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+        body_format: json
+        body: "{{ _var_keycloak_break_glass_profile_open }}"
+        status_code: [200]
+
+    # The whole representation, with the marker subtracted. Writing a
+    # hand-built representation instead would silently clear whatever the
+    # account carries that this role has no opinion about.
+    - name: promote | Write the administrator without the temporary marker
+      changed_when: true
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      ansible.builtin.uri:
+        url: >-
+          {{ _var_keycloak_break_glass_admin_api }}/users/{{
+          _var_keycloak_break_glass_user_id | trim }}
+        method: PUT
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+        body_format: json
+        body: >-
+          {{ _var_keycloak_break_glass_current
+             | combine({'attributes':
+                        _var_keycloak_break_glass_kept_attributes}) }}
+        status_code: [204]
+  always:
+    - name: promote | Restore the realm's user profile
+      changed_when: false
+      no_log: "{{ keycloak_break_glass_no_log | bool }}"
+      ansible.builtin.uri:
+        url: "{{ _var_keycloak_break_glass_admin_api }}/users/profile"
+        method: PUT
+        headers: "{{ _var_keycloak_break_glass_headers }}"
+        ca_path: "{{ keycloak_break_glass_ca_file }}"
+        body_format: json
+        body: "{{ _var_keycloak_break_glass_profile }}"
+        status_code: [200]

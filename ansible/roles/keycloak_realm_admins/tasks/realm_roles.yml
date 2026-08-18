@@ -1,0 +1,82 @@
+---
+# The administrative realm's shape: there is no `realm-management` client in
+# master, because administering master is not administering an application.
+# `admin` is a realm role there, so the mapping is a realm role mapping.
+#
+# Otherwise identical to client_roles.yml — read what exists, grant only what
+# is missing, never assert an exact set — and identical for the same reasons.
+
+- name: realm_roles | Read the realm's roles
+  changed_when: false
+  no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+  register: _reg_keycloak_realm_admins_roles
+  ansible.builtin.uri:
+    url: "{{ _var_keycloak_realm_admins_admin_api }}/roles"
+    headers: "{{ _var_keycloak_realm_admins_headers }}"
+    ca_path: "{{ keycloak_realm_admins_ca_file }}"
+
+- name: realm_roles | Assert every role this role grants exists in the realm
+  vars:
+    _keycloak_realm_admins_absent: >-
+      {{ keycloak_realm_admins_roles
+         | reject('in', _reg_keycloak_realm_admins_roles['json']
+                        | map(attribute='name') | list) | list }}
+  ansible.builtin.assert:
+    that:
+      - (_keycloak_realm_admins_absent | length) == 0
+    fail_msg: >-
+      The realm {{ keycloak_realm_admins_realm }} has no role(s):
+      {{ _keycloak_realm_admins_absent | join(', ') }}. `admin` is created by
+      Keycloak with the realm, so a missing one is a renamed role in a newer
+      release rather than something this play failed to create.
+    quiet: true
+
+- name: realm_roles | Read the roles the group already holds
+  changed_when: false
+  no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+  register: _reg_keycloak_realm_admins_granted
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_realm_admins_admin_api }}/groups/{{
+      _var_keycloak_realm_admins_group_id | trim }}/role-mappings/realm
+    headers: "{{ _var_keycloak_realm_admins_headers }}"
+    ca_path: "{{ keycloak_realm_admins_ca_file }}"
+
+# Additive, for the reason client_roles.yml gives: a group may hold roles this
+# repository does not manage, and a mapping asserted as an exact set would
+# revoke them silently.
+- name: realm_roles | Grant the group the roles it is missing
+  when: (_var_keycloak_realm_admins_missing | length) > 0
+  changed_when: true
+  no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_realm_admins_admin_api }}/groups/{{
+      _var_keycloak_realm_admins_group_id | trim }}/role-mappings/realm
+    method: POST
+    headers: "{{ _var_keycloak_realm_admins_headers }}"
+    ca_path: "{{ keycloak_realm_admins_ca_file }}"
+    body_format: json
+    body: "{{ _var_keycloak_realm_admins_missing }}"
+    status_code: [204]
+
+- name: realm_roles | Read the group's roles back
+  changed_when: false
+  no_log: "{{ keycloak_realm_admins_no_log | bool }}"
+  register: _reg_keycloak_realm_admins_granted
+  ansible.builtin.uri:
+    url: >-
+      {{ _var_keycloak_realm_admins_admin_api }}/groups/{{
+      _var_keycloak_realm_admins_group_id | trim }}/role-mappings/realm
+    headers: "{{ _var_keycloak_realm_admins_headers }}"
+    ca_path: "{{ keycloak_realm_admins_ca_file }}"
+
+- name: realm_roles | Assert the group now holds every role
+  ansible.builtin.assert:
+    that:
+      - (_var_keycloak_realm_admins_missing | length) == 0
+    fail_msg: >-
+      '{{ keycloak_realm_admins_group }}' still lacks
+      {{ _var_keycloak_realm_admins_missing | map(attribute='name')
+         | join(', ') }} in {{ keycloak_realm_admins_realm }}.
+    quiet: true
