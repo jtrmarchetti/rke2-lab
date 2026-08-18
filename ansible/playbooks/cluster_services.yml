@@ -42,6 +42,8 @@
         ipa_sub_ca_crl_url: "{{ inventory_ipa_sub_ca_crl_url }}"
         ipa_sub_ca_ipa_host: "{{ inventory_cluster_services_ipa_host }}"
         ipa_sub_ca_ocsp_url: "{{ inventory_ipa_sub_ca_ocsp_url }}"
+        ipa_sub_ca_publish_dir: "{{ inventory_ipa_sub_ca_publish_dir }}"
+        ipa_sub_ca_publish_host: "{{ inventory_ipa_sub_ca_publish_host }}"
       ansible.builtin.include_role:
         name: ipa_sub_ca
         apply:

@@ -68,6 +68,29 @@ Certificates
 **``x509: certificate signed by unknown authority``.** The FreeIPA CA is not in
 that client's trust store. See :doc:`../access`.
 
+**A browser warns on a ``k8s.dev.lo`` name but not on ``gitlab.dev.lo``.**
+Almost always the working name is a stored exception rather than real CA trust
+— clicking through a warning once is permanent, and it is listed under the
+Servers tab of the browser's certificate dialog. The root CA alone validates
+every internal name, ``k8s.dev.lo`` included, because cert-manager serves the
+cluster intermediate alongside each leaf. Confirm the chain is intact before
+touching the certificates:
+
+.. code-block:: console
+
+   $ curl -fsSL http://192.168.2.99/certs/dev.lo-ca.crt -o /tmp/root.crt
+   $ openssl s_client -connect bao.k8s.dev.lo:443 -servername bao.k8s.dev.lo \
+       -CAfile /tmp/root.crt </dev/null 2>/dev/null | grep "Verify return code"
+
+``Verify return code: 0 (ok)`` means the server side is correct and the fault
+is in that browser's trust store. See :doc:`../access`.
+
+**A ``k8s.dev.lo`` name serves ``CN=TRAEFIK DEFAULT CERT``.** No Ingress claims
+that hostname. The cluster's DNS answers every single-label name under
+``k8s.dev.lo`` with the ingress address, so a typo resolves and connects, then
+gets Traefik's self-signed fallback. No amount of CA installation fixes it —
+check the hostname against ``kubectl get ingress -A``.
+
 **``curl`` is happy but an Ansible ``uri`` task fails verification.** Ansible's
 Python may verify against a different bundle than
 ``update-ca-certificates`` writes. Roles pass

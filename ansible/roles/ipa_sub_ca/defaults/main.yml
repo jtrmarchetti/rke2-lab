@@ -48,3 +48,14 @@ ipa_sub_ca_output_dir: >-
 
 # Set false only when debugging; it exposes the admin password.
 ipa_sub_ca_no_log: true
+
+# Optional publication of the issued intermediate, in public form only, to the
+# artifact host. Anything that validates a certificate the cluster signed needs
+# this alongside the domain root: a browser being taught to trust k8s.dev.lo
+# has to be given both links, and only the root is published by the role that
+# issues repo01's own certificates.
+#
+# Set to the inventory name of the artifact host and a directory under its
+# document root. Empty host disables publishing.
+ipa_sub_ca_publish_host: ""
+ipa_sub_ca_publish_dir: ""

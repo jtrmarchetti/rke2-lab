@@ -91,18 +91,53 @@ Alternatively, from a host that already has the tunnel:
 Trusting the certificates
 =========================
 
-Every internal HTTPS name is signed by the FreeIPA CA. Install it once, or
-every browser and every ``curl`` will refuse:
+Install the domain root CA. That one certificate is enough for every internal
+HTTPS name, including everything under ``k8s.dev.lo``:
 
 .. code-block:: console
 
-   $ curl -fsSL http://192.168.2.99/gitlab/dev.lo-ca.crt \
+   $ curl -fsSL http://192.168.2.99/certs/dev.lo-ca.crt \
        | sudo tee /usr/local/share/ca-certificates/dev.lo-ca.crt >/dev/null
    $ sudo update-ca-certificates
 
 It is fetched over plain HTTP on purpose — that is the only path that does not
 already require the trust it is delivering. On the controller, this is what
 ``playbooks/controller.yml`` does for you.
+
+Names under ``k8s.dev.lo`` are signed by the cluster's intermediate rather than
+by the root directly, but cert-manager serves that intermediate alongside the
+leaf, so the chain completes from the root alone. The intermediate is published
+next to the root for the cases that need the certificate itself — pinning a CA
+bundle, or inspecting a chain by hand:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Certificate
+     - URL
+   * - Domain root CA — install this one
+     - ``http://192.168.2.99/certs/dev.lo-ca.crt``
+   * - Cluster intermediate — reference only
+     - ``http://192.168.2.99/certs/k8s-ca.dev.lo.crt``
+
+Browse ``http://192.168.2.99/certs/`` to see what is published. Install them as
+one file per certificate if you install both: ``update-ca-certificates``
+ignores all but the first certificate in a bundle.
+
+Firefox keeps its own trust store and does not read the system one. Import the
+root under Settings → Privacy & Security → Certificates → View Certificates →
+Authorities, ticking "Trust this CA to identify websites". Chrome and Edge use
+the system store on Linux; on macOS and Windows they use the OS keychain or
+certificate store.
+
+.. note::
+
+   A site that loads without warning is not proof the CA is trusted. Clicking
+   through a warning once stores a permanent per-server exception, listed under
+   the Servers tab of the same dialog, and that site then looks fine while
+   every other name still warns. If one internal name is happy and the rest are
+   not, check that tab before suspecting the certificates.
 
 .. note::
 

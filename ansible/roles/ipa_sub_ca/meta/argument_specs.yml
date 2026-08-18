@@ -80,6 +80,18 @@ argument_specs:
       ipa_sub_ca_output_dir:
         type: str
         description: Directory the key, request and certificate are written to.
+      ipa_sub_ca_publish_host:
+        type: str
+        required: false
+        description:
+          - Inventory name of the artifact host the issued intermediate is
+            copied to, in public form only. Empty disables publishing.
+      ipa_sub_ca_publish_dir:
+        type: path
+        required: false
+        description:
+          - Directory under that host's document root the intermediate is
+            written into, as <common name>.crt.
       ipa_sub_ca_no_log:
         type: bool
         default: true

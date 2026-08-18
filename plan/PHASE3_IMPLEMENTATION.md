@@ -203,7 +203,7 @@ published on Apache: plain HTTP over Tier 1 is the only path that does not
 already require the trust it is delivering.
 
 ```bash
-curl -sf http://192.168.2.99/gitlab/dev.lo-ca.crt \
+curl -sf http://192.168.2.99/certs/dev.lo-ca.crt \
   -o /usr/local/share/ca-certificates/dev.lo.crt
 update-ca-certificates
 ```
@@ -318,7 +318,7 @@ same "status reports intent, not health" trap the Phase 2 runbook describes.
 
 `https://gitlab.dev.lo`, user `root`, password `GITLAB_ROOT_PASSWORD` from
 `~/.config/rke2lab/env.sh`. The certificate chains to the `dev.lo` CA, published
-for consumers at `http://192.168.2.99/gitlab/dev.lo-ca.crt`.
+for consumers at `http://192.168.2.99/certs/dev.lo-ca.crt`.
 
 ## Deliverables at Phase 3 Completion
 

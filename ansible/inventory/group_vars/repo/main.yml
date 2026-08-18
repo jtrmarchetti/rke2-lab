@@ -109,6 +109,11 @@ inventory_artifact_host_allowed_networks:
   - 10.66.66.0/30
   - 127.0.0.1
 inventory_artifact_host_directories:
+  # The trust anchors an operator or a node needs before it can validate
+  # anything under dev.lo: the domain root CA and the cluster's intermediate.
+  # Their own directory rather than a corner of gitlab/, because they are not
+  # a GitLab artifact and every phase from 3 onward fetches them.
+  - certs
   - freeipa
   - gitlab
   - runtime
@@ -150,8 +155,10 @@ inventory_ipa_service_cert_admin_password: "{{ lookup('env', 'FREEIPA_ADMIN_PASS
 inventory_ipa_service_cert_dir: /etc/ssl/dev.lo
 inventory_ipa_service_cert_ca_file: /etc/ssl/dev.lo/dev.lo-ca.crt
 # Published into the artifact document root so nodes in phases 4-6 can fetch
-# the CA over Tier 1 before they are asked to trust anything it signed.
-inventory_ipa_service_cert_ca_publish_path: /data1/artifacts/gitlab/dev.lo-ca.crt
+# the CA over Tier 1 before they are asked to trust anything it signed. It
+# sits under certs/ alongside the cluster intermediate ipa_sub_ca publishes,
+# so a browser being taught the whole chain has one place to fetch both from.
+inventory_ipa_service_cert_ca_publish_path: /data1/artifacts/certs/dev.lo-ca.crt
 inventory_ipa_service_cert_names:
   - name: gitlab.dev.lo
   - name: registry.gitlab.dev.lo

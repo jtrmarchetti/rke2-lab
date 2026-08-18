@@ -91,7 +91,7 @@ inventory_controller_runtime_pulumi_version: >-
 # Fetched over plain HTTP from the artifact host, which is the only path that
 # does not already require the trust it is delivering. Same bootstrap as the
 # cluster nodes make in rke2_node.
-inventory_controller_trust_ca_url: http://192.168.2.99/gitlab/dev.lo-ca.crt
+inventory_controller_trust_ca_url: http://192.168.2.99/certs/dev.lo-ca.crt
 inventory_controller_trust_ca_path: /usr/local/share/ca-certificates/dev.lo-ca.crt
 # A name signed by that CA, used to prove the install worked rather than
 # assuming it did.
@@ -138,6 +138,13 @@ inventory_gitops_source_commit_email: automation@dev.lo
 inventory_ipa_sub_ca_common_name: k8s-ca.dev.lo
 inventory_ipa_sub_ca_ocsp_url: http://ipa-ca.dev.lo/ca/ocsp
 inventory_ipa_sub_ca_crl_url: http://ipa-ca.dev.lo/ipa/crl/MasterCRL.bin
+# The public half of the intermediate is published next to the domain root on
+# the artifact host. Everything the cluster signs is signed by this, so a
+# browser or a curl that only has the root cannot complete the chain unless the
+# server sends the intermediate itself — and this is where the other half comes
+# from when it does not. The key stays here; only the certificate is copied.
+inventory_ipa_sub_ca_publish_host: repo01
+inventory_ipa_sub_ca_publish_dir: /data1/artifacts/certs
 
 # --- Single sign-on --------------------------------------------------------
 #

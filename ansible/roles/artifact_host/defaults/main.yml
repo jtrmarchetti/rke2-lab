@@ -7,6 +7,7 @@ artifact_host_document_root: /data1/artifacts
 
 # One subdirectory per consumer, so an artifact's URL says which phase owns it.
 artifact_host_directories:
+  - certs
   - freeipa
   - gitlab
   - runtime

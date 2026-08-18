@@ -53,3 +53,7 @@
 
 - name: main | Issue the intermediate certificate
   ansible.builtin.include_tasks: issue.yml
+
+- name: main | Publish the intermediate to the artifact host
+  when: (ipa_sub_ca_publish_host | length) > 0
+  ansible.builtin.include_tasks: publish.yml

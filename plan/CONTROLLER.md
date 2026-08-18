@@ -284,12 +284,12 @@ until `GIT_SSL_CAINFO` is passed by hand. Flux is unaffected — its
 bootstrap — which is exactly why this went unnoticed: the cluster trusts the CA,
 and the machine that publishes to the repository does not.
 
-The CA is already published at `http://192.168.2.99/gitlab/dev.lo-ca.crt` for
+The CA is already published at `http://192.168.2.99/certs/dev.lo-ca.crt` for
 the cluster nodes. Installing it here is two commands, and it belongs in
 `kube_cli_controller` or a controller role of its own:
 
 ```bash
-sudo curl -fsSL http://192.168.2.99/gitlab/dev.lo-ca.crt \
+sudo curl -fsSL http://192.168.2.99/certs/dev.lo-ca.crt \
   -o /usr/local/share/ca-certificates/dev.lo-ca.crt
 sudo update-ca-certificates
 ```

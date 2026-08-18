@@ -1,0 +1,30 @@
+---
+# The certificate only, never the key: this file is fetched over plain HTTP by
+# anything that has not been given a reason to trust the domain yet, which is
+# the same bootstrapping argument that puts the root CA on the artifact host.
+- name: publish | Read the issued intermediate for publication
+  changed_when: false
+  register: _reg_ipa_sub_ca_publish_source
+  ansible.builtin.slurp:
+    src: "{{ _var_ipa_sub_ca_crt }}"
+
+# artifact_host owns this directory, but that role runs in an earlier phase on
+# a host that may not have been touched since. Creating it here means the
+# publication does not depend on repo01 having been reconfigured first.
+- name: publish | Ensure the publication directory exists
+  delegate_to: "{{ ipa_sub_ca_publish_host }}"
+  ansible.builtin.file:
+    path: "{{ ipa_sub_ca_publish_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: publish | Ensure the intermediate is published to the artifact host
+  delegate_to: "{{ ipa_sub_ca_publish_host }}"
+  ansible.builtin.copy:
+    content: "{{ _reg_ipa_sub_ca_publish_source['content'] | b64decode }}"
+    dest: "{{ ipa_sub_ca_publish_dir }}/{{ ipa_sub_ca_common_name }}.crt"
+    owner: root
+    group: root
+    mode: "0644"

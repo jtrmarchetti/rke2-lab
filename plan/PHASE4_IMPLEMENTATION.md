@@ -23,7 +23,7 @@ chosen first, and choosing them is Phase 4's research.
 
 - Phase 3 exit criteria hold: GitLab serves Git, the container registry, and the
   package registry over `dev.lo` names with FreeIPA-issued TLS.
-- The `dev.lo` CA is published at `http://192.168.2.99/gitlab/dev.lo-ca.crt`.
+- The `dev.lo` CA is published at `http://192.168.2.99/certs/dev.lo-ca.crt`.
 - `RKE2_TOKEN` is set in `~/.config/rke2lab/env.sh`. New in this phase.
 - `GITLAB_ROOT_PASSWORD` is set — Phase 4 authenticates to GitLab as `root` to
   push, and to mint the read-only credential the nodes use to pull.
