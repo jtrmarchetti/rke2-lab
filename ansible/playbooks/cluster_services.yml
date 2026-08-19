@@ -42,6 +42,10 @@
           {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
         ipa_sub_ca_common_name: "{{ inventory_ipa_sub_ca_common_name }}"
         ipa_sub_ca_crl_url: "{{ inventory_ipa_sub_ca_crl_url }}"
+        # The chain check's trust anchor: the domain CA controller_trust keeps
+        # current on this host. A rebuild that rotated the root makes the
+        # check fail and the intermediate reissue against the new one.
+        ipa_sub_ca_domain_ca_file: "{{ inventory_controller_trust_ca_path }}"
         ipa_sub_ca_ipa_host: "{{ inventory_cluster_services_ipa_host }}"
         ipa_sub_ca_ocsp_url: "{{ inventory_ipa_sub_ca_ocsp_url }}"
         ipa_sub_ca_publish_dir: "{{ inventory_ipa_sub_ca_publish_dir }}"

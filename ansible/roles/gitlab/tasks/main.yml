@@ -70,6 +70,37 @@
     enabled: true
     state: started
 
+# Go's root store is read once per process: a dockerd that started before the
+# domain CA was installed validates registry names against a pool that
+# predates the CA and fails with "certificate signed by unknown authority"
+# until it restarts, even though the CA is in the system store now. On a fresh
+# build that is exactly this role's situation — the runtime was started in an
+# earlier phase and the CA landed only moments ago. The pid file's mtime is
+# the daemon's start time (/run is tmpfs, so it is written at every start),
+# and comparing it against the CA's mtime makes this a one-shot: it fires on
+# the run that installs the CA, on a CA re-issue, and never in steady state.
+- name: main | Stat the domain CA and the docker daemon start marker
+  when: (gitlab_enabled | bool)
+  register: _reg_gitlab_ca_daemon
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ gitlab_ssl_source_dir }}/dev.lo-ca.crt"
+    - /run/docker.pid
+
+- name: main | Restart the container runtime when it predates the domain CA
+  when:
+    - (gitlab_enabled | bool)
+    - not ansible_check_mode
+    - _reg_gitlab_ca_daemon.results[0]['stat']['exists'] | bool
+    - _reg_gitlab_ca_daemon.results[1]['stat']['exists'] | bool
+    - >-
+      _reg_gitlab_ca_daemon.results[1]['stat']['mtime'] | int
+      < _reg_gitlab_ca_daemon.results[0]['stat']['mtime'] | int
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+
 - name: main | Ensure the GitLab compose directory exists
   when: (gitlab_enabled | bool)
   ansible.builtin.file:

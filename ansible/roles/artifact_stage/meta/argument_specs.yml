@@ -112,3 +112,13 @@ argument_specs:
           Names of transit artifacts already confirmed present at their
           destination. These are not restaged, because their local copy is
           deleted by design once published.
+      artifact_stage_runtime_packages:
+        type: list
+        elements: str
+        required: false
+        default:
+          - docker.io
+          - docker-compose-v2
+        description: >-
+          Host packages providing the container runtime the image step pulls
+          with. Delivered through apt, not as Apache artifacts.

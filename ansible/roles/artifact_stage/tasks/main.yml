@@ -85,6 +85,31 @@
     - (_var_artifact_stage_files | length > 0)
   ansible.builtin.include_tasks: files.yml
 
+# The image step pulls by digest, which needs a running Docker daemon. On a
+# fresh build nothing earlier in this play has installed the runtime: each
+# consumer role (gitlab, freeipa_server) installs its own in a later phase.
+# container_storage has already written /etc/docker/daemon.json pointing
+# data-root at the data volume, so starting the daemon here — right after
+# that config exists, and before the first pull — is the point a fresh build
+# needs. Gated on image entries so a file-only manifest stays runtime-free.
+- name: main | Ensure container runtime packages are installed
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_var_artifact_stage_images | length > 0)
+  ansible.builtin.apt:
+    name: "{{ artifact_stage_runtime_packages }}"
+    state: present
+
+- name: main | Ensure the container runtime is running
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_var_artifact_stage_images | length > 0)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
 - name: main | Stage container image artifacts
   when:
     - (artifact_stage_enabled | bool)

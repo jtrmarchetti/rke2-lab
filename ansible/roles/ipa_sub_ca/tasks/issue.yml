@@ -22,11 +22,42 @@
 # window. Presence alone is not enough: a CA certificate that is only ever
 # checked for existence expires silently, and takes every certificate it signed
 # with it.
+#
+# Expiry alone is not the whole of "must be issued". The domain root this CA
+# is signed by is not immortal: a rebuild of the identity host — or a root
+# rollover — issues a new root with the same subject, and every intermediate
+# the old root signed is still unexpired but chains to nothing anyone trusts.
+# Expiry checks the clock; this checks the chain. It can only run where the
+# domain CA itself is present on this host, which is why it is optional:
+# without it the gate falls back to expiry alone.
+- name: issue | Stat the domain CA against which the chain is verified
+  when: (ipa_sub_ca_domain_ca_file | length) > 0
+  register: _reg_ipa_sub_ca_domain_ca
+  ansible.builtin.stat:
+    path: "{{ ipa_sub_ca_domain_ca_file }}"
+
+- name: issue | Check that the existing intermediate chains to the domain CA
+  when:
+    - (_reg_ipa_sub_ca_existing['stat']['exists'] | bool)
+    - (ipa_sub_ca_domain_ca_file | length) > 0
+    - (_reg_ipa_sub_ca_domain_ca['stat']['exists'] | bool)
+  changed_when: false
+  register: _reg_ipa_sub_ca_chain
+  failed_when: false
+  ansible.builtin.command:
+    cmd: >-
+      openssl verify
+      -CAfile {{ ipa_sub_ca_domain_ca_file }}
+      {{ _var_ipa_sub_ca_crt }}
+
 - name: issue | Determine whether the intermediate must be issued
   ansible.builtin.set_fact:
     _ipa_sub_ca_needed: >-
       {{ (not _reg_ipa_sub_ca_existing['stat']['exists'])
-         or (not (_reg_ipa_sub_ca_info['valid_at']['renewal'] | default(false))) }}
+         or (not (_reg_ipa_sub_ca_info['valid_at']['renewal'] | default(false)))
+         or (_reg_ipa_sub_ca_chain is defined
+             and not (_reg_ipa_sub_ca_chain['skipped'] | default(false))
+             and (_reg_ipa_sub_ca_chain['rc'] | default(1)) != 0) }}
 
 - name: issue | Report the issuance decision
   ansible.builtin.debug:

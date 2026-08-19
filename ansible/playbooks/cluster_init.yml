@@ -204,9 +204,43 @@
     # role above, and set on the client here — so the workloads that read them
     # never wait for this play, and nothing needs a second pass.
     #
-    # Everything from 2 onward is gated on Keycloak being reachable, for the
-    # same reason it always was: Keycloak does not start on the current VM CPU
-    # model. See plan/PHASE6_IMPLEMENTATION.md.
+    # Everything from 2 onward is gated on Keycloak being reachable. The gate
+    # used to be a fact nothing in the repository set — a manual switch from
+    # the era when the VM's CPU model kept Keycloak from starting, and a
+    # rebuild skipped the whole SSO path until someone remembered to pass it.
+    # The CPU fix now ships inside the Pulumi VM, so the fact is a live probe:
+    # wait for the admin API to answer, and if it still has not by the time
+    # the probe gives up, the run reports it rather than pretending it ran.
+    - name: cluster_init | Probe whether Keycloak's admin API answers
+      register: _reg_keycloak_ready_probe
+      until: _reg_keycloak_ready_probe['status'] == 200
+      retries: 40
+      delay: 15
+      changed_when: false
+      failed_when: false
+      ansible.builtin.uri:
+        url: "{{ inventory_keycloak_ldap_url }}/realms/master"
+        method: GET
+        # Same CA the role above fetches and trusts: the python interpreter
+        # this runs under does not point at the system trust store, so without
+        # this the probe verifies against the wrong root and reports not ready
+        # for the only reason it can be reached by name.
+        ca_path: "{{ inventory_gitops_bootstrap_domain_ca_file }}"
+        status_code: [200, 502, 503]
+
+    - name: cluster_init | Record whether Keycloak is ready
+      ansible.builtin.set_fact:
+        keycloak_ready: >-
+          {{ _reg_keycloak_ready_probe['status'] | default(0) == 200 }}
+
+    - name: cluster_init | Report that Keycloak was not reachable
+      when: not (keycloak_ready | bool)
+      ansible.builtin.debug:
+        msg: >-
+          Keycloak at {{ inventory_keycloak_ldap_url }} did not answer after
+          {{ 40 * 15 }}s; the Keycloak-gated roles skipped. Re-run
+          cluster_init.yml once Keycloak is serving.
+
     - name: cluster_init | Include the application group role
       tags:
         - ipa_sso_groups

@@ -38,8 +38,22 @@
   changed_when: false
   # `bao status` exits 2 when the vault is sealed and 1 when it is not yet
   # initialised. Both are states this role expects to find, not failures.
+  #
+  # On a cold build the pod is not up when this role first runs: Flux deploys
+  # it from the tree the first GitOps push creates, and its PVCs wait on the
+  # storage class Longhorn installs. A `kubectl exec` into a pod that is not
+  # there exits 1 with an empty body — the same code as "not yet initialised"
+  # minus the JSON — so the gate is "the call answers with a status body",
+  # which is true only once the vault can report itself. That makes the first
+  # run of cluster_init self-contained instead of needing a re-run, and it is
+  # a no-op on an environment where the vault already answers.
   failed_when: _reg_openbao_init_status['rc'] not in [0, 1, 2]
   register: _reg_openbao_init_status
+  until: >-
+    _reg_openbao_init_status['rc'] in [0, 1, 2]
+    and ('"initialized"' in _reg_openbao_init_status['stdout'])
+  retries: 80
+  delay: 15
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}

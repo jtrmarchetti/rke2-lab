@@ -30,6 +30,16 @@ ipa_sub_ca_ca: ipa
 ipa_sub_ca_validity_days: 1825
 ipa_sub_ca_renew_before_days: 90
 
+# Where the domain CA lives on this host, for the chain check that reissues
+# when the root this intermediate was signed by is no longer the one anyone
+# trusts — a rebuild of the identity host rotates the root, and an unexpired
+# intermediate signed by the old one chains to nothing. The controller's trust
+# store is the natural copy: controller_trust keeps it current, and the chain
+# check is exactly the proof that that copy is still what the cluster signed
+# against. Null disables the check and the gate falls back to expiry alone,
+# which is correct for any caller that does not hold a domain CA on its host.
+ipa_sub_ca_domain_ca_file: null
+
 ipa_sub_ca_key_size: 4096
 
 # Values the imported profile carries verbatim from the domain's own
