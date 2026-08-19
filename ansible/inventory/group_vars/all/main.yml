@@ -18,3 +18,74 @@ inventory_kubewk_control_host: kubecp01
 # controller play that uses it is not in the core group and cannot see that
 # group's variables.
 inventory_cluster_services_ipa_host: core01
+
+# Containerd mirror rewrites shared by every RKE2 node. One catch-all rule per
+# upstream *host*, rewriting every repository under it to where rke2_publish
+# pushed it.
+#
+# Lives here rather than duplicated per group because the list is identical for
+# servers and workers: it names which upstream hosts route to the GitLab mirror,
+# not anything about a node type. The rke2_node role's defaults carry the same
+# list for a standalone run.
+#
+# A catch-all means onboarding an image from any host in this list costs nothing
+# at the node: publish it to GitLab, add the manifest, done. Only adding a new
+# upstream host requires a change here and a rolling restart, because RKE2
+# regenerates containerd's hosts.toml from registries.yaml at service start.
+# The replacement paths must stay equal to inventory_rke2_publish_group and
+# inventory_rke2_publish_images_project, or a node asks for a path nothing
+# published.
+inventory_rke2_node_registry_mirrors:
+  # Docker Hub, plus the registry endpoint some tools resolve instead of it.
+  # One catch-all covers official images (library/*) and every namespace.
+  - upstream: docker.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  - upstream: registry-1.docker.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # GitHub Container Registry: kube-vip, fluxcd, external-secrets, ...
+  - upstream: ghcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Google Container Registry, where Google's own images live.
+  - upstream: gcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Quay: jetstack, openbao, keycloak, prometheus, kiwigrid, oauth2-proxy, ...
+  - upstream: quay.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Kubernetes' own registry. Already in use under a catch-all rule, the live
+  # proof of this whole approach.
+  - upstream: registry.k8s.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Microsoft Container Registry.
+  - upstream: mcr.microsoft.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Amazon's public ECR.
+  - upstream: public.ecr.aws
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # IBM Container Registry.
+  - upstream: icr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # CNCF's registry (cert-manager and friends publish here).
+  - upstream: cgr.dev
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # NVIDIA's registry: NGC images and CUDA base images.
+  - upstream: nvcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Red Hat's public registry: UBI and Red Hat-published mirrors.
+  - upstream: registry.redhat.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Red Hat's legacy access registry, kept for pinned manifests that reference it.
+  - upstream: registry.access.redhat.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1

@@ -10,8 +10,10 @@
 # GitLab, and every node's containerd rewrite map is refreshed so those images
 # resolve to the mirror. The second is why the node plays exist at all: RKE2
 # regenerates containerd's hosts.toml from registries.yaml at service start, so
-# a new rewrite rule is inert until the node restarts. That restart is rolling,
-# agents first, and it is the expensive part of adding any new registry prefix.
+# a changed registries.yaml is inert until the node restarts. The rewrite map is
+# host-level, so a namespace added under an already-listed upstream host never
+# changes this file; only adding a new upstream host does, and that is the one
+# case where this rolling restart (agents first) is the price.
 #
 # See plan/PHASE6_IMPLEMENTATION.md.
 

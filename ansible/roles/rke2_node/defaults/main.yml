@@ -57,24 +57,84 @@ rke2_node_registry_host: null
 rke2_node_package_project: rke2/packages
 rke2_node_package_name: rke2
 
-# Containerd mirror rewrites. Each entry redirects one upstream registry at the
-# GitLab mirror and rewrites the repository path to where rke2_publish pushed
-# it. Keep these equal to rke2_publish's group and images project, or a node
-# will ask for a path nothing published.
+# Containerd mirror rewrites. Each entry redirects one upstream registry host
+# at the GitLab mirror and rewrites every repository path under it to where
+# rke2_publish pushes: <upstream namespace>/<repo> -> rke2/images/<namespace>/<repo>.
+#
+# The rewrite is a per-host catch-all (^(.*)), not a per-namespace rule. RKE2
+# regenerates containerd's hosts.toml from registries.yaml only at service
+# start, so a per-namespace list made every new upstream namespace cost a
+# rolling restart of the whole cluster. The catch-all costs exactly one
+# one-time restart, and onboarding an image after that is push-to-GitLab plus
+# a manifest entry -- no core config change, no node restart.
+#
+# The list is one entry per upstream *host*. Adding a new host (e.g.
+# nvcr.io/nvidia) is the only thing that still costs a rolling restart; any
+# namespace or repository under a host already listed here costs nothing.
+#
+# The replacement paths must stay equal to rke2_publish's group and images
+# project, or a node will ask for a path nothing published.
 rke2_node_registry_mirrors:
+  # Docker Hub. Includes the official image namespace (library/*, what a bare
+  # `postgres:18` resolves to), plus every upstream namespace published under
+  # it: rancher, bitnami, longhornio, dxflrs, grafana, ...
   - upstream: docker.io
-    pattern: "^rancher/(.*)"
-    replacement: rke2/images/rancher/$1
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Docker Hub's backend host. Named separately because some clients resolve
+  # docker.io through registry-1.docker.io instead.
+  - upstream: registry-1.docker.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # GitHub Container Registry: kube-vip, fluxcd, external-secrets, ...
   - upstream: ghcr.io
-    pattern: "^kube-vip/(.*)"
-    replacement: rke2/images/kube-vip/$1
-  # Phase 6a. Flux's controllers keep their upstream ghcr.io/fluxcd names in the
-  # manifests Flux applies, so the rewrite is what makes an air-gapped install
-  # work without passing --registry to `flux bootstrap` and rewriting every
-  # image reference in Git.
-  - upstream: ghcr.io
-    pattern: "^fluxcd/(.*)"
-    replacement: rke2/images/fluxcd/$1
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Google Container Registry, where Google's own images live.
+  - upstream: gcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Quay: jetstack, openbao, keycloak, prometheus, prometheus-operator,
+  # kiwigrid, oauth2-proxy, ...
+  - upstream: quay.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Kubernetes' official registry; the one host already in use, which is the
+  # proof the catch-all shape works in this cluster.
+  - upstream: registry.k8s.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Microsoft Container Registry.
+  - upstream: mcr.microsoft.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Red Hat's public registry, where UBI, UBI8/9 min, and Red Hat mirrors of
+  # community images are served.
+  - upstream: registry.redhat.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Red Hat's older access registry. Kept because existing manifests and
+  # documentation reference it; the new images use registry.redhat.io.
+  - upstream: registry.access.redhat.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Cloud Native Computing Foundation: cert-manager, KEDA, OpenZiti, ...
+  - upstream: cgr.dev
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # Amazon ECR public. AWS's public images live here.
+  - upstream: public.ecr.aws
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # IBM's registry: ibmcloud images and mirrors.
+  - upstream: icr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  # NVIDIA's registry: NGC images and the CUDA base images the GPU workloads
+  # are built on.
+  - upstream: nvcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
 
 # Read-only pull credential. No default: a node with an empty credential would
 # get a 401 that reads like a broken mirror. The playbook reads it from the file

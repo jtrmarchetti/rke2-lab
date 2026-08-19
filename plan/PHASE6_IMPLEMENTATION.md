@@ -600,8 +600,11 @@ charts work unmodified in Phase 4, reused rather than rediscovered.
 2. Pin every image by digest read from its registry.
 3. Add manifest entries with `retention: transit`.
 4. Stage on `repo01`, publish into GitLab, local copies retire themselves.
-5. Add a `ghcr.io`/`docker.io` rewrite **only if the image is from a registry
-   prefix no existing rule covers** — and remember the node restart.
+5. Add a mirror entry **only if the image's upstream host has no catch-all
+   rule yet**. The rewrites are host-level (see
+   `inventory_rke2_node_registry_mirrors` in `group_vars/all/main.yml`), so a
+   new namespace under an already-listed host costs nothing; a brand-new host
+   costs one rolling restart, paid once.
 6. Declare it under `infrastructure/controllers`, its objects under
    `infrastructure/configs`, workloads under `apps`.
 7. Verify with a transaction, not a status.

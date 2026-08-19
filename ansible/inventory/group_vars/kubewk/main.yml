@@ -73,86 +73,12 @@ inventory_rke2_node_gitlab_url: https://gitlab.dev.lo
 inventory_rke2_node_registry_host: registry.gitlab.dev.lo
 inventory_rke2_node_package_project: rke2/packages
 
-# Must stay equal to the control plane's rewrites and to rke2_publish's group
-# and project, or a worker asks the registry for a path nothing pushed. The
-# Traefik image added in Phase 5 is a docker.io/rancher/* name and is already
-# covered by the first rule; it needs no entry of its own.
-inventory_rke2_node_registry_mirrors:
-  - upstream: docker.io
-    pattern: "^rancher/(.*)"
-    replacement: rke2/images/rancher/$1
-  - upstream: ghcr.io
-    pattern: "^kube-vip/(.*)"
-    replacement: rke2/images/kube-vip/$1
-  # Phase 6a. Flux's controllers keep their upstream ghcr.io/fluxcd names in the
-  # manifests Flux applies, so the rewrite is what makes an air-gapped install
-  # work without passing --registry to `flux bootstrap` and rewriting every
-  # image reference in Git.
-  - upstream: ghcr.io
-    pattern: "^fluxcd/(.*)"
-    replacement: rke2/images/fluxcd/$1
-  # Phase 6a. Sealed Secrets. A second docker.io rule rather than a second
-  # ghcr.io one, because the controller image is docker.io/bitnami/*, and the
-  # existing docker.io rule matches ^rancher/ only. This is the case the
-  # template bug of 6a was about: two rules under one upstream key, which the
-  # grouped template now emits as one mirror block with two rewrites.
-  - upstream: docker.io
-    pattern: "^bitnami/(.*)"
-    replacement: rke2/images/bitnami/$1
-  # Phase 6b. One rule per upstream namespace the cluster services are pulled
-  # from. Added in a single pass, deliberately: RKE2 regenerates containerd's
-  # hosts.toml from registries.yaml at service start, so every change here
-  # costs a rolling restart of all six nodes however correct the file on disk
-  # already is. Batching the whole 6b set is one restart instead of six.
-  - upstream: quay.io
-    pattern: "^jetstack/(.*)"
-    replacement: rke2/images/jetstack/$1
-  - upstream: quay.io
-    pattern: "^openbao/(.*)"
-    replacement: rke2/images/openbao/$1
-  - upstream: quay.io
-    pattern: "^keycloak/(.*)"
-    replacement: rke2/images/keycloak/$1
-  - upstream: docker.io
-    pattern: "^longhornio/(.*)"
-    replacement: rke2/images/longhornio/$1
-  - upstream: docker.io
-    pattern: "^dxflrs/(.*)"
-    replacement: rke2/images/dxflrs/$1
-  # Docker Hub official images: a bare `postgres:18` is docker.io/library/*
-  # by the time containerd resolves it, so the namespace has to be named.
-  - upstream: docker.io
-    pattern: "^library/(.*)"
-    replacement: rke2/images/library/$1
-  - upstream: ghcr.io
-    pattern: "^external-secrets/(.*)"
-    replacement: rke2/images/external-secrets/$1
-  # Phase 6c. The observability set. registry.k8s.io is a new upstream host,
-  # not just a new namespace under one already configured, which is why 6c
-  # costs its own rolling restart even though 6b already batched its rules.
-  - upstream: quay.io
-    pattern: "^prometheus/(.*)"
-    replacement: rke2/images/prometheus/$1
-  - upstream: quay.io
-    pattern: "^prometheus-operator/(.*)"
-    replacement: rke2/images/prometheus-operator/$1
-  - upstream: quay.io
-    pattern: "^kiwigrid/(.*)"
-    replacement: rke2/images/kiwigrid/$1
-  - upstream: docker.io
-    pattern: "^grafana/(.*)"
-    replacement: rke2/images/grafana/$1
-  - upstream: registry.k8s.io
-    pattern: "^(.*)"
-    replacement: rke2/images/$1
-  # Single sign-on. The oauth2-proxy that fronts the Longhorn UI is the only
-  # image the SSO work adds — every other service federates by configuration
-  # rather than by gaining a component. It is one more quay.io namespace, so
-  # it costs the same rolling restart of all six nodes that any registries.yaml
-  # change does.
-  - upstream: quay.io
-    pattern: "^oauth2-proxy/(.*)"
-    replacement: rke2/images/oauth2-proxy/$1
+# The containerd mirror rewrites are identical on every node, so they are
+# defined once in group_vars/all/main.yml. That file's
+# inventory_rke2_node_registry_mirrors is what the playbooks here pass to
+# rke2_node. A host-level catch-all: onboarding an image from a listed upstream
+# host costs no node restart, because only adding a new host changes the file
+# containerd reads.
 
 # The pull credential is not in inventory. It is the same deploy token the
 # servers use, recorded on repo01 by rke2_publish, and the playbook reads it

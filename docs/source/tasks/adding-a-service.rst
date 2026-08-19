@@ -12,7 +12,7 @@ The whole path, in order:
 .. code-block:: text
 
    1. artifacts    images + chart into the manifest, mirrored to GitLab
-   2. mirror rules one rewrite per new upstream namespace  (costs a node restart)
+   2. mirror rules  only if the image's upstream host is not already rewritten
    3. manifests    a directory under apps/ in the GitOps source tree
    4. secrets      authored into env.sh, written to OpenBao, read by ExternalSecret
    5. identity     an entry in inventory_keycloak_applications, if it federates
@@ -73,26 +73,44 @@ nothing holds.
 2. Mirror rules
 ===============
 
-A node can only pull what its ``registries.yaml`` rewrites. If the new images
-come from an upstream namespace nothing else uses, add a rule to
-``inventory_rke2_node_registry_mirrors`` in ``group_vars/kubecp/main.yml`` and
-``group_vars/kubewk/main.yml``:
+A node can only pull what its ``registries.yaml`` rewrites. The list of
+rewrites, ``inventory_rke2_node_registry_mirrors`` in
+``group_vars/all/main.yml``, uses a **host-level catch-all**: one entry per
+upstream host whose whole namespace tree is redirected to the mirror, not one
+per namespace.
 
 .. code-block:: yaml
 
    - upstream: quay.io
-     pattern: "^vendor/(.*)"
-     replacement: rke2/images/vendor/$1
+     pattern: "^(.*)"
+     replacement: rke2/images/$1
+
+So the question when onboarding an image is not *which namespace* it is in but
+*which host* it is pulled from. If that host already has a catch-all entry —
+docker.io, ghcr.io, gcr.io, quay.io, mcr.microsoft.com, registry.redhat.io,
+cgr.dev, public.ecr.aws, icr.io, nvcr.io, and the others in the list — there
+is nothing to do. The rewrite is already there and the image lands at
+``registry.gitlab.dev.lo/rke2/images/<everything after the host>``.
+
+Only when the image comes from a host **not** in the list do you add an entry
+to ``group_vars/all/main.yml``:
+
+.. code-block:: yaml
+
+   - upstream: registry.example.com
+     pattern: "^(.*)"
+     replacement: rke2/images/$1
 
 .. warning::
 
-   RKE2 regenerates containerd's ``hosts.toml`` from ``registries.yaml`` at
-   service start, so **every change here costs a rolling restart of all six
-   nodes**. Batch all the rules a change needs into one pass.
+   Because the rules are per-host, a new namespace under an already-listed
+   host costs nothing — no edit, no restart. Only adding a **new host** changes
+   ``registries.yaml``, and RKE2 regenerates containerd's ``hosts.toml`` from
+   that file at service start, so that specific case costs a rolling restart of
+   the nodes. That is the one-time cost per host, paid once, not per namespace.
 
    Docker Hub official images are ``docker.io/library/*`` by the time
-   containerd resolves them: a bare ``postgres:17.7-alpine`` needs the
-   ``^library/`` rule, not a namespace-specific one.
+   containerd resolves them; the ``docker.io`` catch-all already covers them.
 
 3. Manifests
 ============
