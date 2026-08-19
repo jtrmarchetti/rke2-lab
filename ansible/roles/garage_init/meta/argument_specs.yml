@@ -32,10 +32,17 @@ argument_specs:
             credentials out of OpenBao.
       garage_init_ready_retries:
         type: int
-        default: 20
+        default: 30
         description:
           - Attempts at that wait. Needed because `kubectl wait` fails at once,
             rather than after the timeout, when the pod does not yet exist.
+          - Together with the delay this is the whole cold-build window, which
+            has to cover Flux creating the `apps` tree before the pod exists.
+      garage_init_ready_delay:
+        type: int
+        default: 10
+        description:
+          - Seconds between attempts at that wait.
       garage_init_zone:
         type: str
         default: dev-lo

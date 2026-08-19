@@ -20,12 +20,29 @@
 # play, and Garage cannot start until External Secrets has synced them into the
 # namespace. Without this wait the role's first command fails with a pod that
 # does not exist yet, which reads as a broken deployment rather than as a race.
+#
+# On a cold rebuild the wait is really for Flux: the `apps` tree that creates
+# the Garage StatefulSet arrives third in the chain
+# (infra-controllers → infra-configs → apps), each link gated on the
+# previous one's readiness. The effective window is `retries × delay`, not
+# the per-call timeout — `kubectl wait` returns at once rather than after
+# the timeout when the pod does not exist yet, so the window must cover the
+# whole cascade, not one readiness check. 30 attempts at 10 s is the length
+# of that chain on a fresh build; on every later run the pod already exists
+# and the first call succeeds, so this costs nothing in steady state.
+#
+# Waiting on the Keycloak realm instead is a longer wait for nothing: the
+# ExternalSecret that starts this pod reads only `garage-cluster`, which
+# openbao_secrets wrote earlier in this play. The cold-build failure this
+# role can still hit is a longhorn-auth crash-loop in the same `apps` tree,
+# which settles on the play's second pass — and it is not a prerequisite of
+# this pod.
 - name: main | Wait for Garage to start on its synced credentials
   changed_when: false
   register: _reg_garage_init_ready
   until: _reg_garage_init_ready is succeeded
   retries: "{{ garage_init_ready_retries }}"
-  delay: 10
+  delay: "{{ garage_init_ready_delay }}"
   ansible.builtin.command:
     cmd: >-
       {{ garage_init_kubectl }} wait --for=condition=Ready
