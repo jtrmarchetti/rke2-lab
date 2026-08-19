@@ -70,7 +70,29 @@ class VmCommonSettings:
     # ones: a host crash or power failure can lose writes the guest believes are
     # durable, including GitLab's database. That is an acceptable trade for a
     # rebuildable dev environment and would not be acceptable in production.
+    #
+    # The physical host's backing storage is an SSD array, so fsync latency is
+    # one order of magnitude below the ~26 ms measured earlier on the spinning
+    # disk the lab started on. writeback stays the safer choice for the same
+    # reasons as above, and it is the mode Proxmox documents as giving a good
+    # balance between safety and speed for block-storage backings.
     disk_cache: str = "writeback"
+    # IO threads move each disk's I/O off the vCPU threads and the main QEMU
+    # event loop into a dedicated thread. On an SSD-backed storage the host's
+    # I/O completes fast enough that the only thing left to serialise is the
+    # QEMU user-space path, and giving it its own thread removes that
+    # serialisation entirely. Proxmox recommends exactly this combination
+    # (virtio-scsi-single + IO Thread) for performance and makes it the default
+    # for newly created Linux VMs since 7.3.
+    #
+    # The trade is one extra host thread per disk per VM. With 8 VMs and 2-3
+    # disks each that is at most ~24 threads on a lab host, which is
+    # negligible.
+    disk_io_thread: bool = True
+    # virtio-scsi-single rather than the virtio-scsi-pci multi-controller
+    # option: iothread is only valid with virtio-scsi-single or virtio-blk,
+    # and single is what Proxmox uses for exactly this purpose.
+    scsi_hardware: str = "virtio-scsi-single"
 
 
 def _disk_args(
@@ -91,6 +113,9 @@ def _disk_args(
 
         if common.disk_cache:
             disk_kwargs["cache"] = common.disk_cache
+
+        if common.disk_io_thread:
+            disk_kwargs["iothread"] = True
 
         # When no template exists, import the first disk from a cloud image.
         if idx == 0 and common.template_vm_id is None and boot_image_file_id is not None:
@@ -152,6 +177,7 @@ def create_vm(
         cdrom=proxmox.VmLegacyCdromArgs(file_id="none"),
         serial_devices=[{}],
         operating_system=proxmox.VmLegacyOperatingSystemArgs(type="l26"),
+        scsi_hardware=common.scsi_hardware,
         cpu=proxmox.VmLegacyCpuArgs(
             cores=spec.cpu_cores,
             sockets=spec.cpu_sockets,
