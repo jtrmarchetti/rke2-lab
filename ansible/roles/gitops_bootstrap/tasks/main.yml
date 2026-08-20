@@ -52,42 +52,41 @@
   when:
     - (gitops_bootstrap_enabled | bool)
     # Same gate the other GitLab-facing roles use: everything below either
-    # mints a credential or writes to the cluster.
+    # reads a credential or writes to the cluster.
     - not ansible_check_mode
   block:
-    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
-    # through a heredoc, which is shell syntax with no command equivalent.
-    - name: main | Mint an admin API token # noqa: command-instead-of-shell
-      changed_when: false
+    # The admin credential is shared with rke2_publish and gitops_source:
+    # one token, recorded on the GitLab host, reused while it authenticates.
+    # This role runs on the controller, so the file work and the mint are
+    # delegated to the GitLab host. When gitops_source has run earlier in the
+    # same playbook, the token is already recorded and this costs a stat, a
+    # slurp and a GET.
+    - name: main | Ensure the shared GitLab admin token
+      ansible.builtin.include_role:
+        name: gitlab_admin_token
+        apply:
+          vars:
+            gitlab_admin_token_url: "{{ gitops_bootstrap_gitlab_url }}"
+            gitlab_admin_token_host: "{{ gitops_bootstrap_gitlab_host }}"
+            gitlab_admin_token_file: "{{ gitops_bootstrap_admin_token_file }}"
+            gitlab_admin_token_no_log: "{{ gitops_bootstrap_no_log }}"
+
+    # The role wrote the record file on the GitLab host, which this role
+    # cannot see; the slurp is the handoff.
+    - name: main | Read the recorded admin token from the GitLab host
       delegate_to: "{{ gitops_bootstrap_gitlab_host }}"
       no_log: "{{ gitops_bootstrap_no_log | bool }}"
-      register: _reg_gitops_bootstrap_pat
-      ansible.builtin.shell:
-        cmd: "{{ _var_gitops_bootstrap_pat_script }}"
+      register: _reg_gitops_bootstrap_admin_token_raw
+      ansible.builtin.slurp:
+        src: "{{ gitops_bootstrap_admin_token_file }}"
 
     - name: main | Ensure the read-only repository token exists
       ansible.builtin.include_tasks: deploy_token.yml
 
     - name: main | Install the Flux components and the sync objects
       ansible.builtin.include_tasks: install.yml
-  always:
-    - name: main | Revoke the admin API token
-      when:
-        - _reg_gitops_bootstrap_pat is defined
-        - "'stdout' in _reg_gitops_bootstrap_pat"
-      changed_when: false
-      no_log: "{{ gitops_bootstrap_no_log | bool }}"
-      # Same transient 401/5xx window as the gitops_source revoke: retry
-      # rather than leave the one-day admin token live.
-      register: _reg_gitops_bootstrap_revoke
-      until: _reg_gitops_bootstrap_revoke['status'] in [204, 404]
-      retries: 4
-      delay: 15
-      ansible.builtin.uri:
-        ca_path: "{{ gitops_bootstrap_ca_file }}"
-        url: >-
-          {{ _var_gitops_bootstrap_api }}/personal_access_tokens/{{
-          _reg_gitops_bootstrap_pat['stdout'].split()[0] }}
-        method: DELETE
-        headers: "{{ _var_gitops_bootstrap_headers }}"
-        status_code: [204, 401, 404, 500, 502, 503]
+
+# No `always` revoke: the credential is the shared one the gitlab_admin_token
+# role recorded on the GitLab host, and it outlives this run on purpose. Its
+# one-day expiry is what bounds a leaked copy of the record file, and the
+# next run of any including role proves the token or mints a replacement.

@@ -167,6 +167,20 @@ re-derivable:
    $ rm ~/.config/rke2lab/flux-deploy-token.yml
    $ ansible-playbook playbooks/gitops.yml
 
+   # the shared admin personal access token. Deleting the record forces the
+   # next run to mint a fresh one; until then every admin API call keeps
+   # using the old token, so this only takes effect on a real run, never
+   # in check mode.
+   $ ssh root@192.168.2.99 rm /data1/gitlab/admin-token.yml
+   $ ansible-playbook playbooks/cluster_services.yml
+   $ ansible-playbook playbooks/gitops.yml
+
+   # not a rotation but worth knowing: the token expires after a day on its
+   # own. A run more than a day after the last mint re-mints transparently,
+   # and the superseded value is simply left to expire — it is never
+   # revoked, because a recorded token that has outlived its day cannot be
+   # revoked through the API it no longer authenticates to.
+
 Certificates
 ============
 

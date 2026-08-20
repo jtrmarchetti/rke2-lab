@@ -75,6 +75,13 @@ argument_specs:
         type: str
         default: ""
         description: The matching deploy token value.
+      rke2_publish_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the gitlab_admin_token role records the shared admin
+            credential on the GitLab host. Every role that needs an admin
+            call reuses it; a token is minted at most once a day.
       rke2_publish_artifact_dir:
         type: str
         default: /data1/artifacts/rke2

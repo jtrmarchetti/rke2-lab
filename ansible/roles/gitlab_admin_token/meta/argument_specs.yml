@@ -1,0 +1,47 @@
+---
+argument_specs:
+  main:
+    short_description: Ensure one valid GitLab admin personal access token
+    description:
+      - Minting a personal access token is the one GitLab operation with no
+        REST equivalent, so every role that needed one minted its own copy
+        with gitlab-rails and revoked it at the end — a minute-plus of
+        gitlab-rails startup per role per run.
+      - This role instead records the token on the GitLab host and proves the
+        recorded value still authenticates with a single GET /user before
+        reusing it. A replacement is minted only when no file exists or the
+        proof fails, and the token is left to expire after a day rather than
+        revoked.
+      - The including role reads the value back with a slurp of the record
+        file, the same shape it already uses for the deploy token, so the
+        handoff works whether the role ran locally or delegated.
+    options:
+      gitlab_admin_token_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      gitlab_admin_token_url:
+        type: str
+        description:
+          - Base URL of the GitLab instance. The caller passes its own
+            gitlab_url, so the token is minted for the instance the caller
+            talks to rather than one this role guessed.
+      gitlab_admin_token_host:
+        type: str
+        description:
+          - Inventory name of the host GitLab runs on, where the mint and the
+            record file live. Absent means the caller already runs on it;
+            roles running on the controller pass their gitlab_host here and
+            delegate the file work and the mint to it.
+      gitlab_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the token value is recorded. GitLab returns a token's value
+            once, so this is the only copy, and the reuse decision turns on
+            whether it exists.
+      gitlab_admin_token_no_log:
+        type: bool
+        default: true
+        description:
+          - Set false only when debugging; it exposes the admin token.

@@ -31,8 +31,9 @@ argument_specs:
         type: str
         required: true
         description:
-          - Inventory name of the host GitLab runs on. The admin token is
-            minted there with gitlab-rails, which has no REST equivalent.
+          - Inventory name of the host GitLab runs on. The shared admin
+            credential is recorded there and minted there with gitlab-rails
+            when needed, which has no REST equivalent.
       gitops_bootstrap_group:
         type: str
         default: platform
@@ -71,6 +72,13 @@ argument_specs:
         description:
           - Where the token value is recorded. GitLab returns it once, so this
             is the only copy.
+      gitops_bootstrap_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the gitlab_admin_token role records the shared admin
+            credential on the GitLab host. Reused by every admin-call role
+            while it still authenticates; a mint happens at most once a day.
       gitops_bootstrap_domain_ca_file:
         type: str
         description:

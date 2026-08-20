@@ -5,21 +5,14 @@ _var_gitops_bootstrap_project_path: >-
   {{ (gitops_bootstrap_group ~ '/' ~ gitops_bootstrap_project)
      | replace('/', '%2F') }}
 
-# Resolved lazily, so it is only valid after main.yml has minted the token.
-# Every task that uses it carries no_log, because it renders the token.
+# The shared admin credential the gitlab_admin_token role recorded on the
+# GitLab host. Resolved lazily, so it is only valid after main.yml has read
+# the record file. Every task that uses it carries no_log, because it renders
+# the token.
+_var_gitops_bootstrap_admin_token: >-
+  {{ _reg_gitops_bootstrap_admin_token_raw['content'] | b64decode | from_yaml }}
 _var_gitops_bootstrap_headers:
-  PRIVATE-TOKEN: "{{ _reg_gitops_bootstrap_pat['stdout'].split()[1] }}"
-
-# Same snippet, and the same reasoning, as rke2_publish and gitops_source use.
-_var_gitops_bootstrap_pat_script: |
-  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
-  u = User.find_by_username("root")
-  t = u.personal_access_tokens.create!(
-    scopes: ["api"],
-    name: "gitops-bootstrap-#{Time.now.to_i}",
-    expires_at: 1.day.from_now)
-  puts "#{t.id} #{t.token}"
-  RUBY
+  PRIVATE-TOKEN: "{{ _var_gitops_bootstrap_admin_token['token'] }}"
 
 # The backed-up key pairs, as the dump recorded them. templates/sealing-keys
 # strips the server-owned metadata; see there for why that matters.

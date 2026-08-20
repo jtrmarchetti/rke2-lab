@@ -4,9 +4,10 @@ gitops_source_enabled: true
 # --- Where the repository lives -------------------------------------------
 
 gitops_source_gitlab_url: null
-# The GitLab host the admin token is minted on. No default: minting runs
-# `gitlab-rails` inside that host's container, and doing it on the wrong host
-# would either fail or mint a token for the wrong GitLab.
+# The GitLab host the admin token is recorded on. No default: the shared
+# gitlab_admin_token role pays its `gitlab-rails` mint inside that host's
+# container when the recorded token is missing or dead, and running it on the
+# wrong host would either fail or mint a token for the wrong GitLab.
 # gitops_source_gitlab_host:
 gitops_source_group: platform
 gitops_source_project: cluster-state
@@ -133,6 +134,12 @@ gitops_source_openbao_unseal_keys: ""
 # rke2_publish recorded it in, on the GitLab host, rather than from env.sh:
 # GitLab returns a deploy token's value once, and that file is the only copy.
 gitops_source_deploy_token_file: /data1/gitlab/rke2-deploy-token.yml
+
+# The shared admin credential the gitlab_admin_token role ensures, recorded
+# on the GitLab host beside the deploy token. One token is reused by every
+# role that needs an admin call while it still authenticates; a mint is paid
+# at most once a day. Same file, same volume as the deploy token.
+gitops_source_admin_token_file: /data1/gitlab/admin-token.yml
 
 # Set false only when debugging; it exposes every secret above.
 gitops_source_no_log: true

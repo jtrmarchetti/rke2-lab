@@ -44,6 +44,13 @@ rke2_publish_deploy_token_file: /data1/gitlab/rke2-deploy-token.yml
 rke2_publish_deploy_token_username: ""
 rke2_publish_deploy_token_value: ""
 
+# The shared admin credential the gitlab_admin_token role ensures. The role
+# proves the recorded value still authenticates and re-mints it only when the
+# record is missing or the token has outlived its day, so a mint is paid at
+# most once a day instead of once per run. Same volume, beside the deploy
+# token, mode 0600.
+rke2_publish_admin_token_file: /data1/gitlab/admin-token.yml
+
 # The staged artifact directory this role reads from. Must be under the artifact
 # host document root, because artifact_stage put it there.
 rke2_publish_artifact_dir: /data1/artifacts/rke2

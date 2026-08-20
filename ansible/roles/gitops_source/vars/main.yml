@@ -12,34 +12,24 @@ _var_gitops_source_git_url: >-
   {{ gitops_source_gitlab_url }}/{{ gitops_source_group }}/{{
   gitops_source_project }}.git
 
-# Resolved lazily, so it is only valid after main.yml has minted the token.
-# Every task that uses it carries no_log, because it renders the token.
+# The shared admin credential the gitlab_admin_token role recorded on the
+# GitLab host. Resolved lazily, so it is only valid after main.yml has read
+# the record file. Every task that uses it carries no_log, because it renders
+# the token.
+_var_gitops_source_admin_token: >-
+  {{ _reg_gitops_source_admin_token_raw['content'] | b64decode | from_yaml }}
 _var_gitops_source_headers:
-  PRIVATE-TOKEN: "{{ _reg_gitops_source_pat['stdout'].split()[1] }}"
+  PRIVATE-TOKEN: "{{ _var_gitops_source_admin_token['token'] }}"
 
-# The push URL, with the same short-lived admin token as its credential. Kept
-# out of the remote's stored configuration — it is passed per command — so a
-# token that outlives the run is not written into the working clone's config.
+# The push URL, with the shared admin token as its credential. Kept out of the
+# remote's stored configuration — it is passed per command — so a token that
+# outlives the run is not written into the working clone's config.
 _var_gitops_source_push_url: >-
   {{ gitops_source_gitlab_url
      | regex_replace('^https://',
                      'https://oauth2:'
-                     ~ _reg_gitops_source_pat['stdout'].split()[1] ~ '@')
+                     ~ _var_gitops_source_admin_token['token'] ~ '@')
   }}/{{ gitops_source_group }}/{{ gitops_source_project }}.git
-
-# Same snippet, and the same reasoning, as rke2_publish uses: creating a
-# personal access token is the one GitLab operation with no REST equivalent,
-# because an API token is what the REST API needs first. Scoped to `api`,
-# expires in a day, and revoked in this role's `always` block.
-_var_gitops_source_pat_script: |
-  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
-  u = User.find_by_username("root")
-  t = u.personal_access_tokens.create!(
-    scopes: ["api"],
-    name: "gitops-source-#{Time.now.to_i}",
-    expires_at: 1.day.from_now)
-  puts "#{t.id} #{t.token}"
-  RUBY
 
 # Templates for this role live in ansible/files/gitops_source/ rather than
 # inside the role, so the tree that renders a host's configuration can

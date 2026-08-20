@@ -298,10 +298,32 @@ Scoped to `read_repository` on one project: a cluster that leaks it leaks the
 ability to read its own declared state and nothing else. Rotating it means deleting
 that file and re-running `playbooks/gitops.yml`.
 
-The cluster's intermediate CA is a third thing outside `env.sh`, for a different
-reason — it is a key pair rather than a value. `ipa_sub_ca` writes it to
-`~/.config/rke2lab/k8s-ca/` at mode 0700 and `gitops_source` seals it into the
-repository from there. The private key never leaves the controller in plaintext.
+A third credential outside `env.sh` is the shared GitLab admin personal access
+token, recorded at `/data1/gitlab/admin-token.yml` on `repo01` at mode `0600`
+by the `gitlab_admin_token` role. It is the one credential the whole GitLab-
+admin surface of the automation uses: `rke2_publish` creates the group, the
+projects and the deploy token with it, and `gitops_source` and
+`gitops_bootstrap` create their project setup and deploy token with it. The
+mint is a `gitlab-rails` call inside the GitLab container and takes about a
+minute, so before the shared role existed each of the three roles minted its
+own copy per run and a full automation paid for it three times. Now the
+token is minted at most once a day: the role records the value (GitLab
+discloses it exactly once), and every later inclusion proves the recorded
+token still authenticates with a single `GET /user` before reusing it. A
+replacement is minted only when the record file is missing or the proof
+fails, and superseded tokens are never revoked — they outlive the run and
+simply expire. That is the deliberate posture change: a live admin token now
+persists on `repo01` between runs instead of being revoked at the end of
+every role, and the bound on a leaked copy of the record file is the
+token's one-day expiry rather than the end of the run. Rotating it means
+deleting that file; the next run of any including role proves the missing
+record and mints a fresh one.
+
+The cluster's intermediate CA is a fourth thing outside `env.sh`, for a
+different reason — it is a key pair rather than a value. `ipa_sub_ca` writes
+it to `~/.config/rke2lab/k8s-ca/` at mode `0700` and `gitops_source` seals
+it into the repository from there. The private key never leaves the
+controller in plaintext.
 
 The cluster's kubeconfig is the other credential that never enters the repository. It
 holds cluster-admin client certificates, and it exists in exactly two places: on each

@@ -8,10 +8,13 @@ _var_rke2_publish_registry_prefix: >-
   {{ rke2_publish_registry_host }}/{{ rke2_publish_group }}/{{
   rke2_publish_images_project }}
 
-# Resolved lazily, so it is only valid after main.yml has minted the token.
-# Every task that uses it carries no_log, because it renders the token.
+# The shared admin credential, as the gitlab_admin_token role recorded it.
+# Resolved lazily, so it is only valid after main.yml has read the record
+# file. Every task that uses it carries no_log, because it renders the token.
+_var_rke2_publish_admin_token: >-
+  {{ _reg_rke2_publish_admin_token['content'] | b64decode | from_yaml }}
 _var_rke2_publish_headers:
-  PRIVATE-TOKEN: "{{ _reg_rke2_publish_pat['stdout'].split()[1] }}"
+  PRIVATE-TOKEN: "{{ _var_rke2_publish_admin_token['token'] }}"
 
 # Charts live beside the images, in a project of their own, and are addressed
 # as an OCI repository rather than through a rewrite: nothing resolves a chart
@@ -128,21 +131,6 @@ _var_rke2_publish_image_target: >-
 # same transformation as stripping the host to build the target path.
 _var_rke2_publish_image_local: >-
   {{ _item_rke2_publish_image | regex_replace('^docker\.io/', '') }}
-
-# Creating a personal access token is the one operation with no REST equivalent
-# — an API token is what the REST API needs in the first place. This is the
-# snippet GitLab documents for exactly this bootstrap. The token is scoped to
-# `api`, expires in a day, and is revoked in this role's `always` block, so it
-# does not outlive the run even when the run fails.
-_var_rke2_publish_pat_script: |
-  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
-  u = User.find_by_username("root")
-  t = u.personal_access_tokens.create!(
-    scopes: ["api"],
-    name: "rke2-publish-#{Time.now.to_i}",
-    expires_at: 1.day.from_now)
-  puts "#{t.id} #{t.token}"
-  RUBY
 
 # --- Retention (Phase 6) -------------------------------------------------
 #

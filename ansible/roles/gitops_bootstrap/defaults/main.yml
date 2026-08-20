@@ -4,9 +4,9 @@ gitops_bootstrap_enabled: true
 # --- The repository being attached to -------------------------------------
 
 gitops_bootstrap_gitlab_url: null
-# No default: the admin token is minted with gitlab-rails inside that host's
-# container, and minting it on the wrong host fails or mints for the wrong
-# GitLab.
+# No default: the shared gitlab_admin_token role pays its `gitlab-rails`
+# mint inside that host's container when the recorded token is missing or
+# dead, and doing it on the wrong host fails or mints for the wrong GitLab.
 # gitops_bootstrap_gitlab_host:
 gitops_bootstrap_group: platform
 gitops_bootstrap_project: cluster-state
@@ -33,6 +33,12 @@ gitops_bootstrap_deploy_token_scopes:
 # for later runs. On the controller, beside the other secrets, mode 0600.
 gitops_bootstrap_deploy_token_file: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/flux-deploy-token.yml
+
+# The shared admin credential the gitlab_admin_token role ensures, recorded
+# on the GitLab host beside the deploy tokens. One token is reused by every
+# role that needs an admin call while it still authenticates; a mint is paid
+# at most once a day.
+gitops_bootstrap_admin_token_file: /data1/gitlab/admin-token.yml
 
 # The domain CA, which Flux needs in the Secret because the GitRepository is
 # HTTPS against an internally signed certificate. Read from this host's trust

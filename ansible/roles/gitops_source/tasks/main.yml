@@ -57,24 +57,37 @@
 - name: main | Render the cluster state and push it into GitLab
   when:
     - (gitops_source_enabled | bool)
-    # Same gate rke2_publish uses. Everything below either mints a credential
+    # Same gate rke2_publish uses. Everything below either reads a credential
     # or writes to a remote, and neither has a meaningful dry run.
     - not ansible_check_mode
   block:
-    # Minted here and revoked in `always`, so nothing long-lived is left
-    # behind. Reported unchanged even though it plainly changes something,
-    # because the pair leaves no state — a role that could never report a clean
-    # second run would hide the one signal that says the tree is in sync.
-    #
-    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
-    # through a heredoc, which is shell syntax with no command equivalent.
-    - name: main | Mint an admin API token # noqa: command-instead-of-shell
-      changed_when: false
+    # The admin credential is shared with rke2_publish and gitops_bootstrap:
+    # one token, recorded on the GitLab host, reused while it authenticates.
+    # This role runs on the controller, so the file work and the mint are
+    # delegated to the GitLab host. Reusing a valid token costs a stat, a
+    # slurp and a GET; the gitlab-rails mint is paid at most once a day,
+    # across every role that includes this one, rather than once per role
+    # per run — which is what made the old three-mint shape cost minutes on
+    # credentials alone.
+    - name: main | Ensure the shared GitLab admin token
+      ansible.builtin.include_role:
+        name: gitlab_admin_token
+        apply:
+          vars:
+            gitlab_admin_token_url: "{{ gitops_source_gitlab_url }}"
+            gitlab_admin_token_host: "{{ gitops_source_gitlab_host }}"
+            gitlab_admin_token_file: "{{ gitops_source_admin_token_file }}"
+            gitlab_admin_token_no_log: "{{ gitops_source_no_log }}"
+
+    # The role wrote the record file on the GitLab host, which this role
+    # cannot see; the slurp is the handoff, the same shape the deploy token
+    # reading just below uses.
+    - name: main | Read the recorded admin token from the GitLab host
       delegate_to: "{{ gitops_source_gitlab_host }}"
       no_log: "{{ gitops_source_no_log | bool }}"
-      register: _reg_gitops_source_pat
-      ansible.builtin.shell:
-        cmd: "{{ _var_gitops_source_pat_script }}"
+      register: _reg_gitops_source_admin_token_raw
+      ansible.builtin.slurp:
+        src: "{{ gitops_source_admin_token_file }}"
 
     # From the GitLab host rather than from env.sh, because GitLab returns a
     # deploy token's value once and rke2_publish's recording of it is the only
@@ -101,28 +114,10 @@
 
     - name: main | Commit and push whatever changed
       ansible.builtin.include_tasks: commit.yml
-  always:
-    - name: main | Revoke the admin API token
-      when:
-        - _reg_gitops_source_pat is defined
-        - "'stdout' in _reg_gitops_source_pat"
-      changed_when: false
-      no_log: "{{ gitops_source_no_log | bool }}"
-      # GitLab's git-over-http and API have been observed to 401/5xx for a
-      # few seconds under load; a single-shot revoke then fails inside the
-      # always: block and leaves the one-day admin token live. Retry with a
-      # delay rather than giving up. A run that still fails after retries
-      # still fails loudly — the token does expire on its own after a day,
-      # but the log should say so.
-      register: _reg_gitops_source_revoke
-      until: _reg_gitops_source_revoke['status'] in [204, 404]
-      retries: 4
-      delay: 15
-      ansible.builtin.uri:
-        ca_path: "{{ gitops_source_ca_file }}"
-        url: >-
-          {{ _var_gitops_source_api }}/personal_access_tokens/{{
-          _reg_gitops_source_pat['stdout'].split()[0] }}
-        method: DELETE
-        headers: "{{ _var_gitops_source_headers }}"
-        status_code: [204, 401, 404, 500, 502, 503]
+
+# No `always` revoke: the credential is the shared one the gitlab_admin_token
+# role recorded on the GitLab host, and it outlives this run on purpose. Its
+# one-day expiry is what bounds a leaked copy of the record file, and the
+# next run of any including role proves the token or mints a replacement.
+# There is nothing of this role's to clean up, which is also what removed the
+# 15-second retry loops the revoke used to need.
