@@ -44,7 +44,11 @@
       vars:
         rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
         rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-        rke2_publish_chart_sets: "{{ inventory_rke2_publish_chart_sets }}"
+        # No chart publishing here: the helm CLI is installed by cluster_services
+        # (Phase 6), so charts are pushed exactly once, there, in the same play,
+        # right after helm_cli. A rebuild must not depend on a Phase 6 tool in
+        # Phase 4.
+        rke2_publish_chart_sets: []
         rke2_publish_deploy_token_username: >-
           {{ inventory_rke2_publish_deploy_token_username }}
         rke2_publish_deploy_token_value: >-

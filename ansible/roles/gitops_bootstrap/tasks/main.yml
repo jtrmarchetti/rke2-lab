@@ -77,6 +77,12 @@
         - "'stdout' in _reg_gitops_bootstrap_pat"
       changed_when: false
       no_log: "{{ gitops_bootstrap_no_log | bool }}"
+      # Same transient 401/5xx window as the gitops_source revoke: retry
+      # rather than leave the one-day admin token live.
+      register: _reg_gitops_bootstrap_revoke
+      until: _reg_gitops_bootstrap_revoke['status'] in [204, 404]
+      retries: 4
+      delay: 15
       ansible.builtin.uri:
         ca_path: "{{ gitops_bootstrap_ca_file }}"
         url: >-
@@ -84,4 +90,4 @@
           _reg_gitops_bootstrap_pat['stdout'].split()[0] }}
         method: DELETE
         headers: "{{ _var_gitops_bootstrap_headers }}"
-        status_code: [204, 404]
+        status_code: [204, 401, 404, 500, 502, 503]

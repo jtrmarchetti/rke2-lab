@@ -38,6 +38,36 @@
   gather_facts: true
   become: false
   tasks:
+    # The unseal keys are written to env.sh by openbao_init in cluster_init.yml,
+    # which runs before this play on a cold build. That write happens during
+    # this ansible-playbook process's lifetime, so lookup('env', ...) — which
+    # reads the environment snapshotted at process start — still sees the
+    # empty value. Re-read the file to pick up the freshly written value; the
+    # env fallback covers the case where this playbook runs on its own after
+    # env.sh has already been sourced.
+    - name: gitops | Re-read the OpenBao unseal keys from the recorded file
+      vars:
+        _gitops_env_sh_text: >-
+          {{ lookup('file', ansible_facts['env']['HOME'] + '/.config/rke2lab/env.sh')
+             | default('', true) }}
+        # Same no-backref pattern as cluster_init.yml: the filter returns the
+        # whole match as a string, and the replace filters strip the prefix
+        # and any surrounding quotes. The value is written unquoted, so the
+        # quote removal is a no-op here.
+        _gitops_unseal_keys_from_file: >-
+          {{ _gitops_env_sh_text
+             | regex_search('^export OPENBAO_UNSEAL_KEYS=.*$', multiline=True)
+             | default('', true)
+             | replace('export OPENBAO_UNSEAL_KEYS=', '')
+             | replace('"', '')
+             | replace("'", '')
+             | trim }}
+      ansible.builtin.set_fact:
+        gitops_openbao_unseal_keys: >-
+          {{ _gitops_unseal_keys_from_file
+             if _gitops_unseal_keys_from_file | length > 0
+             else lookup('env', 'OPENBAO_UNSEAL_KEYS') }}
+
     - name: gitops | Include the GitOps source role
       tags:
         - gitops_source
@@ -63,7 +93,7 @@
         # second environment without editing the role.
         gitops_source_gitlab_host: "{{ groups['repo'] | first }}"
         gitops_source_openbao_unseal_keys: >-
-          {{ lookup('env', 'OPENBAO_UNSEAL_KEYS') }}
+          {{ gitops_openbao_unseal_keys }}
       ansible.builtin.include_role:
         name: gitops_source
         apply:

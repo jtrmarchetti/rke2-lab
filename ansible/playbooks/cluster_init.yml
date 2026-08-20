@@ -87,15 +87,122 @@
           tags:
             - openbao_init
 
+    # openbao_init wrote the root token to env.sh on disk, but the roles below
+    # resolve OPENBAO_ROOT_TOKEN through lookup('env', ...), which is the
+    # environment this ansible-playbook process started with — stale on a cold
+    # build, when openbao_init just minted the token, and empty on a true one.
+    # Re-read it from the file openbao_init writes into, so the config,
+    # secrets and oidc roles consume the key the vault on this host holds.
+    #
+    # The line as written by the blockinfile: export OPENBAO_ROOT_TOKEN="<token>".
+    # Fallback to the process env keeps this play usable where the file does
+    # not carry the line yet (the very first lines of env.sh.example are
+    # written by the bootstrap before openbao_init has a chance to run).
+    - name: cluster_init | Re-read the OpenBao root token from the recorded file
+      tags:
+        - openbao_init
+      vars:
+        # openbao_init_env_file is a role default, not visible at play level;
+        # use the same path the role writes to (see openbao_init/defaults/main.yml).
+        _openbao_env_sh_text: >-
+          {{ lookup('file', ansible_facts['env']['HOME'] + '/.config/rke2lab/env.sh')
+             | default('', true) }}
+        # No capture group in the pattern: without backrefs this filter hands
+        # back the whole match as a string, which is what the replace below
+        # strips the prefix and quotes from.
+        _openbao_root_token_from_file: >-
+          {{ _openbao_env_sh_text
+             | regex_search('^export OPENBAO_ROOT_TOKEN=.*$', multiline=True)
+             | default('', true)
+             | replace('export OPENBAO_ROOT_TOKEN=', '')
+             | replace('"', '')
+             | replace("'", '')
+             | trim }}
+      ansible.builtin.set_fact:
+        cluster_init_openbao_root_token: >-
+          {{ _openbao_root_token_from_file
+             if _openbao_root_token_from_file | length > 0
+             else lookup('env', 'OPENBAO_ROOT_TOKEN') }}
+
+    # The vault's TLS, established before any of the roles below open a
+    # connection. All of them verify against a CA file, and what they must
+    # verify against is the certificate the ingress *is serving*. Early in a
+    # cold build that is not yet the certificate cert-manager issued for the
+    # Ingress: Traefik has been up since the control plane configured it, and
+    # until it knows about the `openbao-tls` Secret it answers the host name
+    # with its own self-signed default. Verifying that default against the
+    # domain CA fails with `self-signed certificate`, and that is exactly the
+    # `CERTIFICATE_VERIFY_FAILED` the first openbao task of a rebuild that
+    # runs fast enough hits — the vault pod has just come up, initialisation
+    # has run, and the ingress certificate is issued seconds after the first
+    # uri task connected.
+    #
+    # The prerequisite is therefore stated here as code rather than assumed,
+    # and polled the way openbao_init polls the pod itself: the
+    # unauthenticated /v1/sys/health endpoint, verified against the domain CA.
+    # Any answer that TLS accepted means the ingress certificate is in place
+    # and chains; until then, keep waiting.
+    - name: cluster_init | Wait for the ingress to serve the vault's certificate
+      tags:
+        - openbao_config
+      # uri has no dry run, and a probe that connects in check mode would
+      # touch the running vault for nothing. Same gate the openbao_secrets
+      # and openbao_oidc roles use on their uri blocks.
+      when: not ansible_check_mode
+      register: _reg_openbao_ingress_ready
+      until: >-
+        (_reg_openbao_ingress_ready['status'] | default(0))
+        in [200, 403, 429, 472, 473, 503]
+      retries: 20
+      delay: 15
+      changed_when: false
+      failed_when: false
+      ansible.builtin.uri:
+        url: "{{ inventory_openbao_config_url }}/v1/sys/health"
+        method: GET
+        # The domain CA, where controller_trust keeps it current: the
+        # cluster's intermediate rides along in the served chain, and the
+        # root is the link that has to be anchored on this host. Same
+        # authority the Keycloak probe below verifies against.
+        ca_path: "{{ inventory_gitops_bootstrap_domain_ca_file }}"
+        status_code: [200, 403, 429, 472, 473, 503]
+
+    # A probe that gives up does not skip the vault on this run: configuring
+    # it is why this play exists, and a run that pretends the certificate
+    # came up when it did not is the failure that hides. In check mode the
+    # probe itself is skipped, which is why the failure is looked at only
+    # when it was not.
+    - name: cluster_init | Report that the ingress certificate does not verify
+      tags:
+        - openbao_config
+      when:
+        - not (_reg_openbao_ingress_ready is skipped)
+        - (_reg_openbao_ingress_ready['status'] | default(0))
+          not in [200, 403, 429, 472, 473, 503]
+      ansible.builtin.assert:
+        that:
+          - (_reg_openbao_ingress_ready['status'] | default(0))
+            in [200, 403, 429, 472, 473, 503]
+        fail_msg: >-
+          {{ inventory_openbao_config_url }} still did not verify against
+          {{ inventory_gitops_bootstrap_domain_ca_file }} after
+          {{ 20 * 15 }}s of waiting. cert-manager has not issued the
+          openbao-tls Secret, or Traefik is still serving its default
+          certificate, and every vault role in this play fails on TLS until
+          it has. Look at the openbao-tls Secret and Certificate in the
+          openbao namespace, and the k8s-ca Secret in cert-manager.
+        quiet: true
+
     # Configuration, not initialisation, and separate because it is the part
     # that is safe to re-run and to change. The root token it needs was written
-    # to env.sh by the role above.
+    # to env.sh by the role above; the fact set just above re-reads it from
+    # disk rather than trusting the (stale) process environment.
     - name: cluster_init | Include the OpenBao configuration role
       tags:
         - openbao_config
       vars:
         openbao_config_url: "{{ inventory_openbao_config_url }}"
-        openbao_config_root_token: "{{ lookup('env', 'OPENBAO_ROOT_TOKEN') }}"
+        openbao_config_root_token: "{{ cluster_init_openbao_root_token }}"
       ansible.builtin.include_role:
         name: openbao_config
         apply:
@@ -113,7 +220,7 @@
         - openbao_secrets
       vars:
         openbao_secrets_url: "{{ inventory_openbao_secrets_url }}"
-        openbao_secrets_root_token: "{{ lookup('env', 'OPENBAO_ROOT_TOKEN') }}"
+        openbao_secrets_root_token: "{{ cluster_init_openbao_root_token }}"
         openbao_secrets_keycloak_admin_password: >-
           {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
         openbao_secrets_keycloak_db_password: >-
@@ -126,9 +233,10 @@
           {{ lookup('env', 'GARAGE_METRICS_TOKEN') }}
         openbao_secrets_garage_rpc_secret: >-
           {{ lookup('env', 'GARAGE_RPC_SECRET') }}
-        # Empty until Garage has minted them, which is the play below. See the
-        # note at the foot of this file on why that costs a second run rather
-        # than being resolved inside one.
+        # Empty until Garage has minted them, which is the play below. This
+        # pass therefore omits the garage-s3 entry on the run that mints the
+        # key; the second pass after garage_init re-reads the values from
+        # env.sh and writes the entry, so no second run is needed.
         openbao_secrets_garage_s3_access_key: >-
           {{ lookup('env', 'GARAGE_S3_ACCESS_KEY') }}
         openbao_secrets_garage_s3_secret_key: >-
@@ -163,6 +271,91 @@
         apply:
           tags:
             - garage_init
+
+    # Garage just minted the S3 key above and recorded it in env.sh on disk,
+    # but this process's environment was snapshotted at start, so the first
+    # pass of openbao_secrets (run before Garage existed) could not see it and
+    # correctly omitted the garage-s3 entry. Re-read the two values from the
+    # file and run the role a second time to write just that entry. The role
+    # reads the vault before it writes, so on any later run both values are
+    # already present and this is a no-op, not a rewrite.
+    - name: cluster_init | Re-read the Garage S3 credentials from the recorded file
+      tags:
+        - openbao_secrets
+        - garage_init
+      vars:
+        # Same path as openbao_init writes to (see its defaults); the role
+        # default is not visible at play level.
+        _cluster_init_env_sh_text: >-
+          {{ lookup('file', ansible_facts['env']['HOME'] + '/.config/rke2lab/env.sh')
+             | default('', true) }}
+        # No capture group: without a backref the filter hands back the whole
+        # match as a string, which the replace filters below strip the prefix
+        # and any quoting from. The values are written unquoted, so the quote
+        # removal is a harmless no-op here.
+        _cluster_init_garage_s3_access_key_from_file: >-
+          {{ _cluster_init_env_sh_text
+             | regex_search('^export GARAGE_S3_ACCESS_KEY=.*$', multiline=True)
+             | default('', true)
+             | replace('export GARAGE_S3_ACCESS_KEY=', '')
+             | replace('"', '')
+             | replace("'", '')
+             | trim }}
+        _cluster_init_garage_s3_secret_key_from_file: >-
+          {{ _cluster_init_env_sh_text
+             | regex_search('^export GARAGE_S3_SECRET_KEY=.*$', multiline=True)
+             | default('', true)
+             | replace('export GARAGE_S3_SECRET_KEY=', '')
+             | replace('"', '')
+             | replace("'", '')
+             | trim }}
+      ansible.builtin.set_fact:
+        cluster_init_garage_s3_access_key: >-
+          {{ _cluster_init_garage_s3_access_key_from_file
+             if _cluster_init_garage_s3_access_key_from_file | length > 0
+             else lookup('env', 'GARAGE_S3_ACCESS_KEY') }}
+        cluster_init_garage_s3_secret_key: >-
+          {{ _cluster_init_garage_s3_secret_key_from_file
+             if _cluster_init_garage_s3_secret_key_from_file | length > 0
+             else lookup('env', 'GARAGE_S3_SECRET_KEY') }}
+
+    - name: cluster_init | Write the Garage S3 entry to the vault (second pass)
+      tags:
+        - openbao_secrets
+        - garage_init
+      vars:
+        openbao_secrets_url: "{{ inventory_openbao_secrets_url }}"
+        openbao_secrets_root_token: "{{ cluster_init_openbao_root_token }}"
+        # The S3 keys come from the file just written; every other value is
+        # already in the vault from the first pass, and passing them again is
+        # a read-compare-write that is a no-op when they are unchanged.
+        openbao_secrets_keycloak_admin_password: >-
+          {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        openbao_secrets_keycloak_db_password: >-
+          {{ lookup('env', 'KEYCLOAK_DB_PASSWORD') }}
+        openbao_secrets_grafana_admin_password: >-
+          {{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}
+        openbao_secrets_garage_admin_token: >-
+          {{ lookup('env', 'GARAGE_ADMIN_TOKEN') }}
+        openbao_secrets_garage_metrics_token: >-
+          {{ lookup('env', 'GARAGE_METRICS_TOKEN') }}
+        openbao_secrets_garage_rpc_secret: >-
+          {{ lookup('env', 'GARAGE_RPC_SECRET') }}
+        openbao_secrets_garage_s3_access_key: >-
+          {{ cluster_init_garage_s3_access_key }}
+        openbao_secrets_garage_s3_secret_key: >-
+          {{ cluster_init_garage_s3_secret_key }}
+        openbao_secrets_grafana_oidc_client_secret: >-
+          {{ lookup('env', 'OIDC_CLIENT_SECRET_GRAFANA') }}
+        openbao_secrets_longhorn_oidc_client_secret: >-
+          {{ lookup('env', 'OIDC_CLIENT_SECRET_LONGHORN') }}
+        openbao_secrets_longhorn_cookie_secret: >-
+          {{ lookup('env', 'OAUTH2_PROXY_COOKIE_SECRET') }}
+      ansible.builtin.include_role:
+        name: openbao_secrets
+        apply:
+          tags:
+            - openbao_secrets
 
     # --- Single sign-on ---------------------------------------------------
     #
@@ -429,7 +622,7 @@
         openbao_oidc_discovery_ca_file: >-
           {{ inventory_openbao_oidc_discovery_ca_file }}
         openbao_oidc_issuer: "{{ inventory_keycloak_realm_issuer }}"
-        openbao_oidc_root_token: "{{ lookup('env', 'OPENBAO_ROOT_TOKEN') }}"
+        openbao_oidc_root_token: "{{ cluster_init_openbao_root_token }}"
         openbao_oidc_url: "{{ inventory_openbao_oidc_url }}"
       ansible.builtin.include_role:
         name: openbao_oidc
@@ -437,15 +630,20 @@
           tags:
             - openbao_oidc
 
-# One secret in this environment cannot be written on the run that creates it,
-# and it is worth being explicit rather than leaving it as a surprise.
+# Secrets minted during this run, and how each is re-read.
 #
 # `lookup('env', ...)` reads the environment this ansible-playbook process
-# started with. garage_init appends the S3 credentials to env.sh while that
-# process is running, so they are on disk but not in this process — the play
-# above therefore omits the `garage` vault entry on the run that mints the key.
-# Re-source env.sh and run this playbook again, and the entry is written.
+# started with, which on a cold build predates every value written to env.sh
+# during the run. The roles that mint a value (openbao_init, garage_init)
+# record it to env.sh on disk; the roles that consume it therefore re-read the
+# file after the write rather than trusting the process environment:
 #
-# OPENBAO_UNSEAL_KEYS has exactly the same shape in gitops.yml, which is why
-# site.yml runs that playbook twice. Neither is resolved by ordering, because
-# the constraint is the process environment rather than the sequence of plays.
+#   OPENBAO_ROOT_TOKEN   written by openbao_init, re-read before
+#                        openbao_config / openbao_secrets / openbao_oidc.
+#   GARAGE_S3_*          written by garage_init, re-read before a second
+#                        pass of openbao_secrets. The first pass runs before
+#                        Garage exists and correctly omits the garage-s3
+#                        entry; the second writes just that entry, and is a
+#                        no-op on every later run.
+#   OPENBAO_UNSEAL_KEYS  written by openbao_init, re-read the same way in
+#                        gitops.yml before the gitops_source include.
