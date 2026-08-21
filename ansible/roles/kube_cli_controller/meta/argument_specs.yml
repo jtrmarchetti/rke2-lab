@@ -5,7 +5,7 @@ argument_specs:
     description:
       - Installs kubectl by copying it from a cluster node, so the client is
         exactly the cluster's version with nothing pinned in this repository.
-      - Installs k9s from a pinned, checksummed release.
+      - Installs k9s from a pinned release.
       - Writes a shell environment that exports KUBECONFIG and sources it from
         the user's shell profile through a single marked block.
       - Proves kubectl reaches the cluster before reporting success.
@@ -55,12 +55,9 @@ argument_specs:
         description: Release tag, also used to detect a stale local copy.
       kube_cli_controller_k9s_url:
         type: str
-        description: Release tarball URL.
-      kube_cli_controller_k9s_sha256:
-        type: str
-        description:
-          - Expected SHA256 of the tarball. The integrity control, verified by
-            get_url before anything is unpacked.
+        description: >-
+          Release tarball URL. The pin and the TLS transport are the integrity
+          control; the download is not verified against a recorded checksum.
       kube_cli_controller_shell_enabled:
         type: bool
         default: true
@@ -86,10 +83,6 @@ argument_specs:
         description: >-
           Where the Flux release tarball is fetched from. The artifact host on
           repo01, not upstream, because this is part of the rebuild path.
-      kube_cli_controller_flux_sha256:
-        type: str
-        required: false
-        description: Expected SHA256 of the Flux release tarball.
       kube_cli_controller_kubeseal_enabled:
         type: bool
         required: false
@@ -108,7 +101,3 @@ argument_specs:
         description: >-
           Where the kubeseal release tarball is fetched from. The artifact host
           on repo01, not upstream, because this is part of the rebuild path.
-      kube_cli_controller_kubeseal_sha256:
-        type: str
-        required: false
-        description: Expected SHA256 of the kubeseal release tarball.

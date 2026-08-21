@@ -88,21 +88,20 @@ _var_rke2_publish_chart_refs: >-
 
 # The images this role mirrors registry to registry, taken from the artifact
 # manifest rather than from a second list in inventory. The manifest is already
-# where an artifact's identity and pinned digest live, and a mirrored image has
-# nothing else to say about itself — no tarball, no staging directory, no local
-# path at all.
+# where an artifact's identity and its pin live, and a mirrored image has
+# nothing else to say about itself — no tarball, no staging directory, no
+# local path at all.
 _var_rke2_publish_manifest_mirrors: >-
   {{ rke2_publish_manifest
      | selectattr('type', 'defined')
      | selectattr('type', 'equalto', 'mirror') | list }}
 
 # Source and target of the copy currently in flight. Resolved lazily against
-# mirror_copy.yml's loop variable. The source drops the tag and addresses the
-# digest; the target keeps the tag and drops the upstream registry host, which
-# is the same transformation the containerd rewrite performs.
+# mirror_copy.yml's loop variable. The source is the upstream image at its
+# manifest tag; the target keeps the tag and drops the upstream registry
+# host, which is the same transformation the containerd rewrite performs.
 _var_rke2_publish_mirror_source: >-
-  {{ (_item_rke2_publish_mirror['image'] | regex_replace(':[^:/]+$', ''))
-     ~ '@' ~ _item_rke2_publish_mirror['digest'] }}
+  {{ _item_rke2_publish_mirror['image'] }}
 _var_rke2_publish_mirror_target: >-
   {{ _item_rke2_publish_mirror['image']
      | regex_replace('^[^/]+/(.*)$', _var_rke2_publish_registry_prefix ~ '/\1') }}
@@ -134,8 +133,7 @@ _var_rke2_publish_image_local: >-
 
 # --- Retention (Phase 6) -------------------------------------------------
 #
-# Must match artifact_stage's suffixes: this role removes the sidecar that
-# role published, and writes the marker that role reads back.
+# Writes the marker artifact_stage reads back.
 # Where the current set's tarball lives. Defaults to the role's artifact
 # directory, so every RKE2 entry is unchanged; an entry may override it with
 # its own artifact_dir, which is how the Flux tarballs are read from
@@ -143,7 +141,6 @@ _var_rke2_publish_image_local: >-
 _var_rke2_publish_set_dir: >-
   {{ _item_rke2_publish_set['artifact_dir'] | default(rke2_publish_artifact_dir) }}
 
-_var_rke2_publish_checksum_suffix: .sha256
 _var_rke2_publish_published_suffix: .published
 
 # Every local filename this role puts into GitLab, from its own inputs rather

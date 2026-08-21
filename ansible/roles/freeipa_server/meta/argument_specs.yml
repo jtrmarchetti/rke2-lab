@@ -115,11 +115,10 @@ argument_specs:
         type: str
         required: false
       freeipa_server_image_tarball_url:
-        description: Apache artifact host URL for the saved image tarball.
-        type: str
-        required: false
-      freeipa_server_image_tarball_checksum:
-        description: Checksum in get_url form, for example "sha256:abc...".
+        description: >-
+          Apache artifact host URL for the saved image tarball. The pin and
+          the TLS transport are the integrity control; the download is not
+          verified against a recorded checksum.
         type: str
         required: false
       freeipa_server_image_tarball_path:

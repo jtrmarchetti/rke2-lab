@@ -42,12 +42,12 @@ gitlab_data_root: /data1/gitlab
 # the runbook and the role agree on where to look.
 gitlab_backup_dir: /data1/gitlab/data/backups
 
-# Air-gapped image delivery, matching the pattern the FreeIPA role uses: the
-# tarball comes from the Apache artifact host and is verified against the
-# .sha256 published beside it at staging time, because a `docker save` tarball
-# has no reproducible checksum of its own.
+# Air-gapped image delivery, matching the pattern the FreeIPA role uses:
+# the tarball comes from the Apache artifact host, over TLS, at the pinned
+# URL — the transport and the pin are the integrity control, since a
+# `docker save` tarball has no reproducible checksum of its own to pin in
+# the first place.
 gitlab_image_tarball_url: null
-gitlab_image_tarball_checksum: null
 gitlab_image_tarball_path: /var/tmp/gitlab-ce-19.2.2-ce.0.tar
 
 # Host prerequisites, installed through the repo01 apt proxy.

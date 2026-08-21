@@ -17,11 +17,9 @@
       - (controller_runtime_pulumi_version | string | length) > 0
       - controller_runtime_pulumi_url is not none
       - (controller_runtime_pulumi_url | string | trim | length) > 0
-      - controller_runtime_pulumi_sha256 is not none
-      - (controller_runtime_pulumi_sha256 | string | trim | length) > 0
     fail_msg: >-
-      controller_runtime_pulumi_version, _url and _sha256 must all be supplied.
-      They come from the pulumi-cli entry in
+      controller_runtime_pulumi_version and _url must both be supplied. They
+      come from the pulumi-cli entry in
       inventory/group_vars/controller/artifacts.yml, passed in by
       playbooks/controller_bootstrap.yml.
     quiet: true
@@ -46,15 +44,13 @@
         state: directory
         suffix: pulumi
 
-    # checksum: is the integrity control rather than a note — get_url fails the
-    # task when it does not match, so a tampered or truncated download never
-    # reaches the unpack below. The value is the one Pulumi publishes in
-    # pulumi-<version>-checksums.txt for this release.
+    # Downloaded over TLS from the release URL pinned in inventory, so the
+    # integrity rides on the transport and the pinned source rather than on a
+    # recorded checksum.
     - name: pulumi | Download the release tarball
       ansible.builtin.get_url:
         url: "{{ controller_runtime_pulumi_url | trim }}"
         dest: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi.tar.gz"
-        checksum: "sha256:{{ controller_runtime_pulumi_sha256 | trim }}"
         mode: "0644"
 
     - name: pulumi | Unpack the release

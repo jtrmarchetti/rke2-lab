@@ -77,13 +77,11 @@ inventory_controller_wireguard_validate_port: 22
 
 # controller_runtime
 #
-# Read from artifacts.yml rather than written here, so the version, the URL and
-# the checksum are one edit in one place. See that file for why the controller
-# needed a manifest of its own.
+# Read from artifacts.yml rather than written here, so the version and the URL
+# are one edit in one place. See that file for why the controller needed a
+# manifest of its own.
 inventory_controller_runtime_pulumi_url: >-
   {{ inventory_controller_artifacts['pulumi-cli']['url'] }}
-inventory_controller_runtime_pulumi_sha256: >-
-  {{ inventory_controller_artifacts['pulumi-cli']['sha256'] }}
 inventory_controller_runtime_pulumi_version: >-
   {{ inventory_controller_artifacts['pulumi-cli']['version'] }}
 
@@ -314,23 +312,17 @@ inventory_keycloak_ldap_connection_url: ldaps://core.dev.lo:636
 # kube_cli_controller
 #
 # All three from artifacts.yml, for the reason above: a version bump is one
-# edit, and the checksum cannot be left behind by it.
+# edit, and the URL cannot be left behind by it.
 inventory_kube_cli_controller_k9s_url: >-
   {{ inventory_controller_artifacts['k9s']['url'] }}
-inventory_kube_cli_controller_k9s_sha256: >-
-  {{ inventory_controller_artifacts['k9s']['sha256'] }}
 inventory_kube_cli_controller_k9s_version: >-
   {{ inventory_controller_artifacts['k9s']['version'] }}
 inventory_kube_cli_controller_flux_url: >-
   {{ inventory_controller_artifacts['flux-cli']['url'] }}
-inventory_kube_cli_controller_flux_sha256: >-
-  {{ inventory_controller_artifacts['flux-cli']['sha256'] }}
 inventory_kube_cli_controller_flux_version: >-
   {{ inventory_controller_artifacts['flux-cli']['version'] }}
 inventory_kube_cli_controller_kubeseal_url: >-
   {{ inventory_controller_artifacts['kubeseal']['url'] }}
-inventory_kube_cli_controller_kubeseal_sha256: >-
-  {{ inventory_controller_artifacts['kubeseal']['sha256'] }}
 inventory_kube_cli_controller_kubeseal_version: >-
   {{ inventory_controller_artifacts['kubeseal']['version'] }}
 

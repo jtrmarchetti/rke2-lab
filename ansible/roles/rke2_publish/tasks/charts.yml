@@ -10,7 +10,7 @@
 # path from image delivery for no gain.
 #
 # Charts are staged as ordinary `type: file` artifacts: a chart is a tarball at
-# a URL with a published checksum, so it needs no new staging machinery. This
+# at a pinned URL, so it needs no new staging machinery. This
 # file is only the publishing half.
 
 - name: charts | Read what the chart registry already holds

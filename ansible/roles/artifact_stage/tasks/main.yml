@@ -8,28 +8,21 @@
   ansible.builtin.assert:
     that:
       - _item_artifact_stage_entry['type'] != 'file' or (_item_artifact_stage_entry['url'] | default('') | length > 0)
-      - _item_artifact_stage_entry['type'] != 'file' or (_item_artifact_stage_entry['sha256'] | default('') | length == 64)
       - _item_artifact_stage_entry['type'] != 'image' or (_item_artifact_stage_entry['image'] | default('') | length > 0)
-      - >-
-        _item_artifact_stage_entry['type'] != 'image'
-        or (_item_artifact_stage_entry['digest'] | default('') is match('^sha256:[0-9a-f]{64}$'))
       - >-
         _item_artifact_stage_entry['type'] != 'mirror'
         or (_item_artifact_stage_entry['image'] | default('') | length > 0)
-      - >-
-        _item_artifact_stage_entry['type'] != 'mirror'
-        or (_item_artifact_stage_entry['digest'] | default('') is match('^sha256:[0-9a-f]{64}$'))
       - >-
         _item_artifact_stage_entry['type'] == 'mirror'
         or _item_artifact_stage_entry['dest'] | default('') is match('^[^/][^\\0]*[^/]$')
       - _item_artifact_stage_entry['retention'] | default('') in ['bootstrap', 'transit']
     fail_msg: >-
       Manifest entry '{{ _item_artifact_stage_entry['name'] | default('<unnamed>') }}' is incomplete.
-      A file entry needs url and a 64-character sha256; an image entry needs
-      image and a sha256: digest. dest must be a relative path under the
-      document root, and retention must be 'bootstrap' or 'transit' — an
-      artifact with no stated retention would be kept forever by default,
-      which is the behaviour this field exists to end.
+      A file entry needs url; an image or mirror entry needs image. dest must
+      be a relative path under the document root, and retention must be
+      'bootstrap' or 'transit' — an artifact with no stated retention would
+      be kept forever by default, which is the behaviour this field exists to
+      end.
     quiet: true
 
 # A transit artifact is deleted locally once GitLab confirms it holds the
@@ -85,7 +78,7 @@
     - (_var_artifact_stage_files | length > 0)
   ansible.builtin.include_tasks: files.yml
 
-# The image step pulls by digest, which needs a running Docker daemon. On a
+# The image step pulls by tag, which needs a running Docker daemon. On a
 # fresh build nothing earlier in this play has installed the runtime: each
 # consumer role (gitlab, freeipa_server) installs its own in a later phase.
 # container_storage has already written /etc/docker/daemon.json pointing
@@ -116,8 +109,29 @@
     - (_var_artifact_stage_images | length > 0)
   ansible.builtin.include_tasks: images.yml
 
-- name: main | Publish checksum files for every artifact
+# Legacy cleanup, one time only. Older versions of this role published a
+# .sha256 sidecar next to every artifact; the pipeline no longer writes or
+# reads them, so a run that still has some deletes them and later runs find
+# nothing and report ok. The rke2/sha256sum-amd64.txt artifact does not match
+# the pattern, because it ends in .txt: it stays, the node's install.sh needs
+# it.
+- name: main | Find the legacy checksum sidecars this role used to publish
+  when: (artifact_stage_enabled | bool)
+  register: _reg_artifact_stage_legacy_sidecars
+  ansible.builtin.find:
+    paths: "{{ artifact_stage_root }}"
+    patterns: "*{{ _var_artifact_stage_checksum_suffix }}"
+    recurse: true
+    file_type: file
+
+- name: main | Remove the legacy checksum sidecars
   when:
     - (artifact_stage_enabled | bool)
-    - (artifact_stage_manifest | length > 0)
-  ansible.builtin.include_tasks: checksums.yml
+    - (_reg_artifact_stage_legacy_sidecars['files'] | length > 0)
+  loop: "{{ _reg_artifact_stage_legacy_sidecars['files'] }}"
+  loop_control:
+    loop_var: _item_artifact_stage_legacy_sidecar
+    label: "{{ _item_artifact_stage_legacy_sidecar['path'] }}"
+  ansible.builtin.file:
+    path: "{{ _item_artifact_stage_legacy_sidecar['path'] }}"
+    state: absent

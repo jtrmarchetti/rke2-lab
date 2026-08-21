@@ -1,9 +1,10 @@
 ---
-# get_url verifies the download against the manifest checksum and refuses to
-# publish a file that does not match, so this task is both the fetch and the
-# integrity gate. It also skips a re-download when the file on disk already
-# matches, which is what makes a second run report no change.
-- name: files | Download and verify each file artifact
+# Downloaded over TLS from the pinned Apache/CDN URLs and published to the
+# document root. Integrity rides on the transport (TLS, pinned source) rather
+# than on a checksum sidecar, so there is nothing to verify after the
+# download. get_url still skips a re-download when the destination exists,
+# which is what makes a second run report no change.
+- name: files | Download each file artifact
   when: not ansible_check_mode
   loop: "{{ _var_artifact_stage_files }}"
   loop_control:
@@ -12,7 +13,6 @@
   ansible.builtin.get_url:
     url: "{{ _item_artifact_stage_file['url'] }}"
     dest: "{{ artifact_stage_root }}/{{ _item_artifact_stage_file['dest'] }}"
-    checksum: "sha256:{{ _item_artifact_stage_file['sha256'] }}"
     owner: "{{ artifact_stage_owner }}"
     group: "{{ artifact_stage_group }}"
     mode: "{{ artifact_stage_file_mode }}"

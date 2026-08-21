@@ -58,10 +58,6 @@ freeipa_server_data_dir: /data1/freeipa
 # consumer, named for the phase that consumes it. The staging role publishes
 # this tarball from the manifest entry in group_vars/repo/artifacts.yml.
 freeipa_server_image_tarball_url: null
-# Verified against the .sha256 file published next to the artifact rather than
-# a value pinned here. A `docker save` tarball has no reproducible checksum, so
-# the only correct expected value is the one generated at staging time.
-freeipa_server_image_tarball_checksum: null
 freeipa_server_image_tarball_path: /var/tmp/freeipa-server-almalinux-8.tar
 
 # Host prerequisites, installed through the repo01 apt proxy.

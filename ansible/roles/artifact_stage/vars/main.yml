@@ -1,12 +1,19 @@
 ---
-# Sidecar published next to every artifact. Consumers verify against this file,
-# so its format is the one sha256sum reads natively.
-_var_artifact_stage_checksum_suffix: .sha256
+# Records the reference a published image tarball was built from, so a
+# changed pin in the manifest triggers a re-export while an unchanged one
+# does not. Not published for consumers; it is this role's idempotency
+# marker.
+_var_artifact_stage_tag_suffix: .tag
 
-# Records the registry digest a published image tarball was built from, so a
-# changed pin in the manifest triggers a re-export while an unchanged one does
-# not. Not published for consumers; it is this role's idempotency marker.
+# Leftover from the digest-pinned era. image_publish.yml still recognises it
+# so one run can remove the old marker; delete this line and the removal
+# task once no host carries a .digest marker anymore.
 _var_artifact_stage_digest_suffix: .digest
+
+# Leftover from the sidecar era. tasks/main.yml still uses it to find and
+# delete the .sha256 sidecars older versions published, one time only;
+# delete this line and the cleanup task once no host carries one anymore.
+_var_artifact_stage_checksum_suffix: .sha256
 
 # Written next to a transit artifact when the destination confirmed it holds
 # the content. Its presence is what lets staging skip a re-download of

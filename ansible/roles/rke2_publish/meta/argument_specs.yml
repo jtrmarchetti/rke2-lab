@@ -7,9 +7,10 @@ argument_specs:
         it into GitLab, which is Tier 2 of the artifact model.
       - Container images are pushed to the container registry under one project
         path, so the containerd rewrite rule on a consuming node is a prefix.
-      - The installer, the binary tarball, and the release checksum file are
-        uploaded to the generic package registry, because a node needs those
-        before it has anything that can pull an image.
+      - The installer, the binary tarball, and the release's own checksum
+        file are uploaded to the generic package registry, because the node's
+        install.sh requires the checksum file next to the binary and nothing
+        else on the node can verify it.
       - Mints a group-scoped read-only deploy token and records its value, since
         GitLab returns it exactly once.
     options:

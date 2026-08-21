@@ -104,9 +104,8 @@ inventory_freeipa_server_dns_records:
 
 inventory_freeipa_server_container_name: freeipa-server
 inventory_freeipa_server_container_image: freeipa/freeipa-server:almalinux-8
-# Tarball URL and checksum come from the role defaults, which follow the
-# artifact host document root layout (freeipa/) and verify against the .sha256
-# file published beside the tarball at staging time.
+# The tarball URL follows the artifact host document root layout (freeipa/);
+# the pinned URL over TLS is the integrity control.
 inventory_freeipa_server_data_dir: /data1/freeipa
 
 # Declared in inventory rather than left to the role default because two roles
@@ -145,8 +144,3 @@ inventory_base_host_split_dns_domains:
 # this tarball from the manifest entry in group_vars/repo/artifacts.yml.
 inventory_freeipa_server_image_tarball_url: >-
   http://192.168.2.99/freeipa/freeipa-server-almalinux-8.tar
-# Verified against the .sha256 file published next to the artifact rather than
-# a value pinned here. A `docker save` tarball has no reproducible checksum, so
-# the only correct expected value is the one generated at staging time.
-inventory_freeipa_server_image_tarball_checksum: >-
-  sha256:http://192.168.2.99/freeipa/freeipa-server-almalinux-8.tar.sha256

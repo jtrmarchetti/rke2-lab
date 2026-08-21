@@ -122,7 +122,6 @@
   ansible.builtin.get_url:
     url: "{{ freeipa_server_image_tarball_url }}"
     dest: "{{ freeipa_server_image_tarball_path }}"
-    checksum: "{{ freeipa_server_image_tarball_checksum | default(omit, true) }}"
     mode: "0640"
 
 - name: main | Load the FreeIPA image from the artifact tarball
@@ -207,6 +206,7 @@
   when:
     - (freeipa_server_enabled | bool)
     - not ansible_check_mode
+  register: _reg_freeipa_server_compose
   community.docker.docker_compose_v2:
     project_src: "{{ freeipa_server_compose_dir }}"
     state: present
@@ -222,10 +222,18 @@
 # installer's DNS pre-checks alone spend about 70 seconds timing out before
 # named exists, so one full crash cycle runs to roughly 90 seconds. A shorter
 # wait sees zero restarts and lets a doomed run proceed to the 30-minute poll.
+#
+# It runs only when compose actually started or restarted the container. A
+# settle sleep after a run that changed nothing is pure wall time, and this
+# was the shape that paid 3.5 minutes of it on every steady-state run. A
+# crash-looping container that compose did not touch is still caught: the
+# restart-count assert below is not gated on this task.
 - name: main | Allow the FreeIPA container a moment to settle
   when:
     - (freeipa_server_enabled | bool)
     - not ansible_check_mode
+    - (_reg_freeipa_server_compose is not skipped)
+    - (_reg_freeipa_server_compose is changed)
   ansible.builtin.wait_for:
     timeout: "{{ freeipa_server_settle_timeout }}"
 

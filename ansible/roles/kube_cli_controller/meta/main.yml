@@ -4,8 +4,8 @@ galaxy_info:
   author: rke2lab
   description: >-
     Sets up the automation controller to operate the cluster: kubectl taken
-    from the cluster's own node so the versions cannot drift, k9s pinned and
-    checksummed, and a shell environment that sets KUBECONFIG so a bare kubectl
+    from the cluster's own node so the versions cannot drift, k9s pinned to a
+    release, and a shell environment that sets KUBECONFIG so a bare kubectl
     command works.
   license: MIT
   min_ansible_version: "2.15"

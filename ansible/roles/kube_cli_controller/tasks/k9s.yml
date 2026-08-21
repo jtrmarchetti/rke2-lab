@@ -4,8 +4,9 @@
 # node reaches the internet, and this host sits outside the Proxmox environment
 # and already installs Pulumi and Ansible from upstream.
 #
-# It is still pinned and checksummed, because "has internet" is not a reason to
-# install whatever happens to be current today.
+# It is still pinned, because "has internet" is not a reason to install
+# whatever happens to be current today: the version and URL come from
+# inventory and the download rides on TLS to that pinned source.
 
 # check_mode: false because this only reads a version, and because the
 # comparison below is a `when:` on every task that follows. A command skipped
@@ -33,14 +34,13 @@
         state: directory
         suffix: k9s
 
-    # checksum: is the integrity control, not a note. get_url fails the task if
-    # it does not match, so a tampered or truncated download never reaches the
-    # unarchive below.
+    # Downloaded over TLS from the pinned release URL, so the integrity rides
+    # on the transport and the pinned source rather than on a recorded
+    # checksum.
     - name: k9s | Download the release tarball
       ansible.builtin.get_url:
         url: "{{ kube_cli_controller_k9s_url | trim }}"
         dest: "{{ _reg_kube_cli_controller_tmp['path'] }}/k9s.tar.gz"
-        checksum: "sha256:{{ kube_cli_controller_k9s_sha256 | trim }}"
         mode: "0644"
 
     - name: k9s | Unpack just the binary

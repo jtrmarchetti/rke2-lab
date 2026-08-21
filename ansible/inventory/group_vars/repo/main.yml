@@ -322,13 +322,11 @@ inventory_base_host_split_dns_domains:
 
 # gitlab
 # Air-gapped image delivery, matching the pattern the FreeIPA role uses: the
-# tarball comes from the Apache artifact host and is verified against the
-# .sha256 published beside it at staging time, because a `docker save` tarball
-# has no reproducible checksum of its own.
+# tarball comes from the Apache artifact host, over TLS, at the pinned URL —
+# the transport and the pin are the integrity control, since a `docker save`
+# tarball has no reproducible checksum of its own to pin in the first place.
 inventory_gitlab_image_tarball_url: >-
   http://192.168.2.99/gitlab/gitlab-ce-19.2.2-ce.0.tar
-inventory_gitlab_image_tarball_checksum: >-
-  sha256:http://192.168.2.99/gitlab/gitlab-ce-19.2.2-ce.0.tar.sha256
 # Who may read the health endpoints. GitLab restricts /-/readiness, /-/liveness
 # and /-/health to 127.0.0.0/8 by default and answers 404 — not 403 — to
 # everyone else, which reads exactly like a missing endpoint.

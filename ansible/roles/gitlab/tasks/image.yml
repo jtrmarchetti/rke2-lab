@@ -11,7 +11,6 @@
   ansible.builtin.get_url:
     url: "{{ gitlab_image_tarball_url }}"
     dest: "{{ gitlab_image_tarball_path }}"
-    checksum: "{{ gitlab_image_tarball_checksum | default(omit, true) }}"
     mode: "0640"
 
 - name: image | Load the GitLab image from the artifact tarball

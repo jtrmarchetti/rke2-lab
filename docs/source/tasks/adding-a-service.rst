@@ -35,11 +35,9 @@ written to disk, and always ``retention: transit``:
      retention: transit
      type: mirror
      image: quay.io/vendor/myapp:1.4.2
-     digest: >-
-       sha256:...
 
-The digest is the integrity control, not a note. Get it with
-``skopeo inspect docker://quay.io/vendor/myapp:1.4.2``.
+The tag is the pin. There is no digest to record: skopeo copies the image
+by tag into the mirror, and the mirror is where consumers resolve it.
 
 .. important::
 
@@ -57,7 +55,6 @@ artifact:
      retention: transit
      type: file
      url: https://vendor.example/charts/myapp-1.4.2.tgz
-     sha256: ...
      dest: charts/myapp-1.4.2.tgz
 
 Then add it to ``inventory_rke2_publish_chart_sets`` in

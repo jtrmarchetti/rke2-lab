@@ -3,6 +3,7 @@
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
+      - WIREGUARD_CONTROLLER_PRIVATE_KEY
       - WIREGUARD_REPO_PRIVATE_KEY
 
 - name: Configure phase1 repo01 services
@@ -95,6 +96,28 @@
           tags:
             - time_sync
 
+    # The gateway's peer key is the controller's public key. It is a pure
+    # function of the controller's private key, so derive it on demand rather
+    # than reading a fact that a different playbook's play happened to set in
+    # this process. That fact (controller_tunnel_local_public_key) is the
+    # value the controller_tunnel play sets; running repo01.yml standalone
+    # leaves no such fact, and the lookup then fails with
+    # "HostVarsVars has no attribute". Delegating `wg pubkey` to the
+    # controller host reproduces the exact derivation and makes this playbook
+    # self-sufficient: it works whether run inside site.yml or on its own.
+    - name: repo01 | Derive the controller's WireGuard public key
+      tags:
+        - wireguard_gateway
+      check_mode: false
+      no_log: true
+      register: _reg_repo01_controller_wg_public_key
+      delegate_to: "{{ inventory_wireguard_gateway_controller_host }}"
+      ansible.builtin.command:
+        cmd: wg pubkey
+        stdin: >-
+          {{ hostvars[inventory_wireguard_gateway_controller_host]
+             ['inventory_controller_wireguard_private_key'] | trim }}
+
     - name: repo01 | Include WireGuard gateway role
       tags:
         - wireguard_gateway
@@ -121,12 +144,11 @@
         wireguard_gateway_peer_persistent_keepalive: >-
           {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
         # Derived on the controller from the key in the environment, not pasted
-        # here. controller_tunnel set this fact in the play above; the gateway
-        # takes the controller's public key from it. Same pattern as
-        # playbooks/tunnel_controller_access.yml.
+        # here. The task above derives it by delegation so this playbook works
+        # standalone as well as inside site.yml; the value is the same one
+        # roles/controller_tunnel publishes as controller_tunnel_local_public_key.
         wireguard_gateway_peer_public_key: >-
-          {{ hostvars[inventory_wireguard_gateway_controller_host]
-             ['controller_tunnel_local_public_key'] }}
+          {{ _reg_repo01_controller_wg_public_key['stdout'] | trim }}
         wireguard_gateway_private_key: >-
           {{ inventory_wireguard_gateway_private_key }}
       ansible.builtin.include_role:

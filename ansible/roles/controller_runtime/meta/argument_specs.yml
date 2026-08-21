@@ -71,12 +71,10 @@ argument_specs:
         description: The pinned Pulumi CLI version.
       controller_runtime_pulumi_url:
         type: str
-        description: Release tarball for the pinned version.
-      controller_runtime_pulumi_sha256:
-        type: str
-        description:
-          - Published SHA256 of the tarball. Verified on download, so a
-            tampered or truncated file never reaches the install.
+        description: >-
+          Release tarball URL for the pinned version. The pin and the TLS
+          transport are the integrity control; the download is not verified
+          against a recorded checksum.
       controller_runtime_pulumi_home:
         type: str
         description: Pulumi's home directory; binaries land in its bin/.

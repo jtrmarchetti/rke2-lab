@@ -1,11 +1,12 @@
 ---
 # Copies one image from its upstream registry into the GitLab mirror.
 #
-# The source is addressed by digest and the destination by tag. That asymmetry
-# is deliberate: the digest is what the manifest pins and what skopeo verifies,
-# and the tag is what a node asks for after the containerd rewrite has turned
-# an upstream name into a mirror path. Copying digest-to-tag is what binds the
-# two together.
+# Both source and destination are addressed by tag: the tag is what the
+# manifest pins, what a node asks for after the containerd rewrite has
+# turned an upstream name into a mirror path, and what charts that pin an
+# image address. There is no digest for the manifest to pin any more; the
+# pin is the tag, and the TLS-protected registries on both ends are the
+# integrity control.
 
 # `--all --preserve-digests`, and both are load-bearing for the same reason.
 #
@@ -21,9 +22,13 @@
 # does not have — a 404 for an image sitting right there under the tag.
 #
 # The cost is real: an index carries every architecture, so mirroring one is
-# several times the bytes of the one this cluster runs. That is the right trade
-# for an air-gapped mirror, where an image that cannot be addressed the way its
-# chart addresses it is not mirrored at all.
+# several times the bytes of the one this cluster runs. That is the right
+# trade for an air-gapped mirror, where an image that cannot be addressed the
+# way its chart addresses it is not mirrored at all.
+#
+# The copy is by tag, and that is the weak point worth naming: an upstream
+# that moves the tag between runs can move what the mirror holds. Accepted
+# trade for a lab air gap; the tag is still the pin the whole build uses.
 - name: mirror_copy | Copy the image into the GitLab registry
   changed_when: _reg_rke2_publish_mirror_result['rc'] == 0
   no_log: "{{ rke2_publish_no_log | bool }}"

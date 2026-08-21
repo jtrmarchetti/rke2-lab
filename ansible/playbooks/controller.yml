@@ -15,7 +15,7 @@
 # this is the controller's single tooling entry point and this is the only
 # window that works: the cluster must exist before kubectl can be taken from a
 # node, and Flux must exist on PATH before 6a bootstraps it. Both 6a binaries
-# come from Apache with published checksums, so neither waits on GitLab.
+# come from the pinned Apache URLs, so neither waits on GitLab.
 #
 # Runs against localhost with no become: everything it installs is user-level,
 # under ~/.local/bin and ~/.config, so operating the cluster needs no root on
@@ -62,17 +62,13 @@
       tags:
         - kube_cli
       vars:
-        # Version, URL and checksum for each binary, all three from
+        # Version and URL for each binary, all from
         # inventory/group_vars/controller/artifacts.yml so that a bump is one
-        # edit and cannot leave a checksum pointing at the previous release.
-        kube_cli_controller_flux_sha256: >-
-          {{ inventory_kube_cli_controller_flux_sha256 }}
+        # edit and cannot leave a URL pointing at the previous release.
         kube_cli_controller_flux_url: >-
           {{ inventory_kube_cli_controller_flux_url }}
         kube_cli_controller_flux_version: >-
           {{ inventory_kube_cli_controller_flux_version }}
-        kube_cli_controller_k9s_sha256: >-
-          {{ inventory_kube_cli_controller_k9s_sha256 }}
         kube_cli_controller_k9s_url: "{{ inventory_kube_cli_controller_k9s_url }}"
         kube_cli_controller_k9s_version: >-
           {{ inventory_kube_cli_controller_k9s_version }}
@@ -80,8 +76,6 @@
           {{ inventory_kubewk_control_host }}
         kube_cli_controller_kubectl_source_path: >-
           {{ hostvars[inventory_kubewk_control_host]['inventory_rke2_node_data_dir'] }}/bin/kubectl
-        kube_cli_controller_kubeseal_sha256: >-
-          {{ inventory_kube_cli_controller_kubeseal_sha256 }}
         kube_cli_controller_kubeseal_url: >-
           {{ inventory_kube_cli_controller_kubeseal_url }}
         kube_cli_controller_kubeseal_version: >-

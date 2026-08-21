@@ -57,7 +57,7 @@
 # Phase 5 — the cluster was finished and could not be looked at. The Flux CLI
 # and kubeseal are Phase 6a tools, and this is the only correct window for
 # them: after the cluster exists, before 6a bootstraps Flux against GitLab.
-# Both come from Apache and are checksummed, so nothing here waits on GitLab.
+# Both come from the pinned Apache URLs, so nothing here waits on GitLab.
 - name: Phases 5-6a - controller tooling for operating the cluster
   ansible.builtin.import_playbook: controller.yml
 

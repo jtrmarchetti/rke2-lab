@@ -4,15 +4,25 @@
 # Internal nodes have no registry to pull from until Phase 3, and no internet
 # route at all, so an image reaches them only as a file served by Apache.
 #
-# The tarball is exported under the manifest's tag, not its digest: the
-# consuming host loads the tarball and then runs that exact tag, so a tarball
-# built from a differently tagged image would load under the wrong name and the
-# consumer would fall back to pulling from a registry it cannot reach.
+# The tarball is exported under the manifest's tag: the consuming host loads
+# the tarball and then runs that exact tag, so a tarball built from a
+# differently tagged image would load under the wrong name and the consumer
+# would fall back to pulling from a registry it cannot reach.
+#
+# The pull is by tag, not digest: a tag can move upstream, so a re-run after
+# the upstream tag advanced keeps the already-pulled image. The marker
+# records the reference the tarball was built from, which is what makes a
+# manifest that repins the tag trigger a re-export. Legacy digest markers left
+# on disk by older versions are removed here and force exactly one re-export
+# so the tag marker is written; after that the entry is a no-op again.
 - name: image_publish | Stage one container image
   vars:
     _artifact_stage_tarball: >-
       {{ artifact_stage_root }}/{{ _item_artifact_stage_image['dest'] }}
-    _artifact_stage_digest_file: >-
+    _artifact_stage_tag_file: >-
+      {{ artifact_stage_root }}/{{ _item_artifact_stage_image['dest'] }}{{
+      _var_artifact_stage_tag_suffix }}
+    _artifact_stage_old_digest_file: >-
       {{ artifact_stage_root }}/{{ _item_artifact_stage_image['dest'] }}{{
       _var_artifact_stage_digest_suffix }}
     _artifact_stage_scratch: >-
@@ -25,54 +35,51 @@
         path: "{{ _artifact_stage_tarball }}"
         get_checksum: false
 
-    - name: image_publish | Check for the published digest marker
+    - name: image_publish | Check for the published tag marker
       register: _reg_artifact_stage_marker_stat
       ansible.builtin.stat:
-        path: "{{ _artifact_stage_digest_file }}"
+        path: "{{ _artifact_stage_tag_file }}"
         get_checksum: false
 
-    - name: image_publish | Read the digest the published tarball was built from
+    - name: image_publish | Check for the legacy digest marker
+      register: _reg_artifact_stage_old_marker_stat
+      ansible.builtin.stat:
+        path: "{{ _artifact_stage_old_digest_file }}"
+        get_checksum: false
+
+    - name: image_publish | Read the tag the published tarball was built from
       when: _reg_artifact_stage_marker_stat['stat']['exists']
       register: _reg_artifact_stage_marker
       ansible.builtin.slurp:
-        src: "{{ _artifact_stage_digest_file }}"
+        src: "{{ _artifact_stage_tag_file }}"
 
     # Re-export when the tarball is missing, when no marker records what it was
-    # built from, or when the manifest has been repinned to a new digest.
-    # Otherwise this entry is already correctly published and every task below
-    # is skipped, which is what makes a second run report no change.
+    # built from, when a legacy digest marker is still on disk, or when the
+    # manifest repinned the tag. Otherwise this entry is already correctly
+    # published and every task below is skipped, which is what makes a second
+    # run report no change.
     - name: image_publish | Stage the image when it is missing or repinned
       when:
         - (_artifact_stage_needs_export | bool)
         - not ansible_check_mode
       vars:
-        _artifact_stage_published_digest: >-
+        _artifact_stage_published_tag: >-
           {{ (_reg_artifact_stage_marker['content'] | default('') | b64decode)
              | trim }}
         _artifact_stage_needs_export: >-
           {{ not _reg_artifact_stage_tarball_stat['stat']['exists']
              or not _reg_artifact_stage_marker_stat['stat']['exists']
-             or _artifact_stage_published_digest
-                != _item_artifact_stage_image['digest'] }}
+             or _reg_artifact_stage_old_marker_stat['stat']['exists']
+             or _artifact_stage_published_tag
+                != _item_artifact_stage_image['image'] }}
       block:
-        # Pulled by digest rather than by tag so the bytes are pinned. A tag can
-        # be moved upstream; a digest cannot.
-        - name: image_publish | Pull the image by its pinned digest
+        # Pulled by tag. The tag is what the consumer runs, and the marker
+        # below records exactly which reference the export was built from.
+        - name: image_publish | Pull the image by its manifest tag
           register: _reg_artifact_stage_pull
           community.docker.docker_image_pull:
-            name: >-
-              {{ _item_artifact_stage_image['image'] | regex_replace(':[^:/]+$', '')
-              }}@{{ _item_artifact_stage_image['digest'] }}
+            name: "{{ _item_artifact_stage_image['image'] }}"
             pull: not_present
-
-        - name: image_publish | Tag the pulled image with the manifest tag
-          community.docker.docker_image_tag:
-            name: >-
-              {{ _item_artifact_stage_image['image']
-                 | regex_replace(':[^:/]+$', '') }}@{{
-              _item_artifact_stage_image['digest'] }}
-            repository:
-              - "{{ _item_artifact_stage_image['image'] }}"
 
         # Exported to scratch first, then moved into place. A partial export
         # left under the document root would be served to an internal node as a
@@ -100,10 +107,16 @@
 
         # Written last, so an interrupted run leaves no marker and the next run
         # re-exports rather than trusting a tarball it did not finish writing.
-        - name: image_publish | Record the digest the tarball was built from
+        - name: image_publish | Record the tag the tarball was built from
           ansible.builtin.copy:
-            content: "{{ _item_artifact_stage_image['digest'] }}\n"
-            dest: "{{ _artifact_stage_digest_file }}"
+            content: "{{ _item_artifact_stage_image['image'] }}\n"
+            dest: "{{ _artifact_stage_tag_file }}"
             owner: "{{ artifact_stage_owner }}"
             group: "{{ artifact_stage_group }}"
             mode: "{{ artifact_stage_file_mode }}"
+
+    - name: image_publish | Remove the legacy digest marker
+      when: not ansible_check_mode and _reg_artifact_stage_old_marker_stat['stat']['exists']
+      ansible.builtin.file:
+        path: "{{ _artifact_stage_old_digest_file }}"
+        state: absent

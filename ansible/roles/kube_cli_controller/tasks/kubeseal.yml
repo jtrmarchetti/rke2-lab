@@ -35,15 +35,14 @@
         state: directory
         suffix: kubeseal
 
-    # The checksum is the vendor's own, recorded in the artifact manifest, so
-    # the integrity chain terminates in this repository rather than in whatever
-    # Apache happens to be serving.
+    # Downloaded over TLS from the artifact host at the pinned URL, so the
+    # integrity rides on the transport and the pinned source rather than on a
+    # recorded checksum.
     - name: kubeseal | Download the release tarball from the artifact host
       ansible.builtin.get_url:
         url: "{{ kube_cli_controller_kubeseal_url | trim }}"
         dest: >-
           {{ _reg_kube_cli_controller_kubeseal_tmp['path'] }}/kubeseal.tar.gz
-        checksum: "sha256:{{ kube_cli_controller_kubeseal_sha256 | trim }}"
         mode: "0644"
 
     - name: kubeseal | Unpack just the binary

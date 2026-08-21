@@ -24,8 +24,8 @@
 # platform when the actual fault is missing content. This is moby/moby#52897
 # and docker/cli#5476, and it is not a configuration mistake to be fixed here.
 #
-# skopeo copies by digest, streams the blobs, verifies the source digest, and
-# needs neither a local image store nor a byte of local disk.
+# skopeo copies by tag, streams the blobs, and needs neither a local image
+# store nor a byte of local disk.
 
 - name: mirror | Ensure skopeo is installed
   ansible.builtin.apt:

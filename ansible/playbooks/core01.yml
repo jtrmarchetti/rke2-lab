@@ -97,8 +97,6 @@
         freeipa_server_forwarders_enabled: >-
           {{ inventory_freeipa_server_forwarders_enabled }}
         freeipa_server_hostname: "{{ inventory_freeipa_server_hostname }}"
-        freeipa_server_image_tarball_checksum: >-
-          {{ inventory_freeipa_server_image_tarball_checksum }}
         freeipa_server_image_tarball_url: >-
           {{ inventory_freeipa_server_image_tarball_url }}
         freeipa_server_ip_address: "{{ inventory_freeipa_server_ip_address }}"
