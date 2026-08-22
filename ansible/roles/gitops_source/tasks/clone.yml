@@ -57,11 +57,14 @@
       git -C {{ gitops_source_work_dir }} rev-parse --verify --quiet
       refs/remotes/origin/{{ gitops_source_branch }}
 
-- name: clone | Note whether the fetch left a tip behind
+- name: clone | Note whether the fetch left a resolvable tip behind
+  when: _reg_gitops_source_branch_head['rc'] != 0
+  changed_when: false
+  failed_when: false
   register: _reg_gitops_source_fetch_head
-  ansible.builtin.stat:
-    path: "{{ gitops_source_work_dir }}/.git/FETCH_HEAD"
-    get_checksum: false
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} rev-parse --verify --quiet FETCH_HEAD
 
 - name: clone | Pick the checkout start point
   ansible.builtin.set_fact:
@@ -69,7 +72,7 @@
       {{ 'refs/remotes/origin/' ~ gitops_source_branch
          if _reg_gitops_source_branch_head['rc'] == 0
          else ('FETCH_HEAD'
-               if _reg_gitops_source_fetch_head['stat']['exists']
+               if (_reg_gitops_source_fetch_head['rc'] | default(1)) == 0
                else '') }}
 
 - name: clone | Pin the working clone to the remote branch # noqa: command-instead-of-module
