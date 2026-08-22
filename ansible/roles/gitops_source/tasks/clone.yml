@@ -57,7 +57,7 @@
       git -C {{ gitops_source_work_dir }} rev-parse --verify --quiet
       refs/remotes/origin/{{ gitops_source_branch }}
 
-- name: clone | Note whether the fetch left a resolvable tip behind
+- name: clone | Note whether the fetch left a resolvable tip behind # noqa: command-instead-of-module
   when: _reg_gitops_source_branch_head['rc'] != 0
   changed_when: false
   failed_when: false

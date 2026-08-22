@@ -304,9 +304,11 @@ by the `gitlab_admin_token` role. It is the one credential the whole GitLab-
 admin surface of the automation uses: `rke2_publish` creates the group, the
 projects and the deploy token with it, and `gitops_source` and
 `gitops_bootstrap` create their project setup and deploy token with it. The
-mint is a `gitlab-rails` call inside the GitLab container and takes about a
-minute, so before the shared role existed each of the three roles minted its
-own copy per run and a full automation paid for it three times. Now the
+mint signs into the instance's web UI as root and POSTs the token form in
+a second or two, with the `gitlab-rails` runner kept only as the fallback
+for a controller that has no root password. Before the shared role existed
+each of the three roles minted its own copy per run and a full automation
+paid for it three times. Now the
 token is minted at most once a day: the role records the value (GitLab
 discloses it exactly once), and every later inclusion proves the recorded
 token still authenticates with a single `GET /user` before reusing it. A

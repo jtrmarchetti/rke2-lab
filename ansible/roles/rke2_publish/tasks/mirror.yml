@@ -23,9 +23,5 @@
       {{ rke2_publish_mirror_images | length }} mirrored images to copy
     verbosity: 0
 
-- name: mirror | Copy each missing image into the registry
-  loop: "{{ _rke2_publish_mirror_missing }}"
-  loop_control:
-    loop_var: _item_rke2_publish_mirror
-    label: "{{ _item_rke2_publish_mirror['image'] }}"
-  ansible.builtin.include_tasks: mirror_copy.yml
+- name: mirror | Copy the missing images into the registry in bounded parallel
+  ansible.builtin.include_tasks: mirror_pool.yml

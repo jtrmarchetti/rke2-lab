@@ -1035,8 +1035,9 @@ in the first place.
 ### What is now true that was not
 
 The direction is one-way. A file edited in GitLab survives until the next run
-of `playbooks/gitops.yml` and is then overwritten, because the render wipes the
-working tree before writing it. That is the point rather than a side effect: a
+of `playbooks/gitops.yml` and is then overwritten, because every run resets
+the working clone to the remote tip and then rewrites the render-owned files
+before committing. That is the point rather than a side effect: a
 repository that absorbs edits from both ends has two sources of truth and
 therefore none.
 

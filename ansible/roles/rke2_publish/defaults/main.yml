@@ -53,6 +53,7 @@ rke2_publish_mirror_retries: 3
 
 rke2_publish_mirror_task_retries: 3
 rke2_publish_mirror_task_delay: 30
+rke2_publish_mirror_parallelism: 3
 
 rke2_publish_chart_sets: []
 
