@@ -58,6 +58,8 @@
 
 - name: main | Ensure container runtime packages are installed
   when: (freeipa_server_enabled | bool)
+  retries: "{{ freeipa_server_apt_retries }}"
+  delay: "{{ freeipa_server_apt_delay }}"
   ansible.builtin.apt:
     name: "{{ freeipa_server_runtime_packages }}"
     state: present

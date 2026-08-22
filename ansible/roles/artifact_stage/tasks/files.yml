@@ -6,6 +6,8 @@
   loop_control:
     loop_var: _item_artifact_stage_file
     label: "{{ _item_artifact_stage_file['name'] }} (phase {{ _item_artifact_stage_file['phase'] }})"
+  retries: "{{ artifact_stage_download_retries }}"
+  delay: "{{ artifact_stage_download_delay }}"
   ansible.builtin.get_url:
     url: "{{ _item_artifact_stage_file['url'] }}"
     dest: "{{ artifact_stage_root }}/{{ _item_artifact_stage_file['dest'] }}"

@@ -10,6 +10,11 @@ artifact_stage_group: root
 artifact_stage_file_mode: "0644"
 
 artifact_stage_download_timeout: 600
+artifact_stage_download_retries: 3
+artifact_stage_download_delay: 30
+
+artifact_stage_image_pull_retries: 3
+artifact_stage_image_pull_delay: 30
 
 artifact_stage_work_dir: /data1/.artifact-staging
 

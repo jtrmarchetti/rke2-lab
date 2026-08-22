@@ -92,6 +92,26 @@ argument_specs:
         required: false
         default: 600
         description: Timeout in seconds for a single download.
+      artifact_stage_download_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing download before the task is fatal.
+      artifact_stage_download_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between download attempts.
+      artifact_stage_image_pull_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing image pull before the task is fatal.
+      artifact_stage_image_pull_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between image pull attempts.
       artifact_stage_work_dir:
         type: str
         required: false

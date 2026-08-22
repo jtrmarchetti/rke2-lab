@@ -98,7 +98,7 @@
   ansible.builtin.tempfile:
     state: file
     suffix: .crt
-    dir: "{{ lookup('env', 'TMPDIR') | default('/tmp') }}"
+    path: "{{ lookup('env', 'TMPDIR') | default('/tmp') }}"
 
 - name: seal | Populate it from the backed-up key pair
   when: >-

@@ -35,6 +35,9 @@ freeipa_server_runtime_packages:
 
   - python3-requests
 
+freeipa_server_apt_retries: 3
+freeipa_server_apt_delay: 15
+
 freeipa_server_dns_zones: []
 
 freeipa_server_dns_records: []

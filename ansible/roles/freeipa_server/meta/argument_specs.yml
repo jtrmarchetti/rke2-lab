@@ -137,6 +137,16 @@ argument_specs:
         description: Seconds allowed for the first-run domain bootstrap.
         type: int
         required: false
+      freeipa_server_apt_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing package install before the task is fatal.
+      freeipa_server_apt_delay:
+        type: int
+        required: false
+        default: 15
+        description: Seconds between package install attempts.
       freeipa_server_dns_forward_zones:
         type: list
         elements: dict

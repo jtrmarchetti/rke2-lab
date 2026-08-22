@@ -56,6 +56,8 @@
 
         - name: image_publish | Pull the image by its manifest tag
           register: _reg_artifact_stage_pull
+          retries: "{{ artifact_stage_image_pull_retries }}"
+          delay: "{{ artifact_stage_image_pull_delay }}"
           community.docker.docker_image_pull:
             name: "{{ _item_artifact_stage_image['image'] }}"
             pull: not_present
