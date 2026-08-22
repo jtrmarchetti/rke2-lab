@@ -33,14 +33,18 @@ class VmSpec:
     # message "CPU does not support x86-64-v2" — which names the CPU when the
     # thing to change is the VM definition. Phase 6b met this on Keycloak.
     #
-    # x86-64-v2-AES rather than `host`: it is the oldest model that satisfies
-    # the requirement, so a guest stays migratable to any host in a future
-    # cluster rather than being pinned to this machine's exact silicon.
+    # `host` rather than `x86-64-v2-AES`: this lab's guests run JVMs (PKI
+    # Tomcat in the FreeIPA container, and friends) whose OpenJDK 8u502 JIT
+    # hard-crashes (SIGSEGV in StringTable during the post-config PKI
+    # restart) when the presented CPU is feature-limited to v2 (no
+    # AVX). The older v2-AES default was chosen for future cross-host
+    # migratability, but it made FreeIPA bootstrap crash-loop; the lab
+    # gains more from a working CA than from theoretical migration.
     #
     # Changing this on an existing VM needs a full power cycle. A reboot from
     # inside the guest keeps the running QEMU process, and the CPU it presents
     # with it.
-    cpu_type: str = "x86-64-v2-AES"
+    cpu_type: str = "host"
 
 
 @dataclass(frozen=True)

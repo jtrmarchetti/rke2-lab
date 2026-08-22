@@ -12,3 +12,6 @@
 # path Pulumi supports.
 pulumi==3.256.0
 pulumi-proxmoxve==8.3.0
+# Host-SSH fallback in modules/pve_cleanup.py (pvesm free of orphan LVs when
+# the PVE 9.2 API DELETE /content 501s). ptyprocess is pexpect's dep.
+pexpect==4.9.0

@@ -1,8 +1,11 @@
 import os
+import sys
 
 import pulumi
+import pulumi.runtime
 import pulumi_proxmoxve as proxmox
 
+from modules.pve_cleanup import CleanupSettings, clean_orphans
 from modules.provider import ProviderSettings, build_provider
 from modules.vm_definitions import build_vm_specs
 from modules.vm_factory import VmCommonSettings, create_vm
@@ -161,6 +164,29 @@ else:
 
 if not deployment_set:
     raise ValueError("No VMs selected for deployment. Check deployment config values.")
+
+# Preflight: remove any orphan per-VM storage content (cloud-init LVs left by a
+# previously failed qmcreate) so the VM-creation loop below can allocate its
+# disks. Skipped during `pulumi preview` (a dry-run must not mutate the host).
+# Best-effort: a failure here is surfaced but must not abort a run that would
+# otherwise succeed - an orphan that survives is still surfaced as a hard, in-
+# line qmcreate error by Pulumi.
+if not pulumi.runtime.is_dry_run():
+    cleanup_settings = CleanupSettings(
+        endpoint=provider_settings.endpoint,
+        username=provider_settings.username,
+        password=provider_settings.password,
+        node_name=provider_settings.node_name,
+        datastore_ids=(common_settings.datastore_id,),
+        insecure=provider_settings.insecure,
+        fallback_password_file=os.getenv("PROXMOX_HOST_PASSWORD_FILE")
+        or os.path.expanduser("~/.proxmoxpass"),
+    )
+    try:
+        for _line in clean_orphans(cleanup_settings, apply=True):
+            print(_line, file=sys.stderr)
+    except RuntimeError as exc:
+        print(f"[pve_cleanup] preflight skipped: {exc}", file=sys.stderr)
 
 created = {}
 for spec in deployment_set:
