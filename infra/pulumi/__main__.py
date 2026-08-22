@@ -110,26 +110,11 @@ if manage_internal_bridge:
     depends_on_resources.append(internal_bridge_resource)
 
 if common_settings.template_vm_id is None:
-    # Pinned to a dated release directory, not to noble/current/. `current`
-    # is a moving target: two rebuilds a fortnight apart produce two different
-    # base images from identical source, which is the one thing every other
-    # artifact in this environment is pinned to prevent. The checksum below
-    # belongs to this directory and only to this one, so the two move together
-    # or the download fails.
-    #
-    # Upgrading is: pick a directory from
-    # https://cloud-images.ubuntu.com/releases/noble/, take the amd64 line out
-    # of its SHA256SUMS, and change both values here.
     image_url = deployment_cfg.get("baseImageUrl") or (
         "https://cloud-images.ubuntu.com/releases/noble/release-20260814/"
         "ubuntu-24.04-server-cloudimg-amd64.img"
     )
     image_name = deployment_cfg.get("baseImageFileName") or "noble-server-cloudimg-amd64.qcow2"
-    # The integrity control, not a note. Proxmox verifies the download against
-    # it and refuses the file on a mismatch, so a truncated or tampered image
-    # never becomes the disk every VM in the lab is imported from. Overridable
-    # alongside baseImageUrl, because a custom URL with this checksum could
-    # never succeed.
     image_checksum = deployment_cfg.get("baseImageChecksum") or (
         "6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733"
     )
@@ -165,12 +150,6 @@ else:
 if not deployment_set:
     raise ValueError("No VMs selected for deployment. Check deployment config values.")
 
-# Preflight: remove any orphan per-VM storage content (cloud-init LVs left by a
-# previously failed qmcreate) so the VM-creation loop below can allocate its
-# disks. Skipped during `pulumi preview` (a dry-run must not mutate the host).
-# Best-effort: a failure here is surfaced but must not abort a run that would
-# otherwise succeed - an orphan that survives is still surfaced as a hard, in-
-# line qmcreate error by Pulumi.
 if not pulumi.runtime.is_dry_run():
     cleanup_settings = CleanupSettings(
         endpoint=provider_settings.endpoint,

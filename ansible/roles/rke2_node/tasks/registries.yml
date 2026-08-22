@@ -1,7 +1,5 @@
 ---
-# Must exist before rke2 ever starts. containerd reads this file at startup and
-# nowhere else, so writing it afterwards means a restart — and a restart of a
-# node that has already failed to pull is a slower way to reach the same state.
+
 - name: registries | Render the containerd registry configuration
   no_log: true
   notify: Restart RKE2
@@ -12,16 +10,11 @@
     group: root
     mode: "0600"
 
-# Proves the credential and the trust chain before RKE2 is asked to use them.
-# Without this, a wrong deploy token surfaces minutes later as pods stuck in
-# ImagePullBackOff on a cluster that otherwise looks like it came up.
 - name: registries | Prove the node can authenticate to the registry
   changed_when: false
   no_log: true
   vars:
-    # Assembled in a variable rather than folded across lines in the url key.
-    # A folded scalar turns each newline into a space, which would put literal
-    # spaces inside the query string.
+
     _rke2_node_pull_scope: >-
       repository:{{ rke2_node_registry_mirrors[0]['replacement'] | dirname
       }}:pull

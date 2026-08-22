@@ -1,19 +1,12 @@
 {{ ansible_managed | comment }}
-# External Secrets Operator, the half of the secrets model that runs.
-#
-# The division of labour is the whole design, and it is worth restating where
-# it is implemented rather than only where it was decided:
-#
-#   Sealed Secrets holds bootstrap material in Git — things needed before a
-#   secret store exists, which with Kubernetes auth turns out to be almost
-#   nothing: the registry pull credential, the cluster CA keypair, and the
-#   vault's own unseal keys.
-#
-#   OpenBao holds runtime secrets, with versions, policy and an audit log, and
-#   is reachable from outside the cluster.
-#
-#   This operator syncs the second into native Kubernetes Secrets, so a
-#   workload reads a Secret and never learns there is a vault.
+
+
+
+
+
+
+
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -46,9 +39,8 @@ spec:
       retries: 3
   values:
     installCRDs: true
-    # The ServiceAccount name is load-bearing: OpenBao's Kubernetes auth role
-    # is bound to exactly this name in exactly this namespace, so renaming it
-    # here is an authentication failure there.
+
+
     serviceAccount:
       create: true
       name: external-secrets

@@ -1,144 +1,49 @@
 ---
 rke2_server_enabled: true
 
-# True on exactly one host — the server that starts the cluster. It omits the
-# `server:` line entirely, which is what makes it the initial etcd member; RKE2
-# needs no cluster-init flag. Every other server joins the address below.
 rke2_server_bootstrap: false
 
-# The fixed registration address. Not any node's own address: it is the kube-vip
-# VIP, so a joining node does not depend on which server happens to be up.
 rke2_server_api_address: null
 rke2_server_api_name: null
 rke2_server_supervisor_port: 9345
 rke2_server_api_port: 6443
 
-# Shared cluster join secret. No default: an empty token would let RKE2 generate
-# one on the bootstrap node that no other node could ever guess.
-# rke2_server_token:
-
-# This node's address on the internal network. Passed in rather than derived,
-# because these hosts have one NIC today and deriving it would quietly pick the
-# wrong one the day they have two.
-# rke2_server_node_ip:
-
-# Names and addresses the API certificate must cover. Everything the API is
-# reachable by, so adding a path later is not a certificate reissue and a
-# restart.
 rke2_server_tls_san: []
 
-# RKE2's packaged CNI. Brought forward from Phase 5 because a node without a
-# CNI never reports Ready, and Phase 4's own exit criteria require Ready nodes.
 rke2_server_cni: cilium
 
-# Packaged components to leave undeployed. Empty since Phase 5: ingress used to
-# be suppressed here with `disable: rke2-ingress-nginx`, which was the blunt
-# instrument for a job rke2_server_ingress_controller does properly.
 rke2_server_disable: []
 
-# Which ingress controller RKE2 deploys. Confirmed against `rke2 server --help`
-# on the running binary: one of none, ingress-nginx, traefik, and the first
-# value becomes the default ingress class.
-#
-# Traefik, because ingress-nginx reached end of life in March 2026 and RKE2
-# makes Traefik the default for new clusters at v1.36. This lab runs v1.35.7,
-# which is inside the supported window. See plan/PHASE5_IMPLEMENTATION.md.
 rke2_server_ingress_controller:
   - traefik
 
-# Pins the packaged Traefik chart to the workers. The control plane taint below
-# would mostly achieve this on its own, but only if the chart happens not to
-# tolerate CriticalAddonsOnly — which is a property of someone else's chart and
-# not something to depend on. A node selector says it outright.
 rke2_server_ingress_node_selector: node-role.kubernetes.io/worker
 
-# Phase 6b. The address every ingress hostname resolves to, requested from the
-# kube-vip pool declared in the cluster-state repository. Pinned rather than
-# allocated: the cluster's DNS answers every name under k8s.dev.lo with it.
 rke2_server_ingress_address: null
 
-# Taints applied to this server. Phase 5, once workers exist to schedule onto;
-# Phase 4 left the servers untainted because tainting them would have left
-# nothing schedulable anywhere.
-#
-# This reaches the kubelet as --register-with-taints, which applies **only at
-# first registration**. It therefore does nothing to a node that is already in
-# the cluster, and exists so that a rebuilt server comes back tainted. The
-# running nodes are tainted with kubectl by playbooks/kubewk.yml. Neither half
-# is sufficient alone.
 rke2_server_node_taints:
   - CriticalAddonsOnly=true:NoExecute
 
-# Must match rke2_node_data_dir. Everything that grows lives here.
 rke2_server_data_dir: /data1/rancher/rke2
 
-# etcd snapshots. RKE2 defaults to every 12 hours keeping 5; six hours and ten
-# costs nothing on a 100 GB volume and bounds the loss window to something a lab
-# rebuild tolerates. The snapshot directory is left at its default, which is
-# under the data directory and therefore already on the data volume.
 rke2_server_etcd_snapshot_schedule: "0 */6 * * *"
 rke2_server_etcd_snapshot_retention: 10
 
-# Raised from etcd's defaults of 500 ms and 2500 ms because this lab's storage
-# is slow to fsync, and etcd is bound by fsync latency rather than throughput.
-# At the default heartbeat a commit that takes longer than the interval reads as
-# a missed heartbeat, the leader is declared dead, and an election starts while
-# the disk is already the bottleneck — which is how a slow disk turns into a
-# lost quorum rather than merely a slow cluster.
-#
-# This is a tolerance, not a fix. It stops etcd thrashing; it does not make the
-# disk faster. The disk-side half is `cache=writeback` in the Pulumi VM factory.
-# etcd's guidance is to keep election-timeout at roughly ten times the heartbeat
-# interval and under 50 s in total.
 rke2_server_etcd_args:
   - heartbeat-interval=1000
   - election-timeout=5000
 
-# Control plane metrics, exposed for Prometheus.
-#
-# RKE2 binds etcd, the scheduler and the controller manager to 127.0.0.1 by
-# default, which is the safe default and also the reason kube-prometheus-stack
-# reports the control plane as down on a cluster where it is fine: every
-# ServiceMonitor the chart ships resolves to the node address and is refused.
-# The alerts that follow — etcdInsufficientMembers, TargetDown,
-# KubeSchedulerInstanceUnreachable — describe the scrape, not the component,
-# and an alert list made of those is an alert list nobody reads.
-#
-# What this turns on, and what each one costs:
-#
-#   etcd            --listen-metrics-urls on 2381. A metrics-only listener; it
-#                   serves no key-value API and needs no client certificate,
-#                   which is why the chart scrapes it over plain HTTP.
-#   scheduler       --bind-address on 10259, HTTPS with the kubelet's own
-#   controller mgr  --bind-address on 10257, authn/authz in front of it. A
-#                   scrape without a bearer token gets 401.
-#   kube-proxy      --metrics-bind-address on 10249, plain HTTP and no auth.
-#                   The one genuinely open listener here.
-#
-# These bind to every interface, so they are reachable from anywhere that can
-# route to a node. On this network that is the WireGuard tunnel and the lab
-# segment, and the exposure is judged acceptable against an alert list that
-# means something. It would not be on a routable network without a host
-# firewall in front of 10249.
 rke2_server_expose_metrics: true
 
-# --- kube-vip -------------------------------------------------------------
 rke2_server_kube_vip_enabled: true
-# Pulled through the containerd mirror like everything else. The upstream name
-# is what is written here; the rewrite to the GitLab path happens in containerd.
+
 rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.2
 rke2_server_kube_vip_interface: eth0
 rke2_server_kube_vip_lease_duration: 15
 rke2_server_kube_vip_renew_deadline: 10
 rke2_server_kube_vip_retry_period: 2
 
-# --- readiness ------------------------------------------------------------
-#
-# Gates on transactions, not on status. `systemctl is-active` and a container in
-# state Up both report the last known intent; these check that the API answers,
-# that the node is schedulable, and that etcd has a real quorum.
 rke2_server_ready_retries: 90
 rke2_server_ready_delay: 10
 
-# Where the controller's kubeconfig is written. Empty disables the copy.
 rke2_server_kubeconfig_dest: ""

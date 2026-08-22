@@ -3,12 +3,8 @@ _var_freeipa_server_hosts_entry: >-
   {{ freeipa_server_ip_address }} {{ freeipa_server_hostname }}
   {{ freeipa_server_hostname.split('.') | first }}
 
-# Written inside the data volume by the container once the domain is installed.
 _var_freeipa_server_installed_marker: "{{ freeipa_server_data_dir }}/etc/ipa/ca.crt"
 
-# Compose derives the project name from the project directory's base name,
-# lowercased. Used to tell our own container apart from a foreign one holding
-# the same name.
 _var_freeipa_server_compose_project: >-
   {{ freeipa_server_compose_dir | basename | lower }}
 
@@ -16,20 +12,6 @@ _var_freeipa_server_compose_file: >-
   {{ freeipa_server_compose_dir }}/docker-compose.yml
 _var_freeipa_server_env_file: "{{ freeipa_server_compose_dir }}/.env"
 
-# Options for `ipa-server-install`, rendered as one string so it survives
-# templating without depending on native Jinja types. Passwords are added by the
-# compose template so they never appear here or in a fact.
-#
-# Deliberately no --hostname. Upstream's documentation says to set the container
-# hostname instead and avoid the installer option, and the reason is concrete:
-# --hostname sets _host_name_overridden, which makes the installer run
-# `hostnamectl set-hostname`. That needs CAP_SYS_ADMIN, an unprivileged
-# container does not have it, and the install dies there every time. The
-# container inherits the host's name through host networking, and the role sets
-# that host name to freeipa_server_hostname before the container starts.
-#
-# --skip-mem-check is required because the host cgroup namespace hides
-# memory.max from the installer; see the compose template for the full reasoning.
 _var_freeipa_server_install_opts: >-
   {{
     (
@@ -57,7 +39,4 @@ _var_freeipa_server_install_opts: >-
     ) | join(' ')
   }}
 
-# Templates for this role live in ansible/files/freeipa_server/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_freeipa_server_files_dir: "{{ role_path | dirname | dirname }}/files/freeipa_server"

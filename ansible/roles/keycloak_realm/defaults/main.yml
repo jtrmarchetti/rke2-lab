@@ -1,45 +1,19 @@
 ---
 keycloak_realm_enabled: true
 
-# Keycloak's base URL and the CA its certificate is verified against. No
-# default for the URL: it names this environment.
 keycloak_realm_url: null
 keycloak_realm_ca_file: /etc/ssl/certs/ca-certificates.crt
 
-# The administrator this role authenticates as, which is always in `master`
-# regardless of which realm is being created. That account is Keycloak's own
-# break-glass: it is local, it is not federated, and nothing this role does
-# can take it away.
 keycloak_realm_admin_user: admin
-# keycloak_realm_admin_password:
 
-# The realm applications live in.
-#
-# Not `master`, and this is the decision the rest of single sign-on rests on.
-# `master` is the realm that administers every other realm, so a client in it
-# is a client one misconfiguration away from the administrative surface, and a
-# federated end user in it is an end user in the realm that holds Keycloak's
-# own administrators. Keycloak's own guidance is that master holds
-# administrators and nothing else.
-#
-# No default, because the realm name is an environment's identity.
 keycloak_realm_name: null
 keycloak_realm_display_name: null
 
-# Session and token lifetimes. Longer than Keycloak's defaults on the SSO
-# session and deliberately short on the access token: the access token is what
-# a compromised browser replays, and the SSO session is what decides how often
-# a person on this network types a password.
 keycloak_realm_access_token_lifespan: 300
 keycloak_realm_sso_session_idle_timeout: 3600
 keycloak_realm_sso_session_max_lifespan: 36000
 
-# Brute force protection. FreeIPA has its own lockout policy, but it never sees
-# these attempts: Keycloak binds to the directory with its own service account
-# and a wrong password is rejected in Keycloak. Without this the directory's
-# lockout policy protects everything except the front door.
 keycloak_realm_brute_force_protected: true
 keycloak_realm_failure_factor: 10
 
-# Set false only when debugging; it prints the admin password.
 keycloak_realm_no_log: true

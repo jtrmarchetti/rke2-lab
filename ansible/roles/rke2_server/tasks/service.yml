@@ -1,15 +1,5 @@
 ---
-# Everything below gates on a transaction rather than on a status. `systemctl
-# is-active rke2-server` reports that systemd has not given up on the unit, not
-# that the API answers or that a pod could ever be scheduled. The phases run
-# back to back, so a false ready here surfaces as an unexplained failure in
-# Phase 5.
 
-# Decides whether the queued restart handlers should fire at all. A server that
-# is not running yet does not need restarting — it is about to be started, and
-# it will read the new configuration when it does. Restarting anyway would
-# interrupt a first bootstrap partway through, which looks like a crash rather
-# than like this role doing it.
 - name: service | Gather the current service state
   ansible.builtin.service_facts:
 
@@ -19,8 +9,6 @@
       {{ ansible_facts['services']['rke2-server.service']['state']
          | default('') == 'running' }}
 
-# Flushed here rather than at the end of the play, because every check below
-# this point is meaningless against a server still running the old config.
 - name: service | Apply any pending restart before checking readiness
   ansible.builtin.meta: flush_handlers
 
@@ -57,26 +45,12 @@
       cause is in the containerd log rather than in this role.
     quiet: true
 
-# Read from the host rather than assumed from the inventory name. RKE2 registers
-# a node under its fully qualified name — kubecp01.dev.lo, not kubecp01 — so a
-# lookup by inventory name finds nothing and the wait below would run out its
-# retries against a node that was Ready the whole time.
 - name: service | Read the name this node registered under
   changed_when: false
   register: _reg_rke2_server_node_name
   ansible.builtin.command:
     cmd: hostname --fqdn
 
-# Ready, not merely registered. A node with no working CNI registers and then
-# stays NotReady forever, which is exactly the state Phase 4's exit criteria are
-# meant to exclude.
-#
-# `kubectl wait` rather than a jsonpath condition polled in an until loop. The
-# obvious jsonpath for this — {.status.conditions[?(@.type=="Ready")].status} —
-# cannot be passed through the command module: it splits its argument with
-# shell-like quoting rules and eats the inner double quotes, so kubectl receives
-# a malformed filter, exits non-zero every time, and the loop runs out its full
-# retry budget against a node that reached Ready in the first minute.
 - name: service | Wait for this node to report Ready
   changed_when: false
   failed_when: _reg_rke2_server_node_ready['rc'] != 0
@@ -89,11 +63,7 @@
       node/{{ _reg_rke2_server_node_name['stdout'] | trim }}
       --timeout={{ rke2_server_ready_retries | int
                    * rke2_server_ready_delay | int }}s
-  # noqa: no-changed-when - checked above; kubectl wait is a read that blocks.
 
-# Only the bootstrap node waits for the VIP, and it waits before any other
-# server is asked to join through it. Doing this on the joining nodes instead
-# would be checking the address they already had to reach to get here.
 - name: service | Wait for the API virtual address to answer
   when:
     - (rke2_server_bootstrap | bool)

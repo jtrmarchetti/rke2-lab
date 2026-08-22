@@ -1,16 +1,10 @@
 {{ ansible_managed | comment }}
-# The Sealed Secrets sealing keys, from the backup, with everything the API
-# server owns stripped out.
-#
-# The backup is a `kubectl get -o yaml` dump, so it carries `resourceVersion`,
-# `uid` and `creationTimestamp`. `resourceVersion` in particular is not
-# decoration: it is an optimistic-concurrency precondition, so applying the
-# backup verbatim against a live cluster fails with a conflict on an object
-# nobody has touched. Name, namespace, label, type and data are the whole of
-# what a sealing key is.
-#
-# The label is what the controller finds its keys by, which is why it is the
-# one piece of metadata carried across.
+
+
+
+
+
+
 ---
 apiVersion: v1
 kind: List

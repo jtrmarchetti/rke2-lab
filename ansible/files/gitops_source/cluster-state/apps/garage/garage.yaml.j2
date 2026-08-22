@@ -1,21 +1,13 @@
 {{ ansible_managed | comment }}
-# Garage, the cluster's object store.
-#
-# Single node, and the replication decision is the same one OpenBao made:
-# Longhorn already keeps two copies of every block, so Garage's own three-way
-# replication would mean six copies of every object on storage measured in
-# fsyncs. One Garage node on a two-replica volume survives a node loss, which
-# is what the redundancy was for.
-#
-# Vendored manifests rather than a chart. Garage publishes no chart to a
-# repository, and this is a StatefulSet, a ConfigMap and two Services — small
-# enough that mirroring a chart to render three objects would be more moving
-# parts, not fewer.
-#
-# In `apps/` rather than `infrastructure/`, because nothing in the
-# infrastructure layer depends on it. That ordering matters if it ever backs
-# Loki: the logging stack is an app too, so the dependency stays inside one
-# layer instead of crossing one.
+
+
+
+
+
+
+
+
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -33,8 +25,7 @@ data:
     data_dir = "/var/lib/garage/data"
     db_engine = "sqlite"
 
-    # One copy, because the volume underneath already keeps two. See the note
-    # at the top of this file.
+
     replication_factor = 1
 
     rpc_bind_addr = "[::]:3901"
@@ -98,11 +89,9 @@ spec:
         - name: garage
           image: dxflrs/garage:v2.3.0
           imagePullPolicy: IfNotPresent
-          # The RPC secret and the admin token come from a Secret rather than
-          # from the config above: a ConfigMap is readable by anything that can
-          # read ConfigMaps, and these two are what authorise cluster
-          # membership and administrative calls. The Secret is synced out of
-          # OpenBao — see secrets.yaml beside this file.
+
+
+
           env:
             - name: GARAGE_RPC_SECRET
               valueFrom:
@@ -159,11 +148,9 @@ spec:
           requests:
             storage: 20Gi
 ---
-# S3 through the cluster's own subdomain, with a certificate from the cluster's
-# own CA. The wildcard matters: S3 clients address buckets as
-# <bucket>.s3.k8s.dev.lo, and the cluster's DNS answers every single-label name
-# under k8s.dev.lo — but not two-label ones, which is what a bucket name makes.
-# So the ingress carries both, and DNS is told about the bucket form explicitly.
+
+
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

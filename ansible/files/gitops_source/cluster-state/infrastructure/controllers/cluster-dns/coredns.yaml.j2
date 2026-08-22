@@ -81,10 +81,6 @@ data:
         k8s_external {{ gitops_source_cluster_domain }}
         template IN A {{ gitops_source_cluster_domain }} {
             match "^[^.]+\.{{ gitops_source_cluster_domain | replace('.', '\\.') }}\.$"
-{# CoreDNS answers are Go templates and `.Name` is CoreDNS's, not Ansible's;
-   without the raw block Jinja resolves it to nothing and every answer is
-   emitted with an empty owner name. At column zero, because an indented
-   comment leaves its own indentation behind in the rendered Corefile. #}
             answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ gitops_source_ingress_address }}"
             fallthrough
         }

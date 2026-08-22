@@ -1,18 +1,11 @@
 {{ ansible_managed | comment }}
-#
-# Kernel inotify limits for a Kubernetes node.
-#
-# Both are per-UID. Almost every container here runs as UID 0, so they all draw
-# on one allowance, and the watchers are ordinary: kubelet, containerd, Flux's
-# controllers, cert-manager, Longhorn, Grafana's config sidecars, Alloy, and
-# every operator built on controller-runtime.
-#
-# At the kernel default of 128 instances this node ran out, and running out does
-# not announce itself as an inotify problem — the allocation fails with EMFILE
-# and the process reports "failed to create fsnotify watcher: too many open
-# files", which reads like a file descriptor limit.
-#
-# Ceilings rather than allocations: nothing is reserved by raising them.
+
+
+
+
+
+
+
 {% for _item_rke2_node_key, _item_rke2_node_value in _var_rke2_node_inotify_settings | dictsort %}
 {{ _item_rke2_node_key }} = {{ _item_rke2_node_value }}
 {% endfor %}

@@ -1,9 +1,1 @@
 ---
-# No handlers.
-#
-# The obvious design is a "restart GitLab" handler notified by the compose and
-# environment templates, but docker_compose_v2 with state: present already
-# recreates the container when either file changes — compose hashes both into
-# the service configuration. The handler was therefore a second restart, and
-# because handlers run at the end of the play it landed *after* the readiness
-# gate, leaving the play reporting ready about a container it had just replaced.

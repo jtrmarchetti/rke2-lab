@@ -1,16 +1,10 @@
 {{ ansible_managed | comment }}
-# The issuer every certificate in the cluster comes from.
-#
-# A CA issuer, signing with the intermediate that FreeIPA signed. That makes
-# the chain real — a certificate issued here validates against the domain CA
-# already in every host's trust store — without FreeIPA being in the path of
-# each issuance.
-#
-# This matters most for the cluster's own subdomain. Names under k8s.dev.lo are
-# created and destroyed by whatever is declared in this repository, and are
-# resolved by the cluster's own DNS rather than by FreeIPA. An issuer that had
-# to ask the domain for each one would need a FreeIPA host entry per ingress,
-# which is exactly the coupling the subdomain removes.
+
+
+
+
+
+
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

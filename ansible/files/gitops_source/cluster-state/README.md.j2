@@ -1,11 +1,10 @@
-# Cluster state — `dev-lo`
+
 
 Declarative state for the RKE2 cluster, reconciled by Flux from the internal
 GitLab. Nothing here reaches the internet: every image resolves to
 `{{ gitops_source_registry_host }}` through the containerd rewrite configured
 on each node, so manifests keep upstream image names and stay portable.
 
-## This repository is generated. Do not edit it here.
 
 Every file below — including this one — is rendered by the `gitops_source`
 Ansible role and pushed here. An edit made in GitLab is not the source of
@@ -21,7 +20,6 @@ internal environment can be rebuilt from the automation repository alone, and
 `repo01` — this GitLab — is one of the things that gets rebuilt. State that
 exists only here is state that does not survive that.
 
-## Layout
 
 ```text
 clusters/dev-lo/         Flux entry point: the cluster's own Kustomizations
@@ -40,7 +38,6 @@ The `controllers`/`configs` split exists because a `ClusterIssuer` applied
 alongside cert-manager fails on the first reconcile — its CRD is not there yet
 — and Flux retries the whole kustomization rather than the single object.
 
-## Secrets
 
 Almost everything a running workload reads comes from **OpenBao**, through an
 `ExternalSecret` beside the manifests that consume it. The values are written
@@ -63,7 +60,6 @@ with a fresh Sealed Secrets key would find every secret in its own Git history
 useless. Regenerating instead means the plaintext is the source and the
 ciphertext is a build product.
 
-## Adding a component
 
 1. Mirror its images into GitLab first, via the manifest in
    `ansible/inventory/group_vars/repo/artifacts.yml`. Declaring something here

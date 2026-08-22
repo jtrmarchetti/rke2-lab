@@ -1,40 +1,20 @@
 ---
 artifact_stage_enabled: true
 
-# Must match artifact_host_document_root. The staging role writes the tree the
-# artifact host serves.
 artifact_stage_root: /data1/artifacts
 
-# The manifest driving every download. Empty by default so the role is inert
-# until inventory supplies one; see inventory/group_vars/repo/artifacts.yml for
-# the entry schema.
 artifact_stage_manifest: []
 
-# Published artifacts are world-readable so Apache can serve them, and owned by
-# root because only this role writes them.
 artifact_stage_owner: root
 artifact_stage_group: root
 artifact_stage_file_mode: "0644"
 
-# Some artifacts are large. This bounds a single download rather than the run.
 artifact_stage_download_timeout: 600
 
-# Where image tarballs are built before being published. Kept on the data
-# volume: a multi-gigabyte export would not fit alongside the OS on the 32 GB
-# root disk.
 artifact_stage_work_dir: /data1/.artifact-staging
 
-# Names of transit artifacts the publishing step has confirmed are in GitLab.
-# Supplied by the caller after inspecting the .published markers, so this role
-# stays free of any knowledge of GitLab. Empty means stage everything, which is
-# what a cold start needs.
 artifact_stage_published_names: []
 
-# The container runtime the image step pulls with. Deliberately a role default
-# rather than a manifest entry: it is a host prerequisite delivered through
-# apt, not an Apache artifact (see group_vars/repo/artifacts.yml). Installed
-# here — after container_storage has written the daemon config — so a fresh
-# build has a running daemon before the first image is pulled.
 artifact_stage_runtime_packages:
   - docker.io
   - docker-compose-v2

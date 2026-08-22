@@ -1,7 +1,6 @@
 {{ ansible_managed | comment }}
-#
-# This host resolves through the dnsmasq instance running on it, which forwards
-# each zone to the right authority. See /etc/dnsmasq.d for the split.
+
+
 nameserver 127.0.0.1
 {% if split_dns_search_domain | length > 0 %}
 search {{ split_dns_search_domain }}

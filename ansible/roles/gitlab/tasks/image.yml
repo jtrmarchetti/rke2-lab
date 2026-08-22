@@ -20,10 +20,6 @@
   community.docker.docker_image_load:
     path: "{{ gitlab_image_tarball_path }}"
 
-# A tarball built from a differently tagged image loads under that other tag,
-# and compose would then try to pull an image that does not exist. On this host
-# a pull would even succeed, since it is the one host with internet access —
-# quietly defeating the whole staged-artifact model. Fail here instead.
 - name: image | Verify the expected image tag is present after loading
   when: not ansible_check_mode
   register: _reg_gitlab_image_verify

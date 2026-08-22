@@ -1,35 +1,20 @@
 {{ ansible_managed | comment }}
-# Grafana dashboards for the logs Loki already holds.
-#
-# The stack collected logs from the day Alloy was deployed and showed none of
-# them: every one of the 29 dashboards Grafana had came from
-# kube-prometheus-stack, and all 29 are metrics. The Loki datasource was there,
-# so the logs were reachable — through Explore, by writing LogQL by hand. That
-# is a fair tool for someone who already knows the query and no answer at all
-# for someone opening Grafana to find out why a service is failing.
-#
-# Two dashboards rather than one, because they answer different questions.
-# `Logs - cluster overview` asks where the logs are coming from and which of
-# them look like failures; `Logs - explorer` is where you land once you know
-# which namespace to look at, and carries the namespace, pod, container and
-# search controls.
-#
-# The sidecar picks these up by the `grafana_dashboard` label from any
-# namespace, the same mechanism datasources.yaml relies on, so they arrive by
-# commit and survive Grafana being deleted and recreated - which matters more
-# here than elsewhere, because Grafana's persistence is deliberately off.
-#
-# On "error-shaped": nothing in this pipeline parses severity. Alloy ships each
-# line with its namespace, pod, container and node and does not look inside it,
-# so there is no `level` label to filter on and the error panels regex the line
-# for error, fatal, panic and exception. That is a heuristic and it will both
-# miss and over-count - a line reading "no errors found" matches. Parsing
-# levels properly means a stage per log format in Alloy's config, which is a
-# larger change than this one and buys less than it looks like it would.
-#
-# Everything below is a raw block. Grafana's legend format uses the same
-# doubled-brace syntax Jinja does, so without it the legends render as empty
-# strings and the panels come out with unlabelled series.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 {% raw %}
 ---
 apiVersion: v1
@@ -40,8 +25,7 @@ metadata:
   labels:
     grafana_dashboard: "1"
   annotations:
-    # Which Grafana folder the sidecar files these under. Without it they land
-    # at the top level beside the 29 the chart ships.
+
     grafana_folder: Logs
 data:
   logs-explorer.json: |

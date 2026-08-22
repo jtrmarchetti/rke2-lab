@@ -1,36 +1,29 @@
-#jinja2: trim_blocks: True, lstrip_blocks: True
-{{ ansible_managed | comment }}
-#
-# The jinja2 directive above must stay on line 1 to take effect.
-#
-# Split-horizon resolution: the internal domain is answered by its own
-# authority, everything else goes upstream. This host needs both, which a flat
-# list of nameservers cannot express — a resolver that answers NXDOMAIN is
-# treated as authoritative, so a second entry would never be consulted.
 
-# Do not read /etc/resolv.conf for upstream servers; it points at this daemon.
+{{ ansible_managed | comment }}
+
+
+
+
+
 no-resolv
 
-# Never forward names with no dot, or reverse lookups for unrouted space, to the
-# upstream resolvers.
+
 domain-needed
 
 {% if split_dns_upstream_servers | length > 0 %}
-# Upstream resolvers for everything not matched by a zone below.
+
 {% for _item_split_dns_server in split_dns_upstream_servers %}
 server={{ _item_split_dns_server }}
 {% endfor %}
 {% endif %}
 
 {% if split_dns_forward_zones | length > 0 %}
-# Zones answered by their own authority. `server=` forwards the query there;
-# `address=` would fabricate the answer locally and never ask.
+
 {% for _item_split_dns_zone in split_dns_forward_zones %}
 server=/{{ _item_split_dns_zone['domain'] }}/{{ _item_split_dns_zone['server'] }}
 {% endfor %}
 {% endif %}
 
-# Answer only where this host is meant to serve.
 {% for _item_split_dns_address in split_dns_listen_addresses %}
 listen-address={{ _item_split_dns_address }}
 {% endfor %}

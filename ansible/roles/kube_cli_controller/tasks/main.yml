@@ -1,10 +1,5 @@
 ---
-# One mode per directory, not one mode for both. The configuration directory
-# is shared with controller_runtime and holds env.sh, the Flux deploy token and
-# the cluster CA, so it is 0700 — and this task used to reset it to 0755 on
-# every run, which both fought controller_runtime for the mode (neither role
-# could ever report a clean second run) and left the lab's secret directory
-# listable by anyone on the host.
+
 - name: main | Ensure the operator directories exist
   when: (kube_cli_controller_enabled | bool)
   loop:
@@ -20,11 +15,6 @@
     state: directory
     mode: "{{ _item_kube_cli_controller_dir['mode'] }}"
 
-# Every downloaded binary here is pinned by the two values that travel
-# together — version and URL — and neither has a value that is correct in any
-# environment, so both come from the caller. Checked up front because the
-# alternative failure is get_url reporting an unparseable URL two task files
-# later, which reads as a network problem rather than a missing input.
 - name: main | Assert every downloaded binary is fully pinned
   when: (kube_cli_controller_enabled | bool)
   loop:

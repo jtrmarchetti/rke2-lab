@@ -1,13 +1,4 @@
 ---
-# The Dogtag profile, the subject principal, and the access rule that ties them
-# together. Read before write throughout, so a second run reports no change.
-#
-# Everything happens in one shell session inside the FreeIPA container, for the
-# reason ipa_service_cert documents: the Kerberos ticket lives in that process
-# tree's credential cache, and splitting the steps across tasks would discard
-# it. The profile arrives on stdin rather than by `docker cp`, because the
-# container runs read_only and a copy into it fails however writable the target
-# path looks.
 
 - name: profile | Render the subordinate CA profile configuration
   register: _reg_ipa_sub_ca_profile_file
@@ -21,13 +12,6 @@
   ansible.builtin.slurp:
     src: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_profile_id }}.cfg"
 
-# A literal block, not a folded one: folding joins the lines with spaces and
-# collapses the script into a single unparseable command. The password crosses
-# as base64 so no character in it can terminate a quote.
-#
-# Each step is guarded by its own read. `ipa caacl-add-profile` and its
-# siblings are additive and refuse duplicates with a non-zero exit, so the
-# guards are what make the whole session idempotent rather than the commands.
 - name: profile | Ensure the profile, principal and access rule exist
   changed_when: "'changed=1' in _reg_ipa_sub_ca_profile_result['stdout']"
   delegate_to: "{{ ipa_sub_ca_ipa_host }}"

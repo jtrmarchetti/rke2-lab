@@ -1,24 +1,4 @@
 ---
-# Attaches the cluster to the repository gitops_source writes.
-#
-# This is the half of `flux bootstrap` that is worth keeping. The CLI does two
-# things: it commits Flux's own manifests into the repository, and it installs
-# them into the cluster along with the credential that lets Flux read the
-# repository back. The first is now gitops_source's job — the manifests are
-# rendered from the template tree like everything else — so what remains is the
-# second, and it is done here with kubectl.
-#
-# Dropping the CLI from the path buys two things. The content of
-# clusters/dev-lo/flux-system stops depending on which Flux CLI version
-# happened to be installed on the controller, and there is no longer one
-# directory in the repository that Ansible does not own — which was the whole
-# complaint that started this change.
-#
-# It runs once per rebuild, and is safe to re-run: applying the components and
-# the sync objects again is exactly what Flux is already doing to itself from
-# Git.
-#
-# See plan/PHASE6_IMPLEMENTATION.md.
 
 - name: main | Assert the inputs this role cannot invent are present
   when: (gitops_bootstrap_enabled | bool)
@@ -30,9 +10,6 @@
       mint an admin token there.
     quiet: true
 
-# The two files come from the working clone rather than from this role, so what
-# is installed is what was pushed. A missing clone means gitops_source has not
-# run, and saying that here is better than a kubectl error about a path.
 - name: main | Check the rendered tree is present
   when: (gitops_bootstrap_enabled | bool)
   failed_when: not _reg_gitops_bootstrap_inputs['stat']['exists']
@@ -51,16 +28,10 @@
 - name: main | Install Flux and point it at the repository
   when:
     - (gitops_bootstrap_enabled | bool)
-    # Same gate the other GitLab-facing roles use: everything below either
-    # reads a credential or writes to the cluster.
+
     - not ansible_check_mode
   block:
-    # The admin credential is shared with rke2_publish and gitops_source:
-    # one token, recorded on the GitLab host, reused while it authenticates.
-    # This role runs on the controller, so the file work and the mint are
-    # delegated to the GitLab host. When gitops_source has run earlier in the
-    # same playbook, the token is already recorded and this costs a stat, a
-    # slurp and a GET.
+
     - name: main | Ensure the shared GitLab admin token
       ansible.builtin.include_role:
         name: gitlab_admin_token
@@ -71,8 +42,6 @@
             gitlab_admin_token_file: "{{ gitops_bootstrap_admin_token_file }}"
             gitlab_admin_token_no_log: "{{ gitops_bootstrap_no_log }}"
 
-    # The role wrote the record file on the GitLab host, which this role
-    # cannot see; the slurp is the handoff.
     - name: main | Read the recorded admin token from the GitLab host
       delegate_to: "{{ gitops_bootstrap_gitlab_host }}"
       no_log: "{{ gitops_bootstrap_no_log | bool }}"
@@ -85,8 +54,3 @@
 
     - name: main | Install the Flux components and the sync objects
       ansible.builtin.include_tasks: install.yml
-
-# No `always` revoke: the credential is the shared one the gitlab_admin_token
-# role recorded on the GitLab host, and it outlives this run on purpose. Its
-# one-day expiry is what bounds a leaked copy of the record file, and the
-# next run of any including role proves the token or mints a replacement.

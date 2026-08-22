@@ -2,22 +2,12 @@ from .vm_factory import VmNicSpec, VmSpec
 
 
 def build_vm_specs(external_bridge: str, internal_bridge: str) -> dict[str, VmSpec]:
-    # vm_id values are reserved for deterministic addressing and easy state tracking.
     return {
         "repo01": VmSpec(
             key="repo01",
             phase=1,
             hostname="repo01.dev.lo",
             vm_id=2001,
-            # GitLab (Phase 3) is the binding constraint on this host, not the
-            # Phase 1 services. GitLab's own requirements call for far more;
-            # 8 GiB was the smallest size that ran it alongside Apache,
-            # apt-cacher-ng, dnsmasq, and the tunnel without swapping, and the
-            # memory-constrained omnibus tuning is applied on top. 10 GiB is
-            # that floor plus the 2 GiB uplift applied across every host.
-            #
-            # This host is created at this size in Phase 1. Phase 3 resized it
-            # once, historically; it does not resize it on a rebuild.
             cpu_cores=4,
             cpu_sockets=1,
             memory_mb=10240,

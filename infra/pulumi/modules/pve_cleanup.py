@@ -67,16 +67,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CleanupSettings:
-    endpoint: str  # https://host:8006
-    username: str  # e.g. root@pam
+    endpoint: str
+    username: str
     password: str
     node_name: str
     datastore_ids: tuple[str, ...]
     insecure: bool = True
-    # Optional fallback: a local file holding the PVE host's root SSH password
-    # (== the PAM password for root@pam). Used when the provider credentials
-    # have drifted from the live host (401 on the ticket flow) but the host
-    # password file is current. Never used for the provider itself.
     fallback_password_file: str | None = None
 
 
@@ -186,7 +182,6 @@ class PveClient:
         )
         if status != 200:
             raise RuntimeError(f"Failed to list VMs on node: HTTP {status}: {payload}")
-        # PVE >= 9 wraps the list in {"data": [...]}; older versions return a bare list.
         entries = payload.get("data", payload) if isinstance(payload, dict) else payload
         return {v["vmid"] for v in entries if isinstance(v, dict) and "vmid" in v}
 
@@ -220,7 +215,7 @@ class PveClient:
         if not upid:
             return "no task UPID returned"
         outcome = self.wait_task(ticket, upid)
-        return outcome  # '' on OK, otherwise the exit-status text
+        return outcome
 
     def wait_task(self, ticket: str, upid: str) -> str:
         for _ in range(60):
@@ -249,13 +244,10 @@ def find_orphans(client: PveClient, ticket: str) -> list[tuple[str, str]]:
         try:
             content = client.node_content(ticket, datastore)
         except RuntimeError:
-            # Datastore absent on this PVE build/version: nothing to clean up.
             continue
         for entry in content:
             vmid = entry.get("vmid")
             if vmid is None:
-                # Volume without an owner record can still be a per-VM volume;
-                # fall back to parsing vm-<id>-<name>.
                 volume = entry.get("volid", "").split(":", 1)[-1]
                 if not volume.startswith("vm-") or volume == "vm-":
                     continue
@@ -292,14 +284,10 @@ def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: 
     import time; if pexpect is not installed an ImportError propagates to
     the caller, which leaves the API error as the surfaced result.
     """
-    import pexpect  # lazy: keeps the module stdlib-only at import time
+    import pexpect
 
     password = _read_fallback_password(settings)
     host = client.ssh_host
-    # pvesm free takes the full storage volid (maps to the correct LVM
-    # backend; refuses in-use volumes). The remote command is passed to ssh
-    # as argv directly (no local shell), so quoting is exact; the marker
-    # line captures the remote exit status.
     cmd = f"pvesm free {shlex.quote(label)} 2>&1; echo {_SSH_EXIT_MARKER}$?"
     remote = f"bash -lc {shlex.quote(cmd)}"
     child = pexpect.spawn(
@@ -312,19 +300,18 @@ def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: 
     try:
         idx = child.expect(["assword:", pexpect.TIMEOUT, pexpect.EOF])
         output_parts.append(child.before or "")
-        if idx == 0:  # password prompt
+        if idx == 0:
             child.sendline(password)
             idx = child.expect([pexpect.TIMEOUT, pexpect.EOF])
             output_parts.append(child.before or "")
             timed_out = idx == 0
         else:
-            timed_out = idx == 1  # TIMEOUT before any prompt / EOF
+            timed_out = idx == 1
     except pexpect.TIMEOUT:
         timed_out = True
     finally:
         child.close()
 
-    # Redact the password from anything the pty ever echoed.
     out = "\n".join(output_parts).replace(password, "<redacted>")
     if timed_out:
         tail = " ".join(out.split())[-400:]
@@ -358,7 +345,7 @@ def clean_orphans(settings: CleanupSettings, apply: bool = False) -> list[str]:
     if not orphans:
         return lines
 
-    api_errors: dict[str, str] = {}  # label -> API error ('' means removed)
+    api_errors: dict[str, str] = {}
     if apply:
         for datastore, volume in orphans:
             label = f"{datastore}:{volume}"

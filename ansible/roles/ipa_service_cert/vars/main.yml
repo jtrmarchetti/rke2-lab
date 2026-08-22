@@ -1,13 +1,8 @@
 ---
-# Packages needed to generate a key and CSR locally. Deliberately not the
-# FreeIPA client: this host is not enrolled, and openssl is all a CSR needs.
+
 _var_ipa_service_cert_packages:
   - openssl
 
-# Per-name paths. These resolve against the loop variable of tasks/issue.yml,
-# which works because Ansible templates variables at use time rather than at
-# definition time, and keeps the path layout in one place instead of repeated
-# across every task that touches a file.
 _var_ipa_service_cert_crt: >-
   {{ ipa_service_cert_dir }}/{{ _item_ipa_service_cert_entry['name'] }}.crt
 _var_ipa_service_cert_key: >-
@@ -18,9 +13,6 @@ _var_ipa_service_cert_principal: >-
   {{ _item_ipa_service_cert_entry['service'] | default('HTTP', true) }}/{{
   _item_ipa_service_cert_entry['name'] }}
 
-# Scratch paths inside the signing container. /tmp is the tmpfs the read-only
-# FreeIPA container can write. Public material, removed once the certificate
-# has been returned.
 _var_ipa_service_cert_remote_csr: >-
   /tmp/{{ _item_ipa_service_cert_entry['name'] }}.csr
 _var_ipa_service_cert_remote_crt: >-

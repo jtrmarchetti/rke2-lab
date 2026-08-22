@@ -1,61 +1,7 @@
 ---
-# Artifact manifest for the automation controller — every download this host
-# makes to become able to build the environment.
-#
-# plan/OVERVIEW.md: "Every artifact is documented, including the controller's
-# own dependencies. The manifest is what makes the environment rebuildable, so
-# it must cover the machine that does the rebuilding [...] A manifest that
-# assumes a working controller cannot recover from losing one."
-#
-# That rule had a manifest for the machines being built —
-# group_vars/repo/artifacts.yml, seventy-odd entries — and nothing for the
-# machine building them. The controller's downloads were pinned, which was
-# never the gap; they were pinned in five different places, so the only way to answer "what does this host pull from the
-# internet" was to read every role. plan/CONTROLLER.md's dependency table was
-# the answer, and it is prose that a human maintains beside the thing it
-# describes, which is the definition of a manifest that drifts.
-#
-# This file is the source, not a record. The variables below it in main.yml
-# read from here, so a version change is one edit in one place and CONTROLLER.md
-# is free to be what it says it is: a record.
-#
-# A dict rather than the list group_vars/repo/artifacts.yml uses, and the
-# difference is what consumes them. That one is iterated by artifact_stage,
-# which stages every entry in turn. This one is looked up by name from three
-# unrelated roles, and a list would make every reference a selectattr.
-#
-# Entry schema
-#
-#   version     What is pinned. Changing it means changing url too.
-#   url         Where it comes from. `null` for an entry pinned elsewhere.
-#               The pin and the TLS transport are the integrity control; there
-#               is no recorded-checksum step in this file any more.
-#   source      'upstream'  — from the internet. Legitimate here and nowhere
-#                             else in the environment: this host sits outside
-#                             the Proxmox environment, and the artifact rule
-#                             constrains internal nodes.
-#               'repo01'    — staged on the artifact host as a bootstrap
-#                             artifact, because it is in the rebuild path and a
-#                             rebuild must not depend on this host reaching
-#                             GitHub. See group_vars/repo/artifacts.yml.
-#               'cluster'   — taken from a running node, never downloaded.
-#   consumed_by The role that installs it.
-#   pinned_in   Set instead of url when the pin lives in a file some
-#               other tool reads. The entry is then an index row: it exists so
-#               that this file answers "what does the controller download"
-#               completely, and it points at the file that cannot drift from
-#               the thing it pins.
-inventory_controller_artifacts:
-  # --- installed by Ansible, pinned here -----------------------------------
 
-  # The IaC half of the rebuild path: every VM in the environment is created by
-  # it, so a controller without it can configure the lab but cannot create it.
-  # Upstream rather than staged, and that is not a hole in the artifact rule —
-  # repo01 is a VM this tool creates, so a Pulumi that came from repo01 could
-  # never build the host serving it.
-  #
-  # Pinned to the release URL over TLS; there is no recorded checksum any
-  # more.
+inventory_controller_artifacts:
+
   pulumi-cli:
     version: 3.256.0
     url: >-
@@ -63,9 +9,6 @@ inventory_controller_artifacts:
     source: upstream
     consumed_by: controller_runtime
 
-  # A terminal UI for the cluster. Upstream, because it is the one tool here
-  # that the rebuild path does not run through: if it is missing, someone types
-  # kubectl instead. The pin is the release URL over TLS.
   k9s:
     version: v0.51.0
     url: >-
@@ -73,33 +16,18 @@ inventory_controller_artifacts:
     source: upstream
     consumed_by: kube_cli_controller
 
-  # From repo01, not GitHub. It is in the rebuild path and a rebuild must not
-  # depend on this host reaching the internet — the same reasoning as kubeseal
-  # below, and the opposite of k9s above.
-  #
-  # v2.9 is the first Flux line whose compatibility matrix lists Kubernetes
-  # v1.35 (">= 1.35.0"); this cluster runs v1.35.7.
   flux-cli:
     version: 2.9.4
     url: http://192.168.2.99/flux/flux_2.9.4_linux_amd64.tar.gz
     source: repo01
     consumed_by: kube_cli_controller
 
-  # The only way to produce a SealedSecret, which puts it in the rebuild path
-  # and in the vault's recovery path. The version tracks the controller
-  # deployed in cluster-state: the two tolerate skew, but keeping them equal is
-  # one number to check rather than a compatibility question to answer.
   kubeseal:
     version: 0.38.4
     url: http://192.168.2.99/sealed-secrets/kubeseal-0.38.4-linux-amd64.tar.gz
     source: repo01
     consumed_by: kube_cli_controller
 
-  # --- index rows: pinned in a file another tool reads ----------------------
-
-  # Not downloaded at all, and the entry exists to say so. Copied from a
-  # cluster node, so it is exactly the version the cluster runs by
-  # construction, with no way for the two to drift.
   kubectl:
     version: v1.35.7+rke2r1
     url: null
@@ -107,8 +35,6 @@ inventory_controller_artifacts:
     consumed_by: kube_cli_controller
     pinned_in: the cluster's own rke2_node version
 
-  # The disk every VM in the lab is imported from. Pulumi fetches it to the
-  # Proxmox node rather than here, which is why the pin lives in the stack.
   ubuntu-cloud-image:
     version: 24.04 release-20260814
     url: null
@@ -116,10 +42,6 @@ inventory_controller_artifacts:
     consumed_by: pulumi
     pinned_in: infra/pulumi/__main__.py
 
-  # Ansible, ansible-lint, and their dependencies, into ~/.venvs/rke2lab. Both
-  # bootstrap/controller-bootstrap.sh and controller_runtime install from this
-  # one file: the script creates the environment on a bare host, the role
-  # reconciles it on every run afterwards.
   python-automation:
     version: ansible 13.4.0, ansible-core 2.20.3
     url: null
@@ -127,10 +49,6 @@ inventory_controller_artifacts:
     consumed_by: controller_runtime
     pinned_in: bootstrap/requirements-controller.txt
 
-  # The Pulumi SDK and the Proxmox provider, into infra/pulumi/.venv. Separate
-  # from the automation environment because the two pin different things for
-  # different reasons, and pinning them together would mean an Ansible upgrade
-  # forcing a provider upgrade.
   python-pulumi:
     version: pulumi 3.256.0, pulumi_proxmoxve 8.3.0
     url: null
@@ -138,10 +56,6 @@ inventory_controller_artifacts:
     consumed_by: controller_runtime
     pinned_in: infra/pulumi/requirements.txt
 
-  # Pinned with == rather than >=. A floor records what was tested against
-  # nothing in particular: the version a rebuild installs is then whichever
-  # Galaxy published most recently, which is the one version nobody has ever
-  # run this repository against.
   ansible-collections:
     version: see the file
     url: null
@@ -149,10 +63,6 @@ inventory_controller_artifacts:
     consumed_by: controller_runtime
     pinned_in: ansible/requirements.yml
 
-  # 115 MB, downloaded by the Pulumi CLI into its own plugin cache on first
-  # use. Listed because it is a real download this host makes and nothing else
-  # records it; unpinnable here because the CLI resolves it from the SDK
-  # version in infra/pulumi/requirements.txt and offers no other path.
   pulumi-proxmoxve-plugin:
     version: 8.3.0
     url: null
@@ -160,12 +70,6 @@ inventory_controller_artifacts:
     consumed_by: pulumi
     pinned_in: infra/pulumi/requirements.txt
 
-  # Ubuntu packages, from the distribution archive. The one category
-  # plan/OVERVIEW.md exempts from staging, and still automated: the bootstrap
-  # script installs the minimum set on a bare host and controller_runtime
-  # reconciles the full set on every run. Unversioned deliberately — these are
-  # the distribution's, and pinning them would mean holding back security
-  # updates on the host that holds every secret in the environment.
   apt-packages:
     version: distribution
     url: null
@@ -173,9 +77,6 @@ inventory_controller_artifacts:
     consumed_by: controller_runtime
     pinned_in: roles/controller_runtime/defaults/main.yml
 
-  # dnsmasq, which resolves dev.lo here and everything else upstream. Owned by
-  # split_dns rather than controller_runtime: two roles installing one package
-  # is how a conflict starts.
   dnsmasq:
     version: distribution
     url: null
@@ -183,9 +84,6 @@ inventory_controller_artifacts:
     consumed_by: split_dns
     pinned_in: roles/split_dns/vars/main.yml
 
-  # The tunnel to repo01. Installed by controller_tunnel, which is what makes
-  # `wg` load-bearing, and again by controller_runtime so a host built some
-  # other way is corrected.
   wireguard-tools:
     version: distribution
     url: null

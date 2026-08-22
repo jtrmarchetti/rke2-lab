@@ -1,17 +1,4 @@
 ---
-# Applies the retention model from plan/OVERVIEW.md to what this role just
-# published: a transit artifact's local copy is dead weight once GitLab holds
-# it, and keeping it is what filled repo01's OS disk.
-#
-# The marker is written first and the file deleted second. If the run dies
-# between the two, the next run finds a marker and a file, skips the download,
-# and deletes the file — which is the same end state. The reverse order could
-# delete the file and lose the record that it was ever published, which would
-# re-download it on the next run.
-#
-# Presence is established from the destination, not from the disk. Every caller
-# of this file has already read back what GitLab holds; that read is the
-# authority, and the marker is only its local cache.
 
 - name: retention | Select the transit artifacts confirmed present in GitLab
   ansible.builtin.set_fact:

@@ -1,20 +1,14 @@
 ---
 _var_gitlab_admin_token_api: "{{ gitlab_admin_token_url }}/api/v4"
 
-# The recorded credential, as parsed. Only valid after the slurp has run, so
-# resolve lazily; the decision in tasks/main.yml is what gates use of it.
+_var_gitlab_admin_token_root_password: >-
+  {{ gitlab_admin_token_root_password
+     if (gitlab_admin_token_root_password | default('') | length) > 0
+     else lookup('env', 'GITLAB_ROOT_PASSWORD') }}
+
 _var_gitlab_admin_token_recorded: >-
   {{ _reg_gitlab_admin_token_recorded['content'] | b64decode | from_yaml }}
 
-# The one GitLab operation with no REST equivalent: creating a personal access
-# token for yourself requires a token you do not have yet. The snippet GitLab
-# documents is a gitlab-rails runner call, scoped to `api`, expired in a day.
-# Runs inside the gitlab container on the GitLab host, so it works even while
-# the API is wedged — which is the state this role exists to repair.
-#
-# The mint's name carries no run identity: the file this role writes is the
-# recording, and a minted token that is superseded before its day is out is
-# simply left to expire.
 _var_gitlab_admin_token_pat_script: |
   docker exec -i gitlab gitlab-rails runner - <<'RUBY'
   u = User.find_by_username("root")
@@ -24,3 +18,75 @@ _var_gitlab_admin_token_pat_script: |
     expires_at: 1.day.from_now)
   puts "#{t.id} #{t.token}"
   RUBY
+
+_var_gitlab_admin_token_web_script: |
+  python3 - <<'PY'
+  import http.cookiejar
+  import json
+  import os
+  import re
+  import ssl
+  import time
+  import urllib.parse
+  import urllib.request
+
+  base = os.environ["GITLAB_ADMIN_TOKEN_BASE_URL"].rstrip("/")
+  name = "gitlab-admin-" + str(int(time.time()))
+  password = os.environ.get("GITLAB_ADMIN_TOKEN_ROOT_PASSWORD")
+  if not password:
+      raise SystemExit("no GitLab root password for the mint")
+  expires = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 86400))
+  ctx = ssl.create_default_context()
+  opener = urllib.request.build_opener(
+      urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+      urllib.request.HTTPSHandler(context=ctx))
+
+
+  def get(path):
+      with opener.open(base + path, timeout=60) as response:
+          return response.read().decode()
+
+
+  def post_form(path, fields):
+      body = urllib.parse.urlencode(fields).encode()
+      request = urllib.request.Request(
+          base + path, data=body,
+          headers={"Content-Type":
+                   "application/x-www-form-urlencoded"})
+      with opener.open(request, timeout=60) as response:
+          return response.read().decode()
+
+
+  def api_get(path, token):
+      request = urllib.request.Request(
+          base + path,
+          headers={"PRIVATE-TOKEN": token,
+                   "Accept": "application/json"})
+      with urllib.request.urlopen(request, context=ctx,
+                                  timeout=60) as response:
+          return json.load(response)
+
+
+  sign_in = get("/users/sign_in")
+  csrf = re.search(r'name="authenticity_token" value="([^"]+)"',
+                   sign_in).group(1)
+  post_form("/users/sign_in", {
+      "authenticity_token": csrf,
+      "user[login]": "root",
+      "user[password]": password,
+  })
+  listing = get("/-/user_settings/personal_access_tokens")
+  meta = re.search(r'<meta name="csrf-token" content="([^"]+)"',
+                   listing).group(1)
+  created = json.loads(post_form("/-/user_settings/personal_access_tokens",
+                                 {"authenticity_token": meta,
+                                  "name": name,
+                                  "scopes[]": "api",
+                                  "expires_at": expires}))
+  token = created["token"]
+  token_id = [entry["id"]
+              for entry in api_get(
+                  "/api/v4/personal_access_tokens?per_page=100", token)
+              if entry["name"] == name][-1]
+  print(token_id, token)
+  PY

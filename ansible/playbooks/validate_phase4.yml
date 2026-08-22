@@ -1,11 +1,4 @@
 ---
-# Phase 4 validation. Mirrors the Test section of
-# plan/PHASE4_IMPLEMENTATION.md: the cluster forms, the air gap holds, and the
-# artifact path everything below Phase 4 depends on is the one actually in use.
-#
-# Every check here is a transaction. Nothing asserts that a service is active or
-# that a file is present, because both are true of a control plane that cannot
-# pull an image and will fail in Phase 5 instead.
 
 - name: Validate the RKE2 control plane
   hosts: kubecp
@@ -16,7 +9,6 @@
       {{ inventory_rke2_server_data_dir }}/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
   tasks:
-    # --- The cluster ------------------------------------------------------
 
     - name: validate_phase4 | Validate the data volume is mounted
       vars:
@@ -31,10 +23,6 @@
           and the containerd image store would be filling the OS disk.
         quiet: true
 
-    # `kubectl wait`, not a jsonpath Ready condition: the command module applies
-    # shell-like quoting to its argument and strips the inner double quotes out
-    # of {.status.conditions[?(@.type=="Ready")].status}, leaving kubectl a
-    # malformed filter that fails whatever the cluster is doing.
     - name: validate_phase4 | Validate every control plane node is Ready
       changed_when: false
       run_once: true
@@ -44,11 +32,6 @@
           {{ _validate_kubectl }} wait --for=condition=Ready
           nodes --all --timeout=30s
 
-    # `-o name` rather than a jsonpath range. The command module splits its
-    # argument on whitespace with shell-like quoting, so a jsonpath containing
-    # either a space or a double quote — {range .items[*]}... contains both —
-    # arrives at kubectl as several mangled arguments and is interpreted as a
-    # resource name.
     - name: validate_phase4 | Read the registered node names
       changed_when: false
       run_once: true
@@ -56,12 +39,6 @@
       ansible.builtin.command:
         cmd: "{{ _validate_kubectl }} get nodes -o name"
 
-    # Membership, not a total. This read `== groups['kubecp'] | length` while
-    # the control plane was the whole cluster, which stopped being true the
-    # moment Phase 5 joined workers — the check then failed on a cluster that
-    # was entirely healthy, and just larger. A phase's validation has to keep
-    # passing as later phases add to what it validates, so it asserts that every
-    # server it owns is present and says nothing about nodes it does not own.
     - name: validate_phase4 | Validate every control plane node is registered
       run_once: true
       vars:
@@ -103,12 +80,6 @@
           answers reads and silently refuses writes.
         quiet: true
 
-    # --- The air gap ------------------------------------------------------
-    #
-    # The point of Phase 4. If these pass for the wrong reason — because the
-    # images were on local disk rather than pulled from GitLab — Phase 5 is the
-    # first place anyone finds out.
-
     - name: validate_phase4 | Validate no air-gap image tarball was seeded on the node
       register: _reg_validate_seeded
       ansible.builtin.find:
@@ -126,15 +97,6 @@
           registry path would pass this phase and fail in a later one.
         quiet: true
 
-    # A live pull, not log archaeology. Searching the journal for the mirror
-    # host cannot work and the attempt was a misreading of the design: the
-    # rewrite happens inside containerd and images keep their upstream names, so
-    # a node that pulled every image from GitLab logs docker.io throughout.
-    #
-    # Pulling by the upstream name is the whole point. It succeeds only if the
-    # rewrite, the deploy token, and the CA trust are all correct, and — given
-    # the negative test below proves there is no route to the real docker.io —
-    # it can only have been served by the mirror.
     - name: validate_phase4 | Pull an image by its upstream name through the mirror
       changed_when: false
       register: _reg_validate_pull
@@ -154,8 +116,6 @@
           token, or the CA trust — check /etc/rancher/rke2/registries.yaml.
         quiet: true
 
-    # A negative test, and the one that proves the design rather than the
-    # configuration. This must fail.
     - name: validate_phase4 | Attempt a direct upstream fetch, which must fail
       changed_when: false
       failed_when: false
@@ -173,8 +133,6 @@
           This node reached registry-1.docker.io. An internal node with a route
           to the internet breaks the premise every phase is built on.
         quiet: true
-
-    # --- The virtual address ---------------------------------------------
 
     - name: validate_phase4 | Validate the API virtual address answers
       run_once: true
@@ -207,8 +165,6 @@
           none means kube-vip is not running anywhere.
         quiet: true
 
-# The controller's own path to the cluster, over the tunnel and through the
-# virtual address, using the certificate the tls-san list covers.
 - name: Validate the controller can reach the cluster
   hosts: controller
   gather_facts: false

@@ -1,9 +1,4 @@
 ---
-# Generates the intermediate's key here and has FreeIPA sign it.
-#
-# The key is written with mode 0600 into the controller's own configuration
-# directory and never leaves this host in plaintext. What crosses to the
-# identity host is a CSR, and what comes back is a certificate — both public.
 
 - name: issue | Check whether the intermediate already exists
   register: _reg_ipa_sub_ca_existing
@@ -18,18 +13,6 @@
     valid_at:
       renewal: "+{{ ipa_sub_ca_renew_before_days }}d"
 
-# Reissue when there is no certificate or when it expires inside the renewal
-# window. Presence alone is not enough: a CA certificate that is only ever
-# checked for existence expires silently, and takes every certificate it signed
-# with it.
-#
-# Expiry alone is not the whole of "must be issued". The domain root this CA
-# is signed by is not immortal: a rebuild of the identity host — or a root
-# rollover — issues a new root with the same subject, and every intermediate
-# the old root signed is still unexpired but chains to nothing anyone trusts.
-# Expiry checks the clock; this checks the chain. It can only run where the
-# domain CA itself is present on this host, which is why it is optional:
-# without it the gate falls back to expiry alone.
 - name: issue | Stat the domain CA against which the chain is verified
   when: (ipa_sub_ca_domain_ca_file | length) > 0
   register: _reg_ipa_sub_ca_domain_ca
@@ -76,9 +59,6 @@
         type: RSA
         mode: "0600"
 
-    # No subject alternative name. A CA certificate is not presented for a
-    # hostname, and FreeIPA validates every SAN against a principal — a SAN
-    # here would add a constraint that buys nothing.
     - name: issue | Ensure the signing request is present
       community.crypto.openssl_csr:
         path: "{{ _var_ipa_sub_ca_csr }}"
@@ -100,9 +80,6 @@
       ansible.builtin.slurp:
         src: "{{ _var_ipa_sub_ca_csr }}"
 
-    # --chain returns the issuing CA with the certificate, which is what makes
-    # the result a usable chain rather than a certificate whose issuer the
-    # cluster would have to be told about separately.
     - name: issue | Sign the request against the domain certificate authority
       changed_when: true
       delegate_to: "{{ ipa_sub_ca_ipa_host }}"
@@ -131,11 +108,6 @@
         dest: "{{ _var_ipa_sub_ca_crt }}"
         mode: "0644"
 
-# Proves what was issued rather than trusting that the profile did its job. A
-# profile whose basic constraints did not apply returns a perfectly valid leaf
-# certificate, and cert-manager would accept it as an issuer and then fail on
-# every certificate it tried to sign — far from here, and looking like a
-# cert-manager fault.
 - name: issue | Read the issued intermediate
   register: _reg_ipa_sub_ca_issued
   community.crypto.x509_certificate_info:
@@ -147,8 +119,7 @@
       - _reg_ipa_sub_ca_issued['basic_constraints'] is defined
       - "'CA:TRUE' in _reg_ipa_sub_ca_issued['basic_constraints']"
       - "'pathlen:0' in _reg_ipa_sub_ca_issued['basic_constraints']"
-      # The long names openssl prints, which is what this module reports —
-      # not the keyCertSign/cRLSign spellings used in the CSR and the profile.
+
       - "'Certificate Sign' in (_reg_ipa_sub_ca_issued['key_usage'] | default([]))"
       - "'CRL Sign' in (_reg_ipa_sub_ca_issued['key_usage'] | default([]))"
     fail_msg: >-

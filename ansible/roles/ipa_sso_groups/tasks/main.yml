@@ -1,26 +1,4 @@
 ---
-# The authorisation half of single sign-on, created where identity already
-# lives.
-#
-# Keycloak federates FreeIPA read-only, so it can tell you who someone is and
-# nothing about what they may do. That second question has to be answered
-# somewhere, and the choice is between answering it in the domain — as group
-# membership, next to the accounts — or in Keycloak, as realm state that exists
-# only in Keycloak's database. This role takes the first, for the same reason
-# keycloak_ldap made the provider READ_ONLY: the domain is the authority, and a
-# second store that can disagree with it is a second store that eventually
-# does.
-#
-# So the model is: two groups per application, `<app>-admins` and
-# `<app>-users`, held in FreeIPA. Keycloak imports them through the group
-# mapper, keycloak_clients maps each to a client role, and every service reads
-# the role out of the token. Granting someone access to Grafana is
-# `ipa group-add-member grafana-users --users alice` and nothing else — no
-# Keycloak console, no per-service user list.
-#
-# Groups only. This role never adds a member: who belongs in `grafana-admins`
-# is a decision about people, and automation that asserted it would fight with
-# every membership change made in the domain.
 
 - name: main | Assert the required inputs are present
   when: (ipa_sso_groups_enabled | bool)
@@ -39,23 +17,6 @@
       plan/SECRETS.md.
     quiet: true
 
-# One invocation per application rather than one per group, so the pair is
-# created or not created together — a directory holding `grafana-admins` and
-# not `grafana-users` is a state no reader would expect and Keycloak would
-# report as a group mapping pointing at nothing.
-#
-# shell, not command: this is a kinit followed by conditional creations, which
-# is control flow inside the container and has no module equivalent. The
-# `changed=N` marker is what makes it honest about idempotence — `ipa
-# group-add` fails on an existing group, so the guard is the check rather than
-# the error being swallowed. Same shape as ipa_sub_ca's profile task.
-#
-# The password crosses on stdin, base64 encoded so that a value containing a
-# quote cannot end the shell string. No process list on core01 ever holds it.
-#
-# noqa on the pipe rule, and the pipe is genuinely guarded: the only pipeline
-# here is inside the `bash -c` script, where `set -o pipefail` below covers it.
-# ansible-lint reads the outer command string, which is a single docker exec.
 - name: main | Ensure each application has an administrator and a user group # noqa: risky-shell-pipe
   when: (ipa_sso_groups_enabled | bool)
   changed_when: "'changed=0' not in _reg_ipa_sso_groups_result['stdout']"
@@ -98,12 +59,6 @@
         echo "changed=${changed}"'
     stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
 
-# The administrator-only services, which get one group rather than a pair.
-# Separate from the loop above rather than folded into it, because that loop's
-# whole point is that a pair is created together: an application holding
-# `grafana-admins` and not `grafana-users` is a state no reader expects. There
-# is no pair to keep together here, and pretending there is would mean a task
-# that creates one group and reports on two.
 - name: main | Ensure each administrator-only service has an administrator group # noqa: risky-shell-pipe
   when:
     - (ipa_sso_groups_enabled | bool)
@@ -137,10 +92,6 @@
         echo "changed=${changed}"'
     stdin: "{{ ipa_sso_groups_admin_password | b64encode }}"
 
-# Read back rather than trusted, because the failure this catches is silent at
-# every other layer: a group that does not exist appears in Keycloak as an
-# absent group mapping, and in the service as a user who authenticates
-# successfully and is then refused, which reads as a broken client.
 - name: main | Read every group back from the directory # noqa: risky-shell-pipe
   when:
     - (ipa_sso_groups_enabled | bool)

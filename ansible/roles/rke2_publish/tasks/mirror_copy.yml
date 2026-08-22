@@ -1,42 +1,7 @@
 ---
-# Copies one image from its upstream registry into the GitLab mirror.
-#
-# Both source and destination are addressed by tag: the tag is what the
-# manifest pins, what a node asks for after the containerd rewrite has
-# turned an upstream name into a mirror path, and what charts that pin an
-# image address. There is no digest for the manifest to pin any more; the
-# pin is the tag, and the TLS-protected registries on both ends are the
-# integrity control.
 
-# `--all --preserve-digests`, and both are load-bearing for the same reason.
-#
-# The digest this manifest pins is an image *index* — the multi-platform object
-# a tag points at. By default skopeo copies only the platform it is running on,
-# so the destination ends up holding a single-platform manifest whose digest is
-# necessarily different. `--preserve-digests` on its own does not fix that; it
-# only refuses conversions of what is being copied.
-#
-# That difference is invisible until something references the image by digest,
-# which charts increasingly do: the Alloy chart pins its config-reloader as
-# `tag@sha256:...`, and the node then asks the mirror for a digest the mirror
-# does not have — a 404 for an image sitting right there under the tag.
-#
-# The cost is real: an index carries every architecture, so mirroring one is
-# several times the bytes of the one this cluster runs. That is the right
-# trade for an air-gapped mirror, where an image that cannot be addressed the
-# way its chart addresses it is not mirrored at all.
-#
-# The copy is by tag, and that is the weak point worth naming: an upstream
-# that moves the tag between runs can move what the mirror holds. Accepted
-# trade for a lab air gap; the tag is still the pin the whole build uses.
 - name: mirror_copy | Copy the image into the GitLab registry
-  # The skopeo --retry-times above re-attempts a failed *transfer*; it does not
-  # cover a transfer that aborts cleanly enough to end the whole invocation
-  # (observed 2026-08-21: an 89 MB keycloak blob hit "client disconnected /
-  # unexpected EOF" (registry status 499) on the flaky source leg, skopeo
-  # exited non-zero, and this task fataled a two-hour run). A task-level retry
-  # re-runs the copy; skopeo is idempotent, so a re-invocation reuses every
-  # blob the previous attempt already pushed and only fills the gap.
+
   changed_when: _reg_rke2_publish_mirror_result['rc'] == 0
   no_log: "{{ rke2_publish_no_log | bool }}"
   register: _reg_rke2_publish_mirror_result

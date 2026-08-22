@@ -1,20 +1,5 @@
 ---
-# Publishes one manifest image entry as a `docker load`-able tarball.
-#
-# Internal nodes have no registry to pull from until Phase 3, and no internet
-# route at all, so an image reaches them only as a file served by Apache.
-#
-# The tarball is exported under the manifest's tag: the consuming host loads
-# the tarball and then runs that exact tag, so a tarball built from a
-# differently tagged image would load under the wrong name and the consumer
-# would fall back to pulling from a registry it cannot reach.
-#
-# The pull is by tag, not digest: a tag can move upstream, so a re-run after
-# the upstream tag advanced keeps the already-pulled image. The marker
-# records the reference the tarball was built from, which is what makes a
-# manifest that repins the tag trigger a re-export. Legacy digest markers left
-# on disk by older versions are removed here and force exactly one re-export
-# so the tag marker is written; after that the entry is a no-op again.
+
 - name: image_publish | Stage one container image
   vars:
     _artifact_stage_tarball: >-
@@ -53,11 +38,6 @@
       ansible.builtin.slurp:
         src: "{{ _artifact_stage_tag_file }}"
 
-    # Re-export when the tarball is missing, when no marker records what it was
-    # built from, when a legacy digest marker is still on disk, or when the
-    # manifest repinned the tag. Otherwise this entry is already correctly
-    # published and every task below is skipped, which is what makes a second
-    # run report no change.
     - name: image_publish | Stage the image when it is missing or repinned
       when:
         - (_artifact_stage_needs_export | bool)
@@ -73,17 +53,13 @@
              or _artifact_stage_published_tag
                 != _item_artifact_stage_image['image'] }}
       block:
-        # Pulled by tag. The tag is what the consumer runs, and the marker
-        # below records exactly which reference the export was built from.
+
         - name: image_publish | Pull the image by its manifest tag
           register: _reg_artifact_stage_pull
           community.docker.docker_image_pull:
             name: "{{ _item_artifact_stage_image['image'] }}"
             pull: not_present
 
-        # Exported to scratch first, then moved into place. A partial export
-        # left under the document root would be served to an internal node as a
-        # complete artifact.
         - name: image_publish | Export the image to a tarball
           community.docker.docker_image_export:
             names:
@@ -105,8 +81,6 @@
             path: "{{ _artifact_stage_scratch }}"
             state: absent
 
-        # Written last, so an interrupted run leaves no marker and the next run
-        # re-exports rather than trusting a tarball it did not finish writing.
         - name: image_publish | Record the tag the tarball was built from
           ansible.builtin.copy:
             content: "{{ _item_artifact_stage_image['image'] }}\n"

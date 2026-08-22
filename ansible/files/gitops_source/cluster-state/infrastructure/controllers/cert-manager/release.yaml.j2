@@ -1,14 +1,9 @@
 {{ ansible_managed | comment }}
-# cert-manager v1.21.1.
-#
-# The version is from the vendor's support table, not from recency: 1.21
-# supports Kubernetes 1.33 to 1.36 and this cluster runs 1.35.7, while 1.20 —
-# which also covers 1.35 today — goes end of life at the release of 1.22.
-#
-# The chart keeps its upstream quay.io/jetstack image names. Nothing here is
-# air-gap-specific, because the rewrite in each node's registries.yaml resolves
-# those names to the GitLab mirror. That is the same property that let RKE2's
-# packaged charts and Flux's own manifests work unmodified.
+
+
+
+
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -36,19 +31,16 @@ spec:
     remediation:
       retries: 3
   upgrade:
-    # CreateReplace rather than Create: a chart upgrade that adds a field to a
-    # CRD is invisible to Create, and the first Certificate to use the new
-    # field then fails validation against a schema nobody updated.
+
+
     crds: CreateReplace
     remediation:
       retries: 3
   values:
     crds:
       enabled: true
-    # Requests, not just limits, and deliberately small. The three workers hold
-    # 30 GiB between them for every workload in 6b and 6c, and cert-manager is
-    # the least of them — it is idle except when a certificate is issued or
-    # renewed. See the sizing section of plan/PHASE6_IMPLEMENTATION.md.
+
+
     resources:
       requests:
         cpu: 10m

@@ -5,9 +5,6 @@
     name: "{{ split_dns_packages }}"
     state: present
 
-# Before dnsmasq starts, not after: both want port 53, and whichever holds it
-# first keeps it. Installing the package already tried to start dnsmasq, so this
-# ordering is what makes the restart below succeed.
 - name: main | Ensure systemd-resolved is not holding port 53
   when:
     - (split_dns_enabled | bool)
@@ -20,8 +17,6 @@
     enabled: false
     masked: true
 
-# follow: false replaces the stub-resolv.conf symlink itself rather than writing
-# through it to a file systemd-resolved owns.
 - name: main | Ensure the host resolves through dnsmasq
   when:
     - (split_dns_enabled | bool)
@@ -54,14 +49,9 @@
     state: started
     enabled: true
 
-# Handlers have not fired yet at this point in the role, and the checks below
-# must test the configuration this run just wrote.
 - name: main | Flush handlers so the checks below test the current configuration
   ansible.builtin.meta: flush_handlers
 
-# Resolution is the whole purpose of the role, and a daemon that is "active"
-# while answering nothing is the failure worth catching. Each configured zone is
-# checked through the local resolver, which is the path every consumer takes.
 - name: main | Verify each forwarded zone resolves through the local resolver
   when:
     - (split_dns_enabled | bool)

@@ -1,30 +1,16 @@
 ---
 kube_cli_node_enabled: true
 
-# Where RKE2 keeps the binaries it ships. Must equal rke2_node_data_dir: kubectl,
-# crictl and ctr all live under it, and that is the reason none of them are on
-# anybody's PATH by default.
 kube_cli_node_data_dir: /data1/rancher/rke2
 
-# Binaries linked into a directory that is already on PATH. Symlinks rather than
-# a PATH entry in a profile script, because a profile script is only read by a
-# login shell — `ansible ... -m shell`, `ssh host kubectl get nodes`, and a cron
-# job would all still fail. The link works everywhere.
 kube_cli_node_link_dir: /usr/local/bin
 kube_cli_node_binaries:
   - kubectl
   - crictl
   - ctr
 
-# The kubeconfig exported for interactive shells. Empty on a worker: an agent
-# has no kubeconfig, so pointing at one would produce a confident error message
-# on every command instead of no variable at all.
 kube_cli_node_kubeconfig: /etc/rancher/rke2/rke2.yaml
 
-# containerd's socket, so crictl needs no --runtime-endpoint. Without this file
-# crictl still works and prints a deprecation warning on every call while it
-# guesses, which is how the flag ended up in every runbook command.
 kube_cli_node_containerd_sock: unix:///run/k3s/containerd/containerd.sock
 
-# Convenience alias in interactive shells only.
 kube_cli_node_alias: k

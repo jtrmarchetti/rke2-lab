@@ -1,22 +1,8 @@
 ---
 gitlab_admin_token_enabled: true
 
-# Base URL of the GitLab instance. The three roles that need an admin
-# credential — rke2_publish, gitops_source, gitops_bootstrap — all pass their
-# own gitlab_url here, so nothing is configured twice.
-# gitlab_admin_token_url:
-# Inventory name of the host GitLab runs on. Absent means the including role
-# runs on that host itself (the rke2_publish case, which targets repo); the
-# gitops roles delegate, and pass their gitlab_host. The mint and the record
-# file both live on this host, so the name and the URL have to name the same
-# machine.
-# gitlab_admin_token_host:
-
-# Where the recorded credential lives. On the GitLab host, beside the deploy
-# tokens rke2_publish records, mode 0600. GitLab shows the token value exactly
-# once, at creation, so this file is the only copy of a live value.
 gitlab_admin_token_file: /data1/gitlab/admin-token.yml
 
-# Suppresses task output that would expose the token. Set false only when
-# debugging, for the same reason rke2_publish_no_log exists.
+gitlab_admin_token_root_password: ""
+
 gitlab_admin_token_no_log: true

@@ -17,14 +17,7 @@
     - (rke2_publish_enabled | bool)
     - not ansible_check_mode
   block:
-    # Every API call below needs a GitLab admin credential. One per run for
-    # the whole role set rather than one per role: the gitlab_admin_token
-    # role proves the token recorded on this host still authenticates and
-    # pays the gitlab-rails mint only when none is recorded, or the
-    # recorded one has outlived its day. A credential that outlives the run
-    # is the design now — bounded by the token's one-day expiry rather than
-    # by a revoke at the end of every role, which is what left the revoke
-    # loop on a failed run.
+
     - name: main | Ensure the GitLab admin token
       ansible.builtin.include_role:
         name: gitlab_admin_token
@@ -34,8 +27,6 @@
             gitlab_admin_token_file: "{{ rke2_publish_admin_token_file }}"
             gitlab_admin_token_no_log: "{{ rke2_publish_no_log }}"
 
-    # The role wrote it on this host; the slurp is the handoff, the same
-    # shape the gitops roles use against the deploy token file.
     - name: main | Read the recorded admin token
       no_log: "{{ rke2_publish_no_log | bool }}"
       register: _reg_rke2_publish_admin_token
@@ -62,9 +53,6 @@
     - name: main | Publish the generic packages
       ansible.builtin.include_tasks: packages.yml
 
-    # Last, and only after both publishing steps have returned. Retiring a
-    # local copy before its destination is confirmed would delete the only
-    # copy that exists.
     - name: main | Retire the local copies of published transit artifacts
       when: (rke2_publish_apply_retention | bool)
       ansible.builtin.include_tasks: retention.yml

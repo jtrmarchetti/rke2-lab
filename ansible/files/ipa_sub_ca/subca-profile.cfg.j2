@@ -1,27 +1,16 @@
 {{ ansible_managed | comment }}
-#
-# A Dogtag certificate profile that issues subordinate CA certificates.
-#
-# Derived from FreeIPA's own caIPAserviceCert, which is the profile every
-# service certificate in this domain is issued from, with four changes:
-#
-#   - Basic constraints (component 15) added, asserting CA:TRUE at path length
-#     zero. This is the change that makes the result a CA at all, and the path
-#     length is what stops it signing further CAs.
-#   - Key usage (component 6) changed from a TLS server's usages to a CA's:
-#     certificate signing and CRL signing on, key and data encipherment off.
-#   - Extended key usage (component 7) removed. Constraining a CA to TLS server
-#     and client authentication would constrain everything it signs.
-#   - The common-name-to-SAN copy (component 12) and the user-supplied SAN
-#     extension (component 11) removed. A CA certificate is not presented for a
-#     hostname, so a subject alternative name on it means nothing.
-#
-# The validity range is this role's, not FreeIPA's default 731 days.
-#
-# Everything else is byte-for-byte the shipped profile, deliberately: the AIA
-# and CRL distribution points below are what let a client fetch this domain's
-# OCSP responder and revocation list, and inventing them here would produce
-# certificates that validate differently from every other one in the domain.
+
+
+
+
+
+
+
+
+
+
+
+
 profileId={{ ipa_sub_ca_profile_id }}
 classId=caEnrollImpl
 desc={{ ipa_sub_ca_profile_description }}

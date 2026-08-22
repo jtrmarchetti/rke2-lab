@@ -1,12 +1,5 @@
 ---
-# The bootstrap step, and the reason the CA is published on Apache over plain
-# HTTP: every other path to it already requires the trust it is delivering.
-#
-# Installed in two places on purpose. containerd is told about the CA explicitly
-# through registries.yaml, but a registry pull authenticates against
-# https://gitlab.dev.lo/jwt/auth — a different host, validated against the
-# system trust store. Phase 3 learned this when `docker login` succeeded and
-# `docker push` failed against the token endpoint.
+
 - name: trust | Fetch the domain CA from the artifact host
   register: _reg_rke2_node_ca
   notify: Update the system trust store
@@ -18,9 +11,6 @@
     mode: "0644"
     timeout: "{{ rke2_node_download_timeout }}"
 
-# Flushed here rather than at the end of the play. Everything after this task
-# talks to GitLab over TLS, so the trust store has to be rebuilt before the next
-# task runs and not whenever the play happens to end.
 - name: trust | Rebuild the trust store before anything uses it
   ansible.builtin.meta: flush_handlers
 

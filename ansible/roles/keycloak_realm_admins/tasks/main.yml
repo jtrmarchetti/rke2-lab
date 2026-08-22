@@ -1,52 +1,4 @@
 ---
-# Administration of the application realm, granted from the directory.
-#
-# Keycloak's local `admin` is the account that works when everything else does
-# not, and it is the wrong account for ordinary work: it is one shared
-# password, it names nobody in an audit log, and every person who has to use it
-# is another person who knows it. What everyday administration should look like
-# here is what everyday access to every other service already looks like —
-# `ipa group-add-member keycloak-admins --users alice`, and nothing in a
-# console.
-#
-# That is what this role is. Members of the FreeIPA group `keycloak-admins`
-# hold `realm-admin` on the application realm's `realm-management` client, and
-# sign in to the admin console with their own domain credentials at
-#
-#     https://<keycloak>/admin/<realm>/console
-#
-# — which is a different URL from the one the local administrator uses, and the
-# most common surprise here: signing in to `/admin/master/console` with a
-# domain account fails with "no realm access", correctly, because the account
-# has none in master.
-#
-# ## Two shapes of grant, because there are two realms
-#
-# In the application realm the roles that matter belong to the
-# `realm-management` client, so the grant is a client role mapping. In master
-# there is no such client — administering master is a **realm** role, `admin` —
-# so the grant is a realm role mapping. Same role, same group, two endpoints;
-# `keycloak_realm_admins_client` empty selects the second.
-#
-# Granting in master is deliberate and it is gated. Keycloak's guidance is that
-# master holds administrators rather than application users, so a filtered
-# federation admitting only this group's members is on the right side of it —
-# but an unfiltered one is not, and neither is a caller that reached master by
-# accident. Hence `keycloak_realm_admins_allow_master_realm`.
-#
-# What it costs is worth stating where it will be read: after this, an account
-# in the directory group can disable or delete the local break-glass
-# administrator. Master's account is no longer protected *from* the directory.
-# It remains local and unfederated, so it still works when the directory does
-# not — which is the availability half, and the half people mean when they say
-# break-glass.
-#
-# ## What this role does not create
-#
-# The group. It is created in FreeIPA by ipa_sso_groups and imported by
-# keycloak_ldap's group mapper, for the reason keycloak_clients gives at
-# length: a group created in Keycloak is a second group with the same name and
-# no members, and it fails as "the mapping is there and nobody has it".
 
 - name: main | Assert the required inputs are present
   when: (keycloak_realm_admins_enabled | bool)
@@ -70,8 +22,7 @@
 - name: main | Delegate administration of the realm to a directory group
   when:
     - (keycloak_realm_admins_enabled | bool)
-    # uri has no dry run and every step needs a token first. Same gate the
-    # other Keycloak roles use.
+
     - not ansible_check_mode
   block:
     - name: main | Obtain an admin token

@@ -1,29 +1,4 @@
 ---
-# The GitOps source of truth, rendered from this repository and pushed into
-# GitLab.
-#
-# The problem this role exists for: the cluster-state repository in GitLab held
-# the only copy of every manifest the cluster runs on. `OVERVIEW.md` states that
-# the whole internal environment can be rebuilt from this repository alone, and
-# `repo01` — the GitLab — is one of the things that gets rebuilt. State that
-# lived only there did not survive that, which made the rebuild claim true of
-# every layer except the one that describes what the cluster actually runs.
-#
-# So the direction is now one-way. The tree under `templates/cluster-state` is
-# the source; GitLab is a rendering of it. A file edited in GitLab survives
-# until the next run of this role and is then overwritten, because the render
-# wipes the working tree before writing it. That is the point rather than a
-# side effect: a repository that can absorb edits from both ends has two
-# sources of truth and therefore none.
-#
-# Three things arrive here from outside the template tree, and each is read
-# from wherever Ansible already put it rather than pasted:
-#
-#   - the domain CA, from this host's trust store (controller_trust)
-#   - the intermediate CA key pair, from ~/.config/rke2lab/k8s-ca (ipa_sub_ca)
-#   - the registry deploy token, from the GitLab host (rke2_publish)
-#
-# See plan/PHASE6_IMPLEMENTATION.md.
 
 - name: main | Assert the inputs this role cannot invent are present
   when: (gitops_source_enabled | bool)
@@ -34,9 +9,6 @@
       gitops_source needs the GitLab host it mints its admin token on.
     quiet: true
 
-# Sealing is what makes this role's output reproducible without the cluster, so
-# a missing sealing key has to fail here rather than 40 tasks later inside a
-# kubeseal invocation whose error is about stdin.
 - name: main | Assert the material the render reads from disk is present
   when: (gitops_source_enabled | bool)
   failed_when: not _reg_gitops_source_inputs['stat']['exists']
@@ -57,18 +29,10 @@
 - name: main | Render the cluster state and push it into GitLab
   when:
     - (gitops_source_enabled | bool)
-    # Same gate rke2_publish uses. Everything below either reads a credential
-    # or writes to a remote, and neither has a meaningful dry run.
+
     - not ansible_check_mode
   block:
-    # The admin credential is shared with rke2_publish and gitops_bootstrap:
-    # one token, recorded on the GitLab host, reused while it authenticates.
-    # This role runs on the controller, so the file work and the mint are
-    # delegated to the GitLab host. Reusing a valid token costs a stat, a
-    # slurp and a GET; the gitlab-rails mint is paid at most once a day,
-    # across every role that includes this one, rather than once per role
-    # per run — which is what made the old three-mint shape cost minutes on
-    # credentials alone.
+
     - name: main | Ensure the shared GitLab admin token
       ansible.builtin.include_role:
         name: gitlab_admin_token
@@ -79,9 +43,6 @@
             gitlab_admin_token_file: "{{ gitops_source_admin_token_file }}"
             gitlab_admin_token_no_log: "{{ gitops_source_no_log }}"
 
-    # The role wrote the record file on the GitLab host, which this role
-    # cannot see; the slurp is the handoff, the same shape the deploy token
-    # reading just below uses.
     - name: main | Read the recorded admin token from the GitLab host
       delegate_to: "{{ gitops_source_gitlab_host }}"
       no_log: "{{ gitops_source_no_log | bool }}"
@@ -89,10 +50,6 @@
       ansible.builtin.slurp:
         src: "{{ gitops_source_admin_token_file }}"
 
-    # From the GitLab host rather than from env.sh, because GitLab returns a
-    # deploy token's value once and rke2_publish's recording of it is the only
-    # copy. Same file, and the same slurp, that cluster_services.yml already
-    # reads to build each node's registries.yaml.
     - name: main | Read the registry deploy token from the GitLab host
       delegate_to: "{{ gitops_source_gitlab_host }}"
       no_log: "{{ gitops_source_no_log | bool }}"
@@ -114,10 +71,3 @@
 
     - name: main | Commit and push whatever changed
       ansible.builtin.include_tasks: commit.yml
-
-# No `always` revoke: the credential is the shared one the gitlab_admin_token
-# role recorded on the GitLab host, and it outlives this run on purpose. Its
-# one-day expiry is what bounds a leaked copy of the record file, and the
-# next run of any including role proves the token or mints a replacement.
-# There is nothing of this role's to clean up, which is also what removed the
-# 15-second retry loops the revoke used to need.

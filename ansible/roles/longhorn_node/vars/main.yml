@@ -1,7 +1,3 @@
 ---
-# No internal constants: everything this role needs is a caller-visible input.
 
-# Templates for this role live in ansible/files/longhorn_node/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_longhorn_node_files_dir: "{{ role_path | dirname | dirname }}/files/longhorn_node"

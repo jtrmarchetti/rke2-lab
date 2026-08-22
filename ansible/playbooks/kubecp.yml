@@ -1,13 +1,4 @@
 ---
-# Phase 4 — the RKE2 control plane.
-#
-# Two plays, and the order between them is the whole point. Nothing on a cluster
-# node can be installed until GitLab actually holds the RKE2 artifact set,
-# because the nodes have no other source: no internet route, and no image
-# tarball on local disk. Publishing runs first, against repo01, and the node
-# play only starts once it has succeeded.
-#
-# See plan/PHASE4_IMPLEMENTATION.md.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
@@ -22,9 +13,7 @@
   become: true
   force_handlers: true
   tasks:
-    # Re-runs the manifest so the phase 4 entries are staged before anything
-    # tries to publish them. A run where the artifacts are already present is a
-    # no-op; a run on a rebuilt repo01 downloads them first.
+
     - name: kubecp | Include artifact staging role
       tags:
         - artifact_stage
@@ -44,10 +33,7 @@
       vars:
         rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
         rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-        # No chart publishing here: the helm CLI is installed by cluster_services
-        # (Phase 6), so charts are pushed exactly once, there, in the same play,
-        # right after helm_cli. A rebuild must not depend on a Phase 6 tool in
-        # Phase 4.
+
         rke2_publish_chart_sets: []
         rke2_publish_deploy_token_username: >-
           {{ inventory_rke2_publish_deploy_token_username }}
@@ -71,55 +57,15 @@
           tags:
             - rke2_publish
 
-# Two batches, and the order between them is the point.
-#
-# Batch 1 is the bootstrap server, alone. It is the one that *starts* the
-# cluster: it omits `server:`, so nothing else may be told to join it until it
-# is answering — /readyz ok, its own node Ready, and the kube-vip VIP up. The
-# whole reason the first server runs by itself is that there is no cluster to
-# join until it has made one.
-#
-# Batch 2 is the remaining servers, in parallel. A joiner has none of the
-# bootstrap's constraint: two new etcd members joining a healthy one-member
-# cluster is ordinary and safe — the quorum argument only bites when you
-# *restart* members of an already-formed, even-sized etcd, not when fresh
-# members register against a live VIP. Running the joiners' host build (base,
-# data volume, time, RKE2 install and image pulls) against each other in
-# parallel is exactly what used to be hidden behind a blanket serial: 1, and it
-# is the largest wall-clock cost of a cold Phase 4.
-#
-# `-e kubecp_serial=1` restores the old fully-serial, one-at-a-time behaviour,
-# and `-e kubecp_serial=N` (N at least the group size) puts every server in one
-# batch, all at once. That last one is what an even-sized etcd recovers with:
-# a two-member cluster has a quorum of two, so no amount of one-at-a-time
-# restarting can reach it, and both members must come up together. `[1, 2]`
-# is the default; 1 is the conservative override; N is the recovery override.
-#
-# The invariant this split depends on: the bootstrap server is the first host
-# in the kubecp inventory order, so it is the one that lands in batch 1. That
-# is the same assumption serial: 1 made, and the assert below only proves the
-# bootstrap host is *in* the group, not that it is *first*. If a future edit
-# repoints inventory_kubecp_bootstrap_host at a host that is not first in the
-# group, the batch seam falls on the wrong host and a joiner ends up in batch
-# 1 with no live cluster to join. Keep the bootstrap host first in the group.
 - name: Form the RKE2 control plane
   hosts: kubecp
   gather_facts: true
   become: true
-  # [1, 2]: the bootstrap server runs its whole task series alone, then the
-  # other servers build and join together. -e kubecp_serial=1 restores fully
-  # serial; -e kubecp_serial=N (N >= group size) runs the whole group at once,
-  # which is the only way to recover an even-sized etcd that cannot be
-  # restarted one member at a time.
+
   serial: "{{ kubecp_serial | default([1, 2]) }}"
   force_handlers: true
   tasks:
-    # Which host started the cluster is inventory data, not something to infer
-    # from play order. Deriving it from the first host in the play looks
-    # equivalent and is not: under `--limit kubecp02:kubecp03` the first host in
-    # the play is kubecp02, which would then be handed no `server:` address and
-    # would quietly start a second, separate cluster rather than joining the
-    # existing one.
+
     - name: kubecp | Assert the bootstrap server is named explicitly
       tags:
         - always
@@ -147,9 +93,6 @@
           tags:
             - base_host
 
-    # Before rke2_node, always. RKE2's data directory is on this volume, and a
-    # role that runs before the mount exists writes to the mount point on the
-    # OS disk instead — silently, and only visibly once the disk fills.
     - name: kubecp | Include data volume role
       tags:
         - data_volume
@@ -178,9 +121,6 @@
           tags:
             - time_sync
 
-    # The deploy token exists in exactly one place: the file rke2_publish wrote
-    # on the repo host. Reading it here keeps it out of inventory and out of
-    # this repository, and means rotating it is one file on one host.
     - name: kubecp | Read the registry deploy token from the repository host
       delegate_to: "{{ groups['repo'] | first }}"
       no_log: true
@@ -224,7 +164,7 @@
         rke2_server_api_address: "{{ inventory_rke2_server_api_address }}"
         rke2_server_api_name: "{{ inventory_rke2_server_api_name }}"
         rke2_server_api_port: "{{ inventory_rke2_server_api_port }}"
-        # Written only from the bootstrap host, and only once.
+
         rke2_server_bootstrap: >-
           {{ inventory_hostname == inventory_kubecp_bootstrap_host }}
         rke2_server_cni: "{{ inventory_rke2_server_cni }}"
@@ -254,8 +194,6 @@
           tags:
             - rke2_server
 
-    # After rke2_server, because it links binaries that the installer puts in
-    # place and reads a kubeconfig that only exists once the server has run.
     - name: kubecp | Include the node CLI role
       tags:
         - kube_cli

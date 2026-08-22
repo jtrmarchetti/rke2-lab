@@ -1,45 +1,4 @@
 ---
-# One OIDC client per federated application, with the authorisation model
-# attached to it.
-#
-# Four things per application, and they only mean anything together:
-#
-#   - a confidential OIDC client, so the service can exchange an authorization
-#     code for a token;
-#   - two client roles, `admin` and `user`;
-#   - a protocol mapper that writes those roles into the token as a top-level
-#     claim, because a role the service cannot see is not an authorisation
-#     model;
-#   - a mapping from each FreeIPA group ipa_sso_groups created to the matching
-#     role, which is the join between "who someone is", held in the domain, and
-#     "what they may do", held here.
-#
-# The result is that granting access is a single `ipa group-add-member` and
-# nothing in Keycloak. Nobody is ever added to a group in the Keycloak console,
-# because the federation is READ_ONLY and Keycloak has no business holding an
-# opinion the directory does not.
-#
-# ## The client secret is authored, not generated
-#
-# Generated is the obvious design and it creates an ordering problem that
-# ordering cannot fix. Grafana and oauth2-proxy read their client secret from a
-# Kubernetes Secret that External Secrets syncs out of OpenBao. If Keycloak is
-# what mints that secret, the vault entry cannot be written until Keycloak is
-# running — and Keycloak is deployed by Flux from the cluster-state repository,
-# so on a cold rebuild those workloads start first and sit waiting on a Secret
-# that cannot exist yet. Every federated service would need a second pass, the
-# way Garage's S3 key does, with nothing forcing it.
-#
-# Authoring the secret removes the cycle instead of sequencing around it. The
-# value is in env.sh before either end exists; openbao_secrets writes it into
-# the vault on the first pass, so each workload's Secret syncs whether or not
-# Keycloak has ever started; and this role sets the client to that same value
-# whenever Keycloak is reachable. Both ends are configured independently and
-# meet when both are up.
-#
-# It is the argument GARAGE_RPC_SECRET already carries in plan/SECRETS.md: a
-# credential named by two configurations has to exist before either of them
-# does.
 
 - name: main | Assert the required inputs are present
   when: (keycloak_clients_enabled | bool)
@@ -80,17 +39,12 @@
 - name: main | Configure a client for every federated application
   when:
     - (keycloak_clients_enabled | bool)
-    # uri has no dry run and every step here needs a token first. Same gate the
-    # other Keycloak roles use.
+
     - not ansible_check_mode
   block:
     - name: main | Obtain an admin token
       ansible.builtin.include_tasks: token.yml
 
-    # Read once, here, rather than per application: these are the groups the
-    # LDAP mapper imported from FreeIPA, and reading them once means the
-    # per-application tasks fail on a missing group with the whole list to hand
-    # rather than on an empty search result.
     - name: main | Read the groups the realm has imported from the directory
       changed_when: false
       no_log: "{{ keycloak_clients_no_log | bool }}"

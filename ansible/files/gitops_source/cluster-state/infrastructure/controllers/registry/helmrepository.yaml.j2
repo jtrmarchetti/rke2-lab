@@ -1,16 +1,10 @@
 {{ ansible_managed | comment }}
-# Where every chart in this repository comes from.
-#
-# One OCI repository in the GitLab registry on repo01, holding the charts the
-# artifact manifest staged and published. Nothing here reaches a public chart
-# repository, and nothing needs to: a chart is an artifact like an image, and
-# it travels the same path — staged on repo01, pushed into GitLab, consumed
-# from GitLab.
-#
-# Two secrets, and they are different kinds of thing. The credential is the
-# read-only deploy token the nodes already pull images with, and it is sealed.
-# The CA is a public certificate that happens to have to arrive as a Secret,
-# because certSecretRef takes nothing else, so it is committed in the clear.
+
+
+
+
+
+
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository

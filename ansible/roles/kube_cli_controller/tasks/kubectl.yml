@@ -1,18 +1,5 @@
 ---
-# From the cluster, not from the internet. The binary a node is running is by
-# definition the right version, needs no checksum maintained in this repository,
-# and cannot drift from the cluster the way a pinned download would.
 
-# `--client` so this does not need a reachable cluster to answer. Asking the
-# full version would make installing the client depend on the API being up,
-# which is backwards: the client is what you reach for when it is not.
-#
-# check_mode: false because this only reads a version, and because the
-# comparison below is a `when:` on every task that follows. A command skipped
-# by --check registers a result with no `rc` in it, so the guard cannot
-# evaluate the way it does on a real run — the download block was entered
-# during --check and then failed on the scratch directory that --check had
-# also skipped. Same pattern controller_runtime uses for the Pulumi CLI.
 - name: kubectl | Read the version already installed here
   changed_when: false
   failed_when: false
@@ -33,36 +20,11 @@
     dest: "{{ kube_cli_controller_bin_dir }}/kubectl"
     flat: true
 
-# fetch does not set a mode, so a freshly copied binary arrives without its
-# execute bit and the next task to run it fails with "permission denied" on a
-# file that is plainly there.
 - name: kubectl | Ensure the binary is executable
   ansible.builtin.file:
     path: "{{ kube_cli_controller_bin_dir }}/kubectl"
     mode: "0755"
 
-# Generated every run so it can never fall behind the binary, then copied into
-# place so the run only reports a change when the content actually differs.
-# Writing the redirect straight at the destination would make every run report
-# changed, and "a second run reports no changes" is a rule this repository
-# holds itself to — a role that always lies about changing something makes real
-# drift impossible to see.
-#
-# Via a file rather than a registered variable: copy's `content` is templated,
-# and 15 kB of generated bash is not something to hand to Jinja.
-#
-# check_mode: false so this runs during --check too. ANSIBLE_STANDARDS.md
-# requires check mode to work without errors, and skipping this task was what
-# broke it: the scratch file was never written, and the copy below failed with
-# "Source .kubectl-completion.new not found" — a check run failing on a file
-# that only exists because the check run declined to create it.
-#
-# Writing during --check is a side effect and is worth being deliberate about.
-# What it writes is a scratch file this role creates and deletes within three
-# tasks, never host state, and running it is what lets the copy below report
-# accurately whether the installed completion would actually change. The
-# alternative — guarding the copy with `not ansible_check_mode` — makes the run
-# succeed while answering nothing, which is worse than failing.
 - name: kubectl | Generate the shell completion
   changed_when: false
   check_mode: false
@@ -78,13 +40,6 @@
     remote_src: true
     mode: "0644"
 
-# changed_when: false because this removes a file this role created moments
-# ago, not anything describing the state of the host.
-#
-# check_mode: false for the same reason, and it is the other half of the task
-# above: a --check run that generates the scratch file and then declines to
-# remove it leaves litter in the lab's secret directory. The pair either both
-# run or neither does.
 - name: kubectl | Remove the generated scratch file
   changed_when: false
   check_mode: false

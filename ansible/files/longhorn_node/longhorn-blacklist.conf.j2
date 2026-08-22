@@ -1,8 +1,6 @@
 {{ ansible_managed | comment }}
-#
-# Keep multipathd away from Longhorn's block devices. Without this it claims
-# them as paths to a multipath device, and the volume attaches but cannot be
-# mounted because multipathd is already holding it.
+
+
 blacklist {
     devnode "^sd[a-z0-9]+"
 }

@@ -1,6 +1,4 @@
 ---
-# Publishes one image set — either an RKE2 release tarball described by its own
-# list file, or a single image staged on its own.
 
 - name: image_set | Read the release image list
   when: _item_rke2_publish_set['list'] is defined
@@ -8,10 +6,6 @@
   ansible.builtin.slurp:
     src: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}"
 
-# An entry with a list file publishes everything the release says that tarball
-# contains; an entry without one publishes the single image it names. Deriving
-# the set from `docker load` output instead would make the published set depend
-# on how the runtime happens to format its result.
 - name: image_set | Determine what this set should publish
   ansible.builtin.set_fact:
     _rke2_publish_set_sources: >-
@@ -36,9 +30,6 @@
       pushed, so a bare name here would publish to a path no node asks for.
     quiet: true
 
-# The upstream reference minus its registry host, under the GitLab project path.
-# This is the same transformation the containerd rewrite rule in registries.yaml
-# performs, which is why the two must be changed together.
 - name: image_set | Determine what is missing from the registry
   ansible.builtin.set_fact:
     _rke2_publish_set_missing: >-
@@ -68,21 +59,12 @@
         username: root
         password: "{{ rke2_publish_root_password }}"
 
-    # Docker 23 and later read zstd-compressed archives directly, so the release
-    # tarball is loaded exactly as it was published rather than decompressed to
-    # a second copy on /data1 first.
     - name: image_set | Load the staged tarball
       register: _reg_rke2_publish_loaded
       community.docker.docker_image_load:
         path: >-
           {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}
 
-    # Compared against the local name, not the reference in the list file.
-    # Docker drops the `docker.io/` prefix from an image's local name, so
-    # `docker.io/rancher/rke2-runtime:v1.35.7-rke2r1` loads and is thereafter
-    # called `rancher/rke2-runtime:v1.35.7-rke2r1`. A literal comparison against
-    # the release list reports every core image as missing from a tarball that
-    # does in fact contain all of them.
     - name: image_set | Assert the tarball contained what the list promised
       loop: "{{ _rke2_publish_set_missing }}"
       loop_control:

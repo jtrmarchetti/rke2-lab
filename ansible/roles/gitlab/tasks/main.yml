@@ -27,9 +27,6 @@
       has reported success. See plan/SECRETS.md.
     quiet: true
 
-# Certificates come from the ipa_service_cert role, which runs before this one.
-# Failing here names the missing file; letting omnibus discover it produces a
-# reconfigure that fails deep inside an nginx template.
 - name: main | Check the service certificates are present
   when: (gitlab_enabled | bool)
   register: _reg_gitlab_cert_files
@@ -70,15 +67,6 @@
     enabled: true
     state: started
 
-# Go's root store is read once per process: a dockerd that started before the
-# domain CA was installed validates registry names against a pool that
-# predates the CA and fails with "certificate signed by unknown authority"
-# until it restarts, even though the CA is in the system store now. On a fresh
-# build that is exactly this role's situation — the runtime was started in an
-# earlier phase and the CA landed only moments ago. The pid file's mtime is
-# the daemon's start time (/run is tmpfs, so it is written at every start),
-# and comparing it against the CA's mtime makes this a one-shot: it fires on
-# the run that installs the CA, on a CA re-issue, and never in steady state.
 - name: main | Stat the domain CA and the docker daemon start marker
   when: (gitlab_enabled | bool)
   register: _reg_gitlab_ca_daemon
@@ -110,21 +98,6 @@
     group: root
     mode: "0750"
 
-# 0755, not 0700. These are bind-mount roots, and omnibus runs its services as
-# non-root users inside the container — postgresql as gitlab-psql, gitaly and
-# workhorse as git, nginx workers as gitlab-www — every one of which has to
-# traverse the mount root to reach its own subdirectory. At 0700 root:root,
-# PostgreSQL fails with `could not access directory
-# "/var/opt/gitlab/postgresql/data": Permission denied` and restarts forever
-# while the container still reports Up and nginx answers 502.
-#
-# It is also what omnibus sets these directories to itself. Declaring 0700 here
-# did not merely start them wrong: the file module re-applied it on every run,
-# so a re-run took a working GitLab down. Matching omnibus stops the role and
-# the application fighting over the same mode.
-#
-# This is the FreeIPA lesson from Phase 2, in a different service: check the
-# mode of the data directory, not just its path.
 - name: main | Ensure the GitLab data directories exist
   when: (gitlab_enabled | bool)
   loop: "{{ _var_gitlab_data_dirs }}"
@@ -138,16 +111,6 @@
     group: root
     mode: "{{ _item_gitlab_data_dir['mode'] | default(omit) }}"
 
-# Before the compose file, because a reconfigure that finds the certificate
-# missing links nothing and the next sign-in fails at the token exchange with a
-# verification error that names neither this file nor Keycloak.
-#
-# /etc/gitlab is the config bind mount, so this lands inside the container at
-# the path omnibus reads on every reconfigure. The certificate is the domain
-# CA — the same file ipa_service_cert already put in this host's trust store —
-# and it is enough on its own: sso's certificate is issued by the cluster's
-# intermediate, which cert-manager serves alongside the leaf, so the chain
-# completes at the root.
 - name: main | Ensure the trusted certificate directory exists
   when:
     - (gitlab_enabled | bool)
@@ -165,8 +128,7 @@
     - (gitlab_oidc_enabled | bool)
   ansible.builtin.copy:
     src: "{{ gitlab_oidc_ca_source_file }}"
-    # Keeps the source file's own name, so the role carries no domain of its
-    # own and a second environment's CA does not land on top of this one's.
+
     dest: >-
       {{ _var_gitlab_trusted_certs_dir }}/{{
       gitlab_oidc_ca_source_file | basename }}
@@ -198,9 +160,6 @@
     group: root
     mode: "0640"
 
-# Compose adopts an existing container only if it carries this project's label.
-# One created any other way holds the name and makes every later run fail with
-# a name conflict. Same reasoning as the FreeIPA role.
 - name: main | Check which compose project owns an existing container
   when:
     - (gitlab_enabled | bool)

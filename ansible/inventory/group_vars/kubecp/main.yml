@@ -1,5 +1,5 @@
 ---
-# Phase 4 — the RKE2 control plane. See plan/PHASE4_IMPLEMENTATION.md.
+
 ansible_user: "{{ lookup('env', 'VM_USERNAME') | default('root', true) }}"
 ansible_password: "{{ lookup('env', 'VM_USER_PASSWORD') }}"
 ansible_ssh_common_args: >-
@@ -8,34 +8,22 @@ ansible_ssh_common_args: >-
 inventory_base_host_manage_hostname: true
 inventory_base_host_target_hostname: "{{ inventory_hostname }}.dev.lo"
 
-# No internet route. Packages come from the repo01 proxy; every other artifact
-# comes from GitLab.
 inventory_base_host_apt_proxy_enabled: true
 inventory_base_host_apt_proxy_url: http://192.168.2.99:3142
 
-# No split DNS. These hosts resolve through core01, which is authoritative for
-# dev.lo and forwards nothing, and they have nothing else to ask.
 inventory_base_host_split_dns_enabled: false
 
-# Time chain: repo01 syncs upstream, core01 takes time from repo01, and the
-# cluster takes time from core01. Kubernetes tolerates a shared clock that
-# drifts; it does not tolerate nodes drifting apart, and etcd least of all.
 inventory_time_sync_enabled: true
 inventory_time_sync_source_directive: server
 inventory_time_sync_sources:
   - 192.168.2.4 iburst
 
-# The 100 GB second disk. RKE2's data directory lives here, because the
-# containerd image store grows with every image the cluster pulls and would
-# otherwise fill the 32 GB OS disk. Applied before rke2_node, or the installer
-# writes to the mount point instead of to the volume.
 inventory_data_volume_enabled: true
 inventory_data_volume_device: /dev/sdb
 inventory_data_volume_filesystem: ext4
 inventory_data_volume_label: data1
 inventory_data_volume_mount_path: /data1
 
-# --- rke2_node: everything true before RKE2 starts ------------------------
 inventory_rke2_node_enabled: true
 inventory_rke2_node_type: server
 inventory_rke2_node_version: 1.35.7+rke2r1
@@ -45,45 +33,19 @@ inventory_rke2_node_gitlab_url: https://gitlab.dev.lo
 inventory_rke2_node_registry_host: registry.gitlab.dev.lo
 inventory_rke2_node_package_project: rke2/packages
 
-# The containerd mirror rewrites are identical on every node, so they are
-# defined once in group_vars/all/main.yml. That file's
-# inventory_rke2_node_registry_mirrors is what the playbooks here pass to
-# rke2_node. A host-level catch-all: onboarding an image from a listed upstream
-# host costs no node restart, because only adding a new host changes the file
-# containerd reads.
-
-# The pull credential is not in inventory. It is a deploy token GitLab issues
-# once, recorded on repo01 by the rke2_publish role, and the playbook reads it
-# from there — so there is exactly one copy and no secret in this file.
-
-# --- rke2_server: the cluster itself --------------------------------------
-#
-# The server that starts the cluster. Named here rather than derived from the
-# first host in the play: those are the same thing only when the play runs
-# against the whole group, and under `--limit kubecp02:kubecp03` the derived
-# answer is kubecp02 — which would be given no server address and would start a
-# second cluster instead of joining this one.
-#
-# Changing this after the cluster exists does not move anything. The initial
-# etcd member is whichever host actually bootstrapped; this value only decides
-# who is told to join whom.
 inventory_kubecp_bootstrap_host: kubecp01
 
 inventory_rke2_server_enabled: true
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+
 inventory_rke2_server_token: "{{ lookup('env', 'RKE2_TOKEN') }}"
 inventory_rke2_server_node_ip: "{{ ansible_host }}"
 inventory_rke2_server_api_address: 192.168.2.20
 inventory_rke2_server_api_name: kube.dev.lo
-# Stated rather than left to the role defaults, because
-# playbooks/validate_phase4.yml checks these without including the role and
-# would otherwise have to guess at them.
+
 inventory_rke2_server_api_port: 6443
 inventory_rke2_server_supervisor_port: 9345
 inventory_rke2_server_data_dir: "{{ inventory_rke2_node_data_dir }}"
 
-# Every path the API is reachable by. Covering all of them now means adding one
-# later is not a certificate reissue and a rolling restart of the control plane.
 inventory_rke2_server_tls_san:
   - kube.dev.lo
   - 192.168.2.20
@@ -96,30 +58,12 @@ inventory_rke2_server_tls_san:
 
 inventory_rke2_server_cni: cilium
 
-# Phase 6c follow-up. RKE2 binds etcd, the scheduler, the controller manager and
-# kube-proxy to 127.0.0.1, and every ServiceMonitor kube-prometheus-stack ships
-# scrapes the node address — so the stack alerted that the control plane was
-# down while all three etcd members were Ready. The alerts described the scrape.
-# See the rke2_server role defaults for what each listener exposes.
 inventory_rke2_server_expose_metrics: true
 
-# Phase 5's decision, and it inverted Phase 4's note rather than confirming it.
-# Phase 4 recorded that RKE2's packaged default is ingress-nginx and that
-# plan/CLUSTER_COMPONENTS.md was wrong to say Traefik. Both halves were true at
-# the time; what changed is that ingress-nginx reached end of life in March 2026
-# and RKE2 makes Traefik the default for new clusters at v1.36. So the document
-# was right and its stated reason was wrong.
-#
-# `disable: rke2-ingress-nginx` is gone with it — ingress-controller is the
-# supported knob and selects the default ingress class at the same time.
 inventory_rke2_server_disable: []
 inventory_rke2_server_ingress_controller:
   - traefik
 
-# The control plane taint, now that Phase 5 has workers to schedule onto.
-# Registration-time only, so it governs a rebuilt server; the running ones are
-# tainted with kubectl by playbooks/kubewk.yml, which first checks that every
-# worker is Ready.
 inventory_rke2_server_node_taints:
   - CriticalAddonsOnly=true:NoExecute
 
@@ -127,16 +71,10 @@ inventory_rke2_server_kube_vip_enabled: true
 inventory_rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.2
 inventory_rke2_server_kube_vip_interface: eth0
 
-# base_host
 inventory_base_host_split_dns_domains:
   - dev.lo
 
-# rke2_node
 inventory_rke2_node_ca_system_path: /usr/local/share/ca-certificates/dev.lo.crt
 inventory_rke2_node_ca_rke2_path: /etc/rancher/rke2/dev.lo-ca.crt
 
-# rke2_server
-# Phase 6b. The address every ingress hostname resolves to, requested from the
-# kube-vip pool declared in the cluster-state repository. Pinned rather than
-# allocated: the cluster's DNS answers every name under k8s.dev.lo with it.
 inventory_rke2_server_ingress_address: 192.168.2.41

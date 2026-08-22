@@ -1,8 +1,5 @@
 ---
-# RKE2 applies everything in this directory at startup and reconciles it
-# thereafter, so the manifest is written before the service first starts. The
-# VIP then exists as soon as the first apiserver answers, which is what the
-# second server needs in order to join.
+
 - name: kube_vip | Ensure the auto-deploy manifest directory exists
   ansible.builtin.file:
     path: "{{ rke2_server_data_dir }}/server/manifests"

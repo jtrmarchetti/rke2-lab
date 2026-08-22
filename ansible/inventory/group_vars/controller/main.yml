@@ -1,55 +1,23 @@
 ---
-# --- split DNS -------------------------------------------------------------
-#
-# The controller needs both authorities, exactly as repo01 does: upstream names
-# to reach GitHub, Pulumi and the Ubuntu archive, and dev.lo names to talk to
-# GitLab, the cluster API and the vault. A flat list of nameservers cannot
-# express that — a resolver answering NXDOMAIN is treated as authoritative, so
-# whichever answered first would win.
-#
-# This replaces controller_setup.sh, which configured dnsmasq by hand and was
-# the last piece of the environment that existed only as a shell script. Two
-# things in it were wrong rather than merely unautomated: it set the search
-# domain to srv.local, which is nothing in this lab, and it enabled
-# expand-hosts for a /etc/hosts file this controller does not keep.
+
 inventory_split_dns_enabled: true
 inventory_split_dns_upstream_servers:
   - 192.168.1.1
 inventory_split_dns_forward_zones:
   - domain: dev.lo
     server: 192.168.2.4
-  # PTR lookups for the internal subnet belong to the same authority; upstream
-  # knows nothing about 192.168.2.0/24.
+
   - domain: 2.168.192.in-addr.arpa
     server: 192.168.2.4
 inventory_split_dns_search_domain: dev.lo
 
-# Off here, and on repo01 it stays on. The role's zone check queries each
-# forwarded zone through the local resolver, which on this host is answered by
-# core01 across the tunnel — and on a cold rebuild this play runs before the
-# tunnel exists, before core01 exists, and before FreeIPA is installed on it.
-# A check that cannot pass on the first run of a rebuild is a check that gets
-# disabled during the rebuild, which is worse than not having it.
-#
-# dev.lo resolution from here is still proven, one phase later and by something
-# that genuinely depends on it: controller_trust fetches https://gitlab.dev.lo
-# by name to verify the domain CA.
 inventory_split_dns_verify_zones: false
 
-# --- the tunnel to repo01 --------------------------------------------------
 inventory_controller_wireguard_enabled: true
 inventory_controller_wireguard_interface: wg0
 inventory_controller_wireguard_address: 10.66.66.2/30
 inventory_controller_wireguard_listen_port: 51821
-# Secrets sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
-#
-# Both private keys, and no public key anywhere. A WireGuard public key is a
-# pure function of its private key, and until 2026-08-17 this file held the
-# gateway's public key as a pasted literal while the gateway's group_vars held
-# this host's — two copies of a derived value, kept in agreement by hand.
-# roles/controller_tunnel derives both with `wg pubkey` and hands the
-# controller's to the gateway play, so rotating a key is now editing env.sh and
-# re-running the playbook, with nothing left to remember.
+
 inventory_controller_wireguard_private_key: >-
   {{ lookup('env', 'WIREGUARD_CONTROLLER_PRIVATE_KEY') }}
 inventory_controller_wireguard_peer_private_key: >-
@@ -62,113 +30,50 @@ inventory_controller_wireguard_peer_persistent_keepalive: 25
 inventory_controller_wireguard_route_subnets:
   - 192.168.2.0/24
 
-# What the tunnel is validated against, which plan/PROXMOX.md asked for in
-# Phase 1 and nothing implemented until now.
-#
-# repo01's internal address rather than a deeper host, and the choice is the
-# same one split DNS's zone check faces: this play runs during a cold rebuild,
-# when repo01 is the only internal host that exists, and a check that cannot
-# pass on the first run of a rebuild is a check that gets disabled during
-# rebuilds. It proves the route down the tunnel and the return path from
-# 192.168.2.0/24 — everything except the gateway forwarding to a third host,
-# which the first playbook to touch core01 exercises.
 inventory_controller_wireguard_validate_address: 192.168.2.99
 inventory_controller_wireguard_validate_port: 22
 
-# controller_runtime
-#
-# Read from artifacts.yml rather than written here, so the version and the URL
-# are one edit in one place. See that file for why the controller needed a
-# manifest of its own.
 inventory_controller_runtime_pulumi_url: >-
   {{ inventory_controller_artifacts['pulumi-cli']['url'] }}
 inventory_controller_runtime_pulumi_version: >-
   {{ inventory_controller_artifacts['pulumi-cli']['version'] }}
 
-# controller_trust
-# Fetched over plain HTTP from the artifact host, which is the only path that
-# does not already require the trust it is delivering. Same bootstrap as the
-# cluster nodes make in rke2_node.
 inventory_controller_trust_ca_url: http://192.168.2.99/certs/dev.lo-ca.crt
 inventory_controller_trust_ca_path: /usr/local/share/ca-certificates/dev.lo-ca.crt
-# A name signed by that CA, used to prove the install worked rather than
-# assuming it did.
+
 inventory_controller_trust_verify_url: https://gitlab.dev.lo/
 
-# gitops_bootstrap
 inventory_gitops_bootstrap_gitlab_url: https://gitlab.dev.lo
-# The domain CA, which Flux needs in the Secret because the GitRepository is
-# HTTPS against an internally signed certificate. Read from this host's trust
-# store, where controller_trust put it.
+
 inventory_gitops_bootstrap_domain_ca_file: /usr/local/share/ca-certificates/dev.lo-ca.crt
 
-# gitops_source
 inventory_gitops_source_gitlab_url: https://gitlab.dev.lo
 inventory_gitops_source_domain: dev.lo
-# The cluster's own subdomain. FreeIPA forwards the whole zone to the cluster
-# and holds no records inside it; see group_vars/core/main.yml.
+
 inventory_gitops_source_cluster_domain: k8s.dev.lo
-# The realm the cluster's own services authenticate against. Equal to
-# inventory_keycloak_realm_name by necessity — the rendered manifests build
-# every OIDC endpoint from it, and a mismatch produces workloads pointed at a
-# realm that does not exist.
+
 inventory_gitops_source_keycloak_realm: dev-lo
 inventory_gitops_source_registry_host: registry.gitlab.dev.lo
-# The LoadBalancer pool, and the two addresses in it that are requested by name
-# because something outside the cluster is configured to reach them: FreeIPA
-# forwards to the DNS address, and every ingress hostname resolves to the
-# ingress address.
+
 inventory_gitops_source_lb_range: 192.168.2.40-192.168.2.52
 inventory_gitops_source_dns_address: 192.168.2.40
 inventory_gitops_source_ingress_address: 192.168.2.41
-# The domain CA, as installed in this host's trust store by controller_trust.
-# Read at render time rather than pasted, so reissuing the domain CA changes
-# the committed Secret without anyone remembering to re-copy it.
+
 inventory_gitops_source_domain_ca_file: /usr/local/share/ca-certificates/dev.lo-ca.crt
 inventory_gitops_source_ca_common_name: k8s-ca.dev.lo
 inventory_gitops_source_commit_email: automation@dev.lo
 
-# ipa_sub_ca
-# The intermediate's identity. FreeIPA validates every request against a
-# subject principal and requires the certificate's CN to match it, so this is
-# both the common name and the host entry created to own it. It is an identity,
-# not a machine: nothing resolves this name and nothing needs to.
 inventory_ipa_sub_ca_common_name: k8s-ca.dev.lo
 inventory_ipa_sub_ca_ocsp_url: http://ipa-ca.dev.lo/ca/ocsp
 inventory_ipa_sub_ca_crl_url: http://ipa-ca.dev.lo/ipa/crl/MasterCRL.bin
-# The public half of the intermediate is published next to the domain root on
-# the artifact host. Everything the cluster signs is signed by this, so a
-# browser or a curl that only has the root cannot complete the chain unless the
-# server sends the intermediate itself — and this is where the other half comes
-# from when it does not. The key stays here; only the certificate is copied.
+
 inventory_ipa_sub_ca_publish_host: repo01
 inventory_ipa_sub_ca_publish_dir: /data1/artifacts/certs
 
-# --- Single sign-on --------------------------------------------------------
-#
-# One realm, and one list of applications, passed to every role that needs
-# them. Both are here rather than in a role default because they are this
-# environment's identity — and the list is shared deliberately: ipa_sso_groups
-# creates two FreeIPA groups per entry, keycloak_clients creates a client with
-# two roles per entry and binds the groups to them, and the two agree because
-# the playbook hands them the same value rather than because two lists are kept
-# aligned.
-#
-# The realm is `dev-lo` and not `master`. Master administers every other realm
-# and holds Keycloak's own break-glass administrator; federated end users and
-# application clients do not belong in it. See roles/keycloak_realm.
 inventory_keycloak_realm_name: dev-lo
 inventory_keycloak_realm_display_name: dev.lo
 inventory_keycloak_realm_issuer: https://sso.k8s.dev.lo/realms/dev-lo
 
-# The four services that federate, and the exact URIs Keycloak will return an
-# authorization code to. Exact, never wildcarded.
-#
-# Each `client_secret` is authored here from the environment rather than read
-# back from one Keycloak generated. That is what removes the ordering problem:
-# the value exists before either end does, so openbao_secrets can write it into
-# the vault on a cold rebuild's first pass and the workloads start without
-# waiting for Keycloak. See roles/keycloak_clients/tasks/main.yml.
 inventory_keycloak_applications:
   - name: grafana
     description: Grafana, the observability front end
@@ -177,9 +82,6 @@ inventory_keycloak_applications:
       - https://grafana.k8s.dev.lo/login/generic_oauth
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_GRAFANA') }}"
 
-  # The Longhorn UI itself speaks no OIDC. The client belongs to the
-  # oauth2-proxy in front of it, which is why the callback is /oauth2/callback
-  # on Longhorn's own hostname rather than a path Longhorn serves.
   - name: longhorn
     description: The Longhorn storage UI, behind an authenticating proxy
     base_url: https://longhorn.k8s.dev.lo
@@ -187,9 +89,6 @@ inventory_keycloak_applications:
       - https://longhorn.k8s.dev.lo/oauth2/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_LONGHORN') }}"
 
-  # Two callbacks, and the second is not optional: `bao login -method=oidc`
-  # opens a browser and listens on localhost:8250 for the response, so a vault
-  # without it can be signed into from the UI and not from a terminal.
   - name: openbao
     description: OpenBao, the secrets vault
     base_url: https://bao.k8s.dev.lo
@@ -198,9 +97,6 @@ inventory_keycloak_applications:
       - http://localhost:8250/oidc/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_OPENBAO') }}"
 
-  # Outside the cluster, and outside the k8s.dev.lo subdomain with it. GitLab
-  # is upstream of everything the cluster runs, so its federation is additive
-  # and the root password remains the way in — see roles/gitlab/defaults.
   - name: gitlab
     description: GitLab, the artifact and GitOps source host
     base_url: https://gitlab.dev.lo
@@ -208,111 +104,40 @@ inventory_keycloak_applications:
       - https://gitlab.dev.lo/users/auth/openid_connect/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_GITLAB') }}"
 
-# Keycloak itself, which has an administrator tier and no user tier: every
-# account in the domain can already sign in to it, so a `keycloak-users` group
-# would grant nothing that being federated does not already grant.
-#
-# It is here rather than in the list above because it is not an OIDC client —
-# Keycloak does not federate to itself. ipa_sso_groups creates the one group;
-# keycloak_realm_admins is what gives that group administration of the realm.
 inventory_keycloak_admin_only_applications:
   - name: keycloak
     description: Keycloak itself, the single sign-on service
 
-# The same group, spelled out, because keycloak_realm_admins is given a group
-# name rather than a slug and a suffix. It is `<name>-admins` of the entry
-# above, and the two are one fact written twice — there is no way to make it
-# fewer without one role reading another role's variables.
 inventory_keycloak_admins_group: keycloak-admins
 
-# --- Administering Keycloak itself -----------------------------------------
-#
-# `keycloak-admins` administers both realms, and the two grants are different
-# objects: `realm-admin` on `dev-lo`'s `realm-management` client, and the
-# `admin` realm role in `master`. The second needs master to be federated,
-# which is the arrangement everything else here is arranged to avoid — so it is
-# narrowed rather than granted whole.
-#
-# The narrowing is these two filters. The provider in master admits only
-# accounts that are members of the group, and its group mapper imports only
-# that one group, so master gains the people who administer Keycloak rather
-# than the domain. Keycloak's guidance is that master holds administrators and
-# not application users; a filtered federation is on the right side of it and
-# an unfiltered one is not, which is why keycloak_ldap refuses master without
-# both of these set.
-#
-# FreeIPA answers a memberOf filter for the Keycloak bind account — verified
-# against this directory — even though the group mapper cannot rely on the
-# attribute being readable and loads groups by member attribute instead.
 inventory_keycloak_admin_user_filter: >-
   (&(!(nsAccountLock=TRUE))(memberOf=cn=keycloak-admins,cn=groups,cn=accounts,dc=dev,dc=lo))
 inventory_keycloak_admin_groups_filter: (cn=keycloak-admins)
 
-# The one federation provider master is allowed to hold. keycloak_break_glass
-# removes anything else it finds there, which is what caught the provider left
-# behind by the realm split — name this and the two roles stop taking turns.
 inventory_keycloak_break_glass_allowed_federation:
   - freeipa
 
-# The realm role that administers master. Keycloak creates it with the realm;
-# there is no `realm-management` client there, because administering master is
-# not administering an application.
 inventory_keycloak_master_admin_roles:
   - admin
 
-# ipa_sso_groups
 inventory_ipa_sso_groups_ipa_host: core01
 inventory_ipa_sso_groups_ipa_container: freeipa-server
 inventory_ipa_sso_groups_admin_password: >-
   {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
 
-# openbao_oidc
 inventory_openbao_oidc_url: https://bao.k8s.dev.lo
 inventory_openbao_oidc_client_secret: >-
   {{ lookup('env', 'OIDC_CLIENT_SECRET_OPENBAO') }}
-# The domain CA from this host's trust store, where controller_trust put it.
-# The vault fetches Keycloak's discovery document itself and its container does
-# not trust the domain CA, so without this the configuration write fails with
-# `error checking oidc discovery URL` — an error naming the URL and not the
-# certificate. Same file gitops_source reads for the same reason.
+
 inventory_openbao_oidc_discovery_ca_file: >-
   /usr/local/share/ca-certificates/dev.lo-ca.crt
 
-# keycloak_ldap
 inventory_keycloak_ldap_url: https://sso.k8s.dev.lo
-# Where FreeIPA keeps user groups, which is not beside the users. The group
-# mapper reads this subtree, and pointing it at the wrong one produces a realm
-# with no groups in it and no error anywhere.
+
 inventory_keycloak_ldap_groups_dn: cn=groups,cn=accounts,dc=dev,dc=lo
-# LDAPS. This was plain LDAP, defended on the grounds that the hop never
-# leaves 192.168.2.0/24 and that terminating it would cost a BCFKS truststore.
-# Both halves were wrong in a way worth recording rather than quietly deleting:
-#
-#   - The bind is `authType: simple`, so the argument was never really about
-#     the confidentiality of user attributes. Every connection put the bind
-#     account's password on the wire in the clear, and that account can read
-#     the whole user tree. The blast radius of anyone with a span port is a
-#     directory credential, not a name.
-#   - The hop is not host-to-host. Keycloak runs in a pod, so the traffic
-#     crosses the pod network, the node's bridge, and the LAN between two VMs
-#     on a hypervisor that is itself a VM. "Internal" was doing a lot of work.
-#   - The BCFKS cost applies only under `KC_FIPS_MODE=strict`, which dev-lo
-#     does not enable. Here it is a PEM file in `conf/truststores`, which
-#     Keycloak reads without a keystore of any format. See the note in
-#     apps/keycloak/components/fips for what production still owes.
-#
-# `core.dev.lo`, not `core01.dev.lo`. The inventory calls this host core01 and
-# the domain calls it core, and only the second is a name anything can resolve
-# — Keycloak answered the first attempt with `UnknownHost`, which is a DNS
-# failure wearing an LDAP error's clothes. It matters twice over now: the name
-# also has to match FreeIPA's certificate, which is issued for the host as the
-# domain knows it.
+
 inventory_keycloak_ldap_connection_url: ldaps://core.dev.lo:636
 
-# kube_cli_controller
-#
-# All three from artifacts.yml, for the reason above: a version bump is one
-# edit, and the URL cannot be left behind by it.
 inventory_kube_cli_controller_k9s_url: >-
   {{ inventory_controller_artifacts['k9s']['url'] }}
 inventory_kube_cli_controller_k9s_version: >-
@@ -326,16 +151,6 @@ inventory_kube_cli_controller_kubeseal_url: >-
 inventory_kube_cli_controller_kubeseal_version: >-
   {{ inventory_controller_artifacts['kubeseal']['version'] }}
 
-# openbao_config
-# The vault's own API, through the ingress the cluster issued a certificate
-# for. Using it rather than exec'ing into the pod means this role exercises the
-# same path every other client uses — DNS delegation, ingress address, and
-# certificate — instead of bypassing all three.
 inventory_openbao_config_url: https://bao.k8s.dev.lo
 
-# openbao_secrets
-# The vault's own API, through the ingress the cluster issued a certificate
-# for. Same address, and the same reasoning, as openbao_config: this exercises
-# the DNS delegation, the ingress and the certificate rather than bypassing all
-# three by exec'ing into the pod.
 inventory_openbao_secrets_url: https://bao.k8s.dev.lo

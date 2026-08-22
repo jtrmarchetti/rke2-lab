@@ -25,12 +25,6 @@
       end.
     quiet: true
 
-# A transit artifact is deleted locally once GitLab confirms it holds the
-# content, so absence from disk cannot mean "fetch it again" — that would
-# re-download the whole set on every run. The marker rke2_publish leaves behind
-# is the local record of that confirmation, and it is read here rather than by
-# the caller: every playbook that stages artifacts needs this, and one that
-# forgot it would silently re-download gigabytes and report itself changed.
 - name: main | Find the markers of artifacts already published to GitLab
   when: (artifact_stage_enabled | bool)
   register: _reg_artifact_stage_markers
@@ -55,9 +49,6 @@
          | selectattr('dest', 'in', _artifact_stage_marked_dests)
          | map(attribute='name') | list }}
 
-# Mirror entries are skipped throughout this role. They are copied straight
-# from one registry to another by rke2_publish and have no local path at all,
-# which is the whole point of them.
 - name: main | Ensure the destination directories exist
   when: (artifact_stage_enabled | bool)
   loop: "{{ _var_artifact_stage_local }}"
@@ -78,13 +69,6 @@
     - (_var_artifact_stage_files | length > 0)
   ansible.builtin.include_tasks: files.yml
 
-# The image step pulls by tag, which needs a running Docker daemon. On a
-# fresh build nothing earlier in this play has installed the runtime: each
-# consumer role (gitlab, freeipa_server) installs its own in a later phase.
-# container_storage has already written /etc/docker/daemon.json pointing
-# data-root at the data volume, so starting the daemon here — right after
-# that config exists, and before the first pull — is the point a fresh build
-# needs. Gated on image entries so a file-only manifest stays runtime-free.
 - name: main | Ensure container runtime packages are installed
   when:
     - (artifact_stage_enabled | bool)
@@ -109,12 +93,6 @@
     - (_var_artifact_stage_images | length > 0)
   ansible.builtin.include_tasks: images.yml
 
-# Legacy cleanup, one time only. Older versions of this role published a
-# .sha256 sidecar next to every artifact; the pipeline no longer writes or
-# reads them, so a run that still has some deletes them and later runs find
-# nothing and report ok. The rke2/sha256sum-amd64.txt artifact does not match
-# the pattern, because it ends in .txt: it stays, the node's install.sh needs
-# it.
 - name: main | Find the legacy checksum sidecars this role used to publish
   when: (artifact_stage_enabled | bool)
   register: _reg_artifact_stage_legacy_sidecars

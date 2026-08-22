@@ -1,11 +1,4 @@
 ---
-# The client's two roles, and the mapper that puts them in the token.
-#
-# The mapper is the half that is easy to leave out and impossible to notice
-# missing from Keycloak's side: the roles exist, the group mappings exist, the
-# console shows a correctly authorised user, and every service still refuses
-# them, because the token they were issued does not mention a role anywhere the
-# service looks.
 
 - name: roles | Read the roles the client already has
   changed_when: false
@@ -41,11 +34,6 @@
     body: "{{ _item_keycloak_clients_role }}"
     status_code: [201]
 
-# Re-read, overwriting the register above, because groups.yml grants a role by
-# posting the role's full representation — identifier included — and a role
-# created a moment ago is not in a list that was read before it existed.
-# Without this, the run that creates the roles is exactly the run that cannot
-# grant them, and it would report success either way.
 - name: roles | Re-read the client's roles now that they all exist
   changed_when: false
   no_log: "{{ keycloak_clients_no_log | bool }}"
@@ -85,16 +73,10 @@
     body: "{{ _var_keycloak_clients_role_mapper }}"
     status_code: [201]
 
-# Update as well as create, because a mapper whose claim name was changed in
-# this repository and not in the realm is the same silent drift the client
-# update above exists to prevent — and it fails in the least obvious place, as
-# a service that authenticates everyone and authorises nobody.
 - name: roles | Correct an existing mapper that no longer matches
   when:
     - (_keycloak_clients_mapper | length) > 0
-    # One-directional: true only if this definition would change something.
-    # Comparing the two configs outright would report a change forever the
-    # first time a Keycloak release echoes back a key this file does not set.
+
     - >-
       (_keycloak_clients_mapper[0]['config']
        | combine(_var_keycloak_clients_role_mapper['config']))

@@ -1,11 +1,4 @@
 ---
-# The controller's end of the tunnel into 192.168.2.0/24.
-#
-# Ordering here is not arbitrary. The tooling comes first because the key
-# derivation shells out to `wg`; the keys come before the interface because the
-# rendered configuration contains both of them; and validation is last and off
-# by default in the play that configures this end, because the far end of the
-# tunnel does not exist yet when this end is written.
 
 - name: main | Ensure the WireGuard tooling is installed
   when: (controller_tunnel_enabled | bool)

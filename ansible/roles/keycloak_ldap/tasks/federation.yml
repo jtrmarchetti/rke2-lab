@@ -1,9 +1,4 @@
 ---
-# The Keycloak side: a user federation provider pointing at FreeIPA.
-#
-# Configured through the admin API rather than by importing a realm file,
-# because the bind credential belongs in the request and not in a file in Git.
-# Read before written, so a second run reports no change.
 
 - name: federation | Obtain an admin token
   no_log: "{{ keycloak_ldap_no_log | bool }}"
@@ -51,12 +46,6 @@
     body: "{{ _var_keycloak_ldap_component }}"
     status_code: [201]
 
-# Create-only would be a trap, and this role fell into it once: the provider
-# was created on a run whose connection URL was wrong, and every later run
-# found a provider by that name and left it alone. Keycloak went on reporting
-# UnknownHost against a host name that had since been corrected in this
-# repository, which is the worst kind of drift — the fix is committed, applied,
-# and not in effect.
 - name: federation | Update the existing provider to match this definition
   when: (_var_keycloak_ldap_present | bool)
   no_log: "{{ keycloak_ldap_no_log | bool }}"
@@ -84,12 +73,6 @@
     headers: "{{ _var_keycloak_ldap_headers }}"
     ca_path: "{{ keycloak_ldap_ca_file }}"
 
-# The attribute mappers Keycloak creates with the provider are nearly right.
-# For the `rhds` vendor it maps **first name from `cn`**, which in FreeIPA is
-# the full name — so every federated user arrives with their whole name in the
-# first-name field and their surname repeated after it. FreeIPA keeps the given
-# name in `givenName`, like every other directory, so the mapper is corrected
-# rather than the directory being reshaped to suit it.
 - name: federation | Read the provider's attribute mappers
   no_log: "{{ keycloak_ldap_no_log | bool }}"
   register: _reg_keycloak_ldap_mappers
@@ -127,11 +110,6 @@
                    recursive=True) }}
     status_code: [204]
 
-# Every federated user is imported with emailVerified false, because FreeIPA
-# has no attribute that says otherwise. oauth2-proxy then refuses the login
-# *after* Keycloak has authenticated the user, with a 500 and a message about
-# an unverified address. See the defaults for why this is fixed at the
-# directory's edge rather than by telling the proxy to stop checking.
 - name: federation | Create the email-verified mapper
   when:
     - (keycloak_ldap_email_verified_mapper_enabled | bool)
@@ -172,9 +150,6 @@
          | combine(_var_keycloak_ldap_email_verified_mapper) }}
     status_code: [204]
 
-# The groups. Everything above this point federates identity; this federates
-# authorisation, and without it Keycloak can say who someone is and nothing
-# about what they may do.
 - name: federation | Create the group mapper
   when:
     - (keycloak_ldap_group_mapper_enabled | bool)
@@ -192,10 +167,6 @@
     body: "{{ _var_keycloak_ldap_group_mapper }}"
     status_code: [201]
 
-# Updated as well as created, for the reason the provider itself is: a mapper
-# created with the wrong subtree is a mapper every later run finds by name and
-# leaves alone, and the symptom — a realm with no groups in it — points at
-# FreeIPA rather than at the mapper.
 - name: federation | Update an existing group mapper to match this definition
   when:
     - (keycloak_ldap_group_mapper_enabled | bool)
@@ -232,18 +203,6 @@
     headers: "{{ _var_keycloak_ldap_headers }}"
     ca_path: "{{ keycloak_ldap_ca_file }}"
 
-# Import now rather than at some later sync.
-#
-# Keycloak imports groups when the federation synchronises, not when a user
-# logs in, so a group ipa_sso_groups created a moment ago is not in the realm
-# yet — and keycloak_clients reads the realm's groups to bind them to client
-# roles. Without this, the run that adds an application is exactly the run that
-# cannot finish it, and the error names a group that plainly exists in FreeIPA.
-#
-# Reported unchanged: it imports whatever the directory holds and leaves no
-# state of its own, so a run where nothing in the directory has moved genuinely
-# changes nothing. What it does report is how many groups were added or
-# updated, which is the number worth reading when a login is refused.
 - name: federation | Import the directory's groups into the realm
   when:
     - (keycloak_ldap_group_mapper_enabled | bool)
@@ -261,11 +220,6 @@
     ca_path: "{{ keycloak_ldap_ca_file }}"
     status_code: [200]
 
-# A fresh token, because the sync above is the one step in this role that can
-# take real time — it walks the whole group subtree — and **Keycloak's master
-# realm issues 60 second access tokens by default**. The calls after this would
-# otherwise fail with a 401 whose cause is entirely invisible from the error,
-# and only on directories large enough to push the sync past the minute.
 - name: federation | Obtain a fresh admin token after the import
   when:
     - (keycloak_ldap_group_mapper_enabled | bool)
@@ -295,22 +249,6 @@
       {{ _reg_keycloak_ldap_group_sync['json']['status'] | default('no status') }}
     verbosity: 0
 
-# Re-import the users, so the mappers above reach the ones already in the
-# realm.
-#
-# A mapper shapes a user as they are imported and at no other moment. Adding
-# the email-verified mapper to a realm that already holds imported users leaves
-# every one of them exactly as they were, so without this the run that fixes
-# the mapper is indistinguishable from a run that fixed nothing — the realm
-# reports the mapper present and the logins keep failing.
-#
-# triggerFullSync, not triggerChangedUsersSync: the changed-users variant
-# selects on the directory's modify timestamp, and correcting a mapper on
-# Keycloak's side does not touch it. Every user would be skipped, which looks
-# like a successful sync of nothing.
-#
-# Reported unchanged for the reason the group import is: it re-reads the
-# directory and leaves no state of its own.
 - name: federation | Re-import the directory's users into the realm
   when:
     - (keycloak_ldap_user_sync | bool)
@@ -326,8 +264,6 @@
     ca_path: "{{ keycloak_ldap_ca_file }}"
     status_code: [200]
 
-# A fresh token again, for the reason the group import needed one: this walks
-# the whole user subtree and master's access tokens last 60 seconds.
 - name: federation | Obtain a fresh admin token after the user import
   when:
     - (keycloak_ldap_user_sync | bool)
@@ -355,24 +291,6 @@
       {{ _reg_keycloak_ldap_user_sync['json']['status'] | default('no status') }}
     verbosity: 0
 
-# Drop the user cache, so a membership change made in the directory since the
-# last run is actually visible.
-#
-# This is the step whose absence looks least like its cause. Keycloak caches an
-# imported user together with the groups resolved for them, and neither sync
-# above invalidates that cache — the group subtree is re-read, the user
-# entries are re-read, and the *cached* association between the two survives
-# both. A person added to `keycloak-admins` in FreeIPA therefore appears in the
-# group when the admin API is asked who is in it, because that query goes to
-# the directory, and does not appear in their own group list, because that one
-# is served from the cache. Every role mapping derived from the group is
-# missing with it, and the person is refused at the console with "You do not
-# have permission to access this resource" against a realm in which every
-# mapping reads back correctly.
-#
-# Reported unchanged: the cache repopulates from the database and the directory
-# on the next read, so this leaves no state behind. It is the same argument the
-# two syncs above make for themselves.
 - name: federation | Drop the realm's user cache
   when: (keycloak_ldap_clear_user_cache | bool)
   changed_when: false
@@ -386,8 +304,6 @@
     ca_path: "{{ keycloak_ldap_ca_file }}"
     status_code: [204]
 
-# Keycloak's own connection test, which is the only check that proves the
-# provider is usable rather than merely present.
 - name: federation | Ask Keycloak to test the connection and the bind
   no_log: "{{ keycloak_ldap_no_log | bool }}"
   loop:

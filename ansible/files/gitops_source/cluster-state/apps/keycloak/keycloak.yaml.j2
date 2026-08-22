@@ -1,34 +1,19 @@
 {{ ansible_managed | comment }}
-# Keycloak, and the database it needs.
-#
-# FIPS is not configured here. It is a property of the environment rather than
-# of Keycloak, and this file is shared by every environment: dev does not run
-# in the FIPS boundary and production does. The switch is the `fips` component
-# beside this file, which a cluster enables in its own kustomization — see
-# components/fips/kustomization.yaml for what it changes and why it is more
-# than one flag.
-#
-# What is here regardless of FIPS:
-#
-#   - TLS terminates at Traefik, not in Keycloak. The certificate that matters
-#     is the one on the ingress, issued by the cluster's CA. Terminating here
-#     as well would mean a keystore to generate and rotate for a connection
-#     that never leaves the pod network — and in FIPS mode that keystore has
-#     to be BCFKS, which is a second format for no gain.
-#   - `proxy-headers=xforwarded` is what makes that safe: without it Keycloak
-#     builds redirect URLs from the request it actually received, which is
-#     plain HTTP from Traefik, and every OIDC redirect would downgrade.
-#   - Users come from FreeIPA over LDAPS, configured by the keycloak_ldap role
-#     rather than declared here, because the bind credential belongs in a
-#     request and not in a file in Git. What this file owns is the other half
-#     of that connection: the domain CA, mounted below. Without it Keycloak
-#     cannot verify the directory's certificate and the federation does not
-#     connect at all — which is the intended failure mode, and the reason the
-#     two halves have to be committed together.
-#
-# Plain manifests rather than the Operator or the community chart. For a single
-# instance the Operator is a controller to keep current for no gain, and the
-# community chart is a third party in the authentication path.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ---
 apiVersion: v1
 kind: Namespace
@@ -80,9 +65,8 @@ spec:
                 secretKeyRef:
                   name: keycloak-secrets
                   key: db-password
-            # Postgres refuses to initialise into a non-empty directory, and a
-            # Longhorn volume arrives with lost+found in it. A subdirectory is
-            # the documented answer.
+
+
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           ports:
@@ -111,16 +95,11 @@ spec:
           requests:
             storage: 5Gi
 ---
-# The domain CA, so Keycloak can verify FreeIPA's LDAPS certificate.
-#
-# Public material, committed in the clear but read from the controller's trust
-# store at render time rather than pasted, so reissuing the domain CA changes
-# this file without anyone remembering to re-copy it — the same arrangement as
-# the registry's CA Secret and Grafana's.
-#
-# The domain root is the right anchor here rather than the cluster's
-# intermediate: 389-ds inside FreeIPA is served a certificate by the IPA CA
-# directly, not by the sub-CA that issues for the cluster.
+
+
+
+
+
 apiVersion: v1
 kind: Secret
 metadata:
@@ -167,11 +146,9 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - start
-            # Built at start rather than baked into a derived image. An
-            # optimised build would be faster to start and would mean
-            # maintaining an image of our own in the registry — a fair trade
-            # for a busy cluster, and the wrong one for a single instance that
-            # restarts rarely.
+
+
+
             - --optimized=false
           env:
             - name: KC_DB
@@ -205,22 +182,14 @@ spec:
               name: http
             - containerPort: 9000
               name: management
-          # `conf/truststores` is loaded automatically — Keycloak scans it and
-          # its subdirectories at startup, so no `KC_TRUSTSTORE_PATHS` is
-          # needed and there is no keystore file to generate or rotate. The
-          # JRE's own trusted roots are kept, not replaced; this only adds to
-          # them, which is why mounting a single-certificate Secret here does
-          # not break anything else Keycloak talks to.
-          #
-          # Startup logs the CA three times — as `ca.crt`, as `..data/ca.crt`
-          # and once under a timestamped directory. That is Kubernetes' atomic
-          # secret-update layout being scanned recursively, not three
-          # certificates, and it is harmless: the same anchor loaded three
-          # times trusts exactly what it would have trusted once. Do not
-          # "tidy" it with a `subPath` mount — subPath severs the symlink that
-          # makes the update atomic, and the pod would then keep serving the
-          # old CA after the domain reissues it, which fails as an expired
-          # trust anchor months later with nothing to connect it to this file.
+
+
+
+
+
+
+
+
           volumeMounts:
             - name: domain-ca
               mountPath: /opt/keycloak/conf/truststores
@@ -231,9 +200,8 @@ spec:
               memory: 768Mi
             limits:
               memory: 1280Mi
-          # Keycloak's health endpoints are on the management port, not the
-          # HTTP one, and a probe pointed at 8080 gets a 404 that reads as the
-          # server being broken.
+
+
           startupProbe:
             httpGet:
               path: /health/started

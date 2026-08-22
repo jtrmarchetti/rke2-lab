@@ -1,42 +1,29 @@
-#jinja2: trim_blocks: True, lstrip_blocks: True
-# Managed by Ansible (apt_proxy role). Do not edit by hand.
-#
-# apt-cacher-ng reads every *.conf in this directory, so this file carries only the
-# settings this lab overrides. The packaged acng.conf and its backend/mirror lists are
-# left untouched.
-#
-# Operating mode: caching proxy, never a mirror. Files are stored only after an
-# internal host actually requests them, and unreferenced files are expired again.
-# Nothing here pre-fetches or clones an Ubuntu repository — that would cost tens of
-# gigabytes on /data1 to hold packages the lab will never install.
+
+
+
+
+
+
 
 Port: {{ apt_proxy_bind_port }}
 {% if apt_proxy_bind_addresses | length > 0 %}
-# Bound to internal addresses only, so the proxy is not reachable from the external
-# network. This is the access control; there is no client ACL in apt-cacher-ng.
+
 BindAddress: {{ apt_proxy_bind_addresses | join(' ') }}
 {% endif %}
 
 CacheDir: {{ apt_proxy_cache_dir }}
 LogDir: {{ apt_proxy_log_dir }}
 
-# Expire cached files that are no longer referenced by any index after this many days.
-# The packaged daily cron job runs the expiration pass.
+
 ExThreshold: {{ apt_proxy_expire_days }}
 
-# Keep only this many superseded versions of a package. Higher values grow the cache
-# with builds no internal host will ever ask for again.
+
 KeepExtraVersions: {{ apt_proxy_keep_extra_versions }}
 
-# Do not abort expiration when a mirror is briefly unreachable; a failed pass would
-# otherwise leave the cache growing unchecked.
+
 ExAbortOnProblems: 0
 
-# Deliberately unset: PrecacheFor. Setting it makes apt-cacher-ng walk and download
-# entire repository index trees on a schedule, which is the mirroring behavior this
-# lab does not want.
 
-# CONNECT tunneling is restricted to Ubuntu archive hosts. A permissive pattern such
-# as `.*` would turn this proxy into general internet egress for internal hosts, which
-# is exactly what the no-internet-access design forbids.
+
+
 PassThroughPattern: {{ apt_proxy_passthrough_pattern }}

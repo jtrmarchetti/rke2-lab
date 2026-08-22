@@ -1,10 +1,4 @@
 ---
-# Pushes one staged chart tarball into the GitLab container registry.
-#
-# `helm push` is the only way in: a chart pushed as an OCI artifact carries the
-# media types the source-controller looks for, and uploading the same tarball
-# as a blob by hand would produce something the cluster cannot read. There is
-# no Ansible module for it.
 
 - name: chart_push | Confirm the staged chart tarball is present
   register: _reg_rke2_publish_chart_stat

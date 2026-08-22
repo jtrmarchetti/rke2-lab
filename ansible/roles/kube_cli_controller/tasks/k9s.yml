@@ -1,19 +1,5 @@
 ---
-# The controller has internet access, so k9s is fetched here directly. That is
-# not a hole in the artifact rule: plan/OVERVIEW.md's rule is that no *internal*
-# node reaches the internet, and this host sits outside the Proxmox environment
-# and already installs Pulumi and Ansible from upstream.
-#
-# It is still pinned, because "has internet" is not a reason to install
-# whatever happens to be current today: the version and URL come from
-# inventory and the download rides on TLS to that pinned source.
 
-# check_mode: false because this only reads a version, and because the
-# comparison below is a `when:` on every task that follows. A command skipped
-# by --check registers a result with no `rc` in it, so the guard cannot
-# evaluate the way it does on a real run — the download block was entered
-# during --check and then failed on the scratch directory that --check had
-# also skipped. Same pattern controller_runtime uses for the Pulumi CLI.
 - name: k9s | Read the version already installed here
   changed_when: false
   failed_when: false
@@ -34,9 +20,6 @@
         state: directory
         suffix: k9s
 
-    # Downloaded over TLS from the pinned release URL, so the integrity rides
-    # on the transport and the pinned source rather than on a recorded
-    # checksum.
     - name: k9s | Download the release tarball
       ansible.builtin.get_url:
         url: "{{ kube_cli_controller_k9s_url | trim }}"

@@ -102,8 +102,8 @@ argument_specs:
       gitops_source_work_dir:
         type: str
         description:
-          - Working clone. Removed and re-cloned each run, and left in place
-            afterwards so the pushed tree can be inspected.
+          - Working clone. Cloned once, then synced with the remote tip
+            every run and left in place so the pushed tree can be inspected.
       gitops_source_bin_dir:
         type: str
         description: Directory holding kubeseal on this host.

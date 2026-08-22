@@ -1,15 +1,4 @@
 ---
-# The group and the project the cluster reconciles from.
-#
-# Read before create, rather than creating and treating the resulting 400 as
-# success — same shape as rke2_publish/tasks/gitlab_project.yml, and for the
-# same reason: a create-then-ignore-the-error form reports `changed` on every
-# run and cannot tell "already exists" apart from "the request was malformed".
-#
-# Its own group rather than a fourth project under `rke2`. That group is the
-# artifact mirror — images, packages, charts — and its deploy token is handed
-# to every node in the cluster. Cluster state is not an artifact and no node
-# should be able to read it.
 
 - name: project | Look for the group
   no_log: "{{ gitops_source_no_log | bool }}"
@@ -71,15 +60,9 @@
       path: "{{ gitops_source_project }}"
       namespace_id: "{{ _reg_gitops_source_group_final['json']['id'] }}"
       visibility: private
-      # Named explicitly rather than left to the instance default. The
-      # GitRepository this role writes names a branch, and a project whose
-      # default branch is something else would produce a repository Flux
-      # reconciles nothing from and a push that lands on an orphan.
+
       default_branch: "{{ gitops_source_branch }}"
-      # Nothing is developed here — the source is in the automation repository
-      # — so an issue tracker and merge requests would advertise a workflow
-      # that does not exist and invite exactly the edit-in-GitLab habit this
-      # role removes.
+
       issues_enabled: false
       merge_requests_enabled: false
       wiki_enabled: false

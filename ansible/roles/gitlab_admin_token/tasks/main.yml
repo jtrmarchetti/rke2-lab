@@ -1,36 +1,4 @@
 ---
-# Ensure one valid GitLab admin personal access token, recorded on the GitLab
-# host, and leave it in place for the including role to read.
-#
-# Minting is the slow step: creating a token requires a token you do not have
-# yet, so the mint is a `gitlab-rails` command inside the GitLab container,
-# which takes around a minute every time. Paying that per role — which was the
-# shape before this one existed, when rke2_publish, gitops_source and
-# gitops_bootstrap each minted and revoked their own copy — is what made a
-# full automation run spend several minutes on credentials alone.
-#
-# So the token is minted at most once per day rather than once per run. The
-# value is recorded in a file on the GitLab host, and every subsequent
-# inclusion proves the recorded value still authenticates with a single
-# `GET /user` and reuses it. A mint happens only when the file is missing or
-# the recorded token no longer authenticates; the fresh token supersedes the
-# recorded one, and the superseded token — if still inside its day — is left
-# to expire. This role records at most one token, so it never revokes: there
-# is nothing of its own to revoke, and the old revoke-on-failure loops are gone
-# with it.
-#
-# The token expires in a day rather than living forever. A value that outlived
-# its run was the posture this role replaces, and one-day expiry bounds how
-# stale a leaked copy of the record file can be. After a day the proof step
-# fails and the next inclusion mints a replacement; no operator is involved.
-#
-# This role owns the record file on the GitLab host and nothing else: the
-# including role reads the recorded value back from that file, exactly as it
-# already reads the deploy token file. `gitlab_admin_token_host` names that
-# host; roles that already run on it (rke2_publish) leave it unset and the
-# tasks run locally, and roles running on the controller (gitops_source,
-# gitops_bootstrap) set it so the file work and the mint land on the GitLab
-# host rather than the workstation.
 
 - name: main | Check for a previously recorded token
   register: _reg_gitlab_admin_token_file
@@ -53,11 +21,6 @@
   ansible.builtin.slurp:
     src: "{{ gitlab_admin_token_file }}"
 
-# The one cheap operation this role exists to replace the mint with: a token
-# that still authenticates costs a stat, a slurp and this call — seconds
-# instead of the gitlab-rails startup. Transient 5xx from a wedged GitLab is
-# retried the way the old revoke task did, rather than forcing a mint on a
-# token that is fine.
 - name: main | Prove the recorded token still authenticates
   when: _reg_gitlab_admin_token_file['stat']['exists']
   no_log: "{{ gitlab_admin_token_no_log | bool }}"
@@ -67,32 +30,13 @@
     {{ gitlab_admin_token_host
        if (gitlab_admin_token_host | default('') | length) > 0
        else omit }}
-  # No ca_path: this call runs on the GitLab host, where the gitlab role has
-  # put the domain CA in the system trust store — the same trust rke2_publish's
-  # own API tasks rely on. A connection error, like a wedged GitLab, is not a
-  # failure of this task: an unprovable token is treated as dead and re-minted
-  # below, and the following API tasks surface the real outage.
+
   ansible.builtin.uri:
     url: "{{ _var_gitlab_admin_token_api }}/user"
     headers:
       PRIVATE-TOKEN: "{{ _var_gitlab_admin_token_recorded['token'] }}"
     status_code: [200, 401, 403]
 
-# Whether the recorded token counts as usable for this run. Two cases:
-#
-# * Real run: the GET decides. A 200 means the recorded token still
-#   authenticates, so it is reused. Anything else — a 401, a 403, or a
-#   connection error on a wedged GitLab — is indistinguishable here from an
-#   expired token, and a mint is the answer to all of them. `.get` rather
-#   than a bracket lookup, because a task that failed before it got an HTTP
-#   status reports no status at all.
-#
-# * Check run: the GET is skipped (uri does not support check mode), so a
-#   recorded token cannot be *proven* — but it was recorded by a real run
-#   that did prove it, and check mode must not fail merely because it
-#   cannot re-prove it. So a recorded token is assumed reusable in check
-#   mode, and the mint refusal below only fires when the record file is
-#   genuinely missing.
 - name: main | Decide whether the recorded token can be reused
   ansible.builtin.set_fact:
     _gitlab_admin_token_reusable: >-
@@ -131,10 +75,15 @@
     {{ gitlab_admin_token_host
        if (gitlab_admin_token_host | default('') | length) > 0
        else omit }}
+  environment:
+    GITLAB_ADMIN_TOKEN_BASE_URL: "{{ gitlab_admin_token_url }}"
+    GITLAB_ADMIN_TOKEN_ROOT_PASSWORD: >-
+      {{ _var_gitlab_admin_token_root_password }}
   ansible.builtin.shell:
-    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
-    # through a heredoc, which is shell syntax with no command equivalent.
-    cmd: "{{ _var_gitlab_admin_token_pat_script }}"
+    cmd: >-
+      {{ _var_gitlab_admin_token_web_script
+         if (_var_gitlab_admin_token_root_password | length) > 0
+         else _var_gitlab_admin_token_pat_script }}
 
 - name: main | Record the token for later runs
   when: not (_gitlab_admin_token_reusable | bool)
@@ -145,12 +94,6 @@
        else omit }}
   ansible.builtin.copy:
     content: |
-      # Written by the gitlab_admin_token role. Read by every role that needs
-      # a GitLab admin credential, so the gitlab-rails mint is paid once a
-      # day at most rather than once per role per run. Not a repository
-      # file: GitLab returns a token's value exactly once, so this is the
-      # only copy. The token expires in a day; a missing or dead token is
-      # re-minted on the next run of any including role.
       id: {{ _reg_gitlab_admin_token_new['stdout'].split()[0] }}
       token: {{ _reg_gitlab_admin_token_new['stdout'].split()[1] }}
     dest: "{{ gitlab_admin_token_file }}"

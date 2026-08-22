@@ -1,26 +1,4 @@
 ---
-# Initialises OpenBao once, and records the keys it hands back.
-#
-# `bao operator init` is the one operation in this lab that produces secrets
-# rather than consuming them, and it can only ever be run once: the unseal keys
-# and the root token are returned exactly once, and a vault whose keys were not
-# captured is a vault whose data is gone. Everything here is arranged around
-# that single fact.
-#
-#   - It reads the vault's state first and does nothing if it is already
-#     initialised. Re-running init against an initialised vault is an error,
-#     and an error is a much better outcome than a second set of keys.
-#   - It writes the keys to env.sh before unsealing with them, so a failure
-#     between the two leaves a recorded set of keys and a sealed vault, rather
-#     than an unsealed vault and no way to unseal it again.
-#   - It runs on the controller. The keys land in the file that already holds
-#     every other secret in the environment, at mode 0600, and never touch a
-#     managed host.
-#
-# The keys are held twice on purpose, and the second copy is Phase 6b's other
-# half: a SealedSecret in Git, which the unsealer loop reads. The two fail in
-# different ways — losing the sealing key does not touch env.sh, and losing the
-# controller does not touch Git — and neither one alone covers both.
 
 - name: main | Assert the required inputs are present
   ansible.builtin.assert:
@@ -36,17 +14,7 @@
 
 - name: main | Read the vault's current state
   changed_when: false
-  # `bao status` exits 2 when the vault is sealed and 1 when it is not yet
-  # initialised. Both are states this role expects to find, not failures.
-  #
-  # On a cold build the pod is not up when this role first runs: Flux deploys
-  # it from the tree the first GitOps push creates, and its PVCs wait on the
-  # storage class Longhorn installs. A `kubectl exec` into a pod that is not
-  # there exits 1 with an empty body — the same code as "not yet initialised"
-  # minus the JSON — so the gate is "the call answers with a status body",
-  # which is true only once the vault can report itself. That makes the first
-  # run of cluster_init self-contained instead of needing a re-run, and it is
-  # a no-op on an environment where the vault already answers.
+
   failed_when: _reg_openbao_init_status['rc'] not in [0, 1, 2]
   register: _reg_openbao_init_status
   until: >-
@@ -82,9 +50,6 @@
           -key-threshold={{ openbao_init_key_threshold }}
           -format=json
 
-    # Before unsealing, deliberately. If this play dies at the next task, the
-    # keys are on disk and the vault is merely sealed; the reverse order could
-    # leave a running vault whose keys exist nowhere.
     - name: main | Record the keys in the controller's secret environment
       no_log: "{{ openbao_init_no_log | bool }}"
       ansible.builtin.blockinfile:
@@ -93,16 +58,6 @@
         create: true
         mode: "0600"
         block: |
-          # OpenBao unseal keys and root token, written by the openbao_init
-          # role.
-          #
-          # This is the break-glass copy. The automation's copy is a
-          # SealedSecret in the cluster-state repository, read by the unsealer
-          # loop; this one is what recovers the vault when the Sealed Secrets
-          # sealing key is lost. Both are needed: they fail differently.
-          #
-          # Seal migration also requires these. They are not cleanup to be
-          # tidied away once auto-unseal works.
           export OPENBAO_UNSEAL_KEYS="{{ _var_openbao_init_keys | join(',') }}"
           export OPENBAO_ROOT_TOKEN="{{ _var_openbao_init_root }}"
 

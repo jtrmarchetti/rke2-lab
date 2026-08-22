@@ -2,38 +2,14 @@
 _var_gitlab_compose_file: "{{ gitlab_compose_dir }}/docker-compose.gitlab.yml"
 _var_gitlab_env_file: "{{ gitlab_compose_dir }}/gitlab.env"
 
-# The three volumes GitLab's own documentation defines, and only those. Config
-# holds gitlab-secrets.json, which is what decrypts everything in data, so the
-# two still have to be backed up together — but that is a backup concern, not a
-# reason for a fourth mount.
-#
-# Backups deliberately are not a separate bind mount. They live at
-# /var/opt/gitlab/backups, which is already inside the data volume and so
-# already on the data disk. Mounting them separately added a root-owned
-# directory that the `git` user could not write, for no gain.
-# A mode is declared only where the container's own users must traverse the
-# mount root: /var/opt/gitlab, which holds the PostgreSQL cluster. The other two
-# are created and then left alone, because omnibus manages their modes itself
-# and enforcing a value here means the role and the application overwrite each
-# other on alternate runs — visible as a task that reports changed forever.
 _var_gitlab_data_dirs:
   - path: "{{ gitlab_data_root }}/config"
   - path: "{{ gitlab_data_root }}/logs"
   - path: "{{ gitlab_data_root }}/data"
     mode: "0755"
 
-# Where the certificates are mounted inside the container. Omnibus looks here
-# for <hostname>.crt and <hostname>.key without being told to.
 _var_gitlab_container_ssl_dir: /etc/gitlab/ssl
 
-# Where authorities GitLab must *trust* go, as opposed to the certificates it
-# serves. A different directory and a different purpose: omnibus hashes and
-# links everything here into the Ruby trust store on each reconfigure, which is
-# what lets the token exchange with Keycloak verify a certificate the cluster
-# issued itself. On the host this is inside the config bind mount.
 _var_gitlab_trusted_certs_dir: "{{ gitlab_data_root }}/config/trusted-certs"
 
-# Templates for this role live in ansible/files/gitlab/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_gitlab_files_dir: "{{ role_path | dirname | dirname }}/files/gitlab"

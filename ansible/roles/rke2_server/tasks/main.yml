@@ -16,9 +16,6 @@
   when: (rke2_server_enabled | bool)
   ansible.builtin.include_tasks: config.yml
 
-# Only the bootstrap node writes these. RKE2's auto-deploy directory is
-# reconciled from every server, so three copies of the same manifest would be
-# three servers racing to apply identical objects.
 - name: main | Deploy the API virtual address
   when:
     - (rke2_server_enabled | bool)
@@ -26,8 +23,6 @@
     - (rke2_server_bootstrap | bool)
   ansible.builtin.include_tasks: kube_vip.yml
 
-# Bootstrap only, for the same reason as kube-vip above: the auto-deploy
-# directory is reconciled from every server.
 - name: main | Configure the packaged ingress controller
   when:
     - (rke2_server_enabled | bool)

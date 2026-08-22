@@ -1,15 +1,10 @@
 {{ ansible_managed | comment }}
-# The second StorageClass, for data that can be rebuilt.
-#
-# `longhorn` is the default and keeps two replicas: it survives a node loss and
-# rebuilds onto the spare. This one keeps one, which means a single node loss
-# destroys the volume — so it is for caches, scratch, and anything else whose
-# loss costs time rather than data.
-#
-# Explicitly not for OpenBao. It holds every runtime secret in the cluster, and
-# the plan says so in two places because it is the tempting wrong answer: one
-# replica is the fastest storage here, and the vault is the thing most bothered
-# by slow storage.
+
+
+
+
+
+
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

@@ -1,28 +1,4 @@
 ---
-# The kernel's inotify limits, which are per-UID and which a Kubernetes node
-# exhausts as a matter of course.
-#
-# `fs.inotify.max_user_instances` defaults to 128. Almost every container on a
-# node runs as UID 0, so they all draw on the same allowance, and the things
-# that watch files here are not exotic: kubelet, containerd, Flux's four
-# controllers, cert-manager, the Longhorn manager and engines, Grafana's two
-# config sidecars, Alloy, and every controller-runtime operator in the cluster.
-# Six nodes measured before this was written held 129 root-owned instances
-# against a limit of 128.
-#
-# What that looks like is not a message about inotify. The allocation fails with
-# EMFILE and the process reports what EMFILE usually means:
-#
-#     failed to create fsnotify watcher: too many open files
-#
-# which sends you to ulimit and to `fs.file-max`, where nothing is wrong. The
-# component then either crash-loops or, worse, starts and silently never
-# notices a change it was deployed to watch.
-#
-# Set through a file in /etc/sysctl.d rather than with sysctl alone, because the
-# running value is what fixes today and the file is what survives a reboot.
-# Neither is sufficient alone, and the reboot case is the one that comes back
-# months later looking like a new fault.
 
 - name: inotify | Ensure the inotify sysctl drop-in is present
   ansible.builtin.template:
@@ -32,10 +8,6 @@
     group: root
     mode: "0644"
 
-# Applied by name rather than by reloading everything under /etc/sysctl.d.
-# `sysctl --system` re-applies every drop-in on the host, which on a node this
-# role does not otherwise own means re-asserting settings that something else
-# put there and that may have been changed deliberately since.
 - name: inotify | Apply the inotify limits to the running kernel
   loop: "{{ _var_rke2_node_inotify_settings | dict2items }}"
   loop_control:

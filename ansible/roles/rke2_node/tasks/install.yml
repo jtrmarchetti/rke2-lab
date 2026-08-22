@@ -1,8 +1,4 @@
 ---
-# The binary comes from the GitLab generic package registry, not from Apache and
-# not from the internet. This is the one thing a node needs before it has
-# anything that can pull an image, which is why it is a package and not an
-# image.
 
 - name: install | Ensure the installer scratch directory exists
   ansible.builtin.file:
@@ -12,17 +8,6 @@
     group: root
     mode: "0700"
 
-# Three files: install.sh, the binary tarball, and the release's own
-# sha256sum file. The checksum file is not ours to verify — install.sh's
-# stage_local_checksums and verify_tarball use it to check the binary itself,
-# and the script aborts without it, so it must ship alongside the binary.
-# install.sh looks for an rke2-images.<arch>.tar.* and, finding none, leaves
-# AIRGAP_CHECKSUM_EXPECTED empty; both verify_airgap_tarball and
-# install_airgap_tarball then return immediately. That is the supported shape
-# for a registry-based air gap, and it is deliberate: seeding the image
-# tarball here would leave containerd with every image already on local disk,
-# so it would never contact the mirror and a broken mirror would pass this
-# phase silently. See plan/PHASE4_IMPLEMENTATION.md.
 - name: install | Fetch the installer and binary from the package registry
   no_log: true
   loop:
@@ -47,11 +32,6 @@
     mode: "0700"
     timeout: "{{ rke2_node_download_timeout }}"
 
-# The release's own checksum file is not verified by this role: install.sh
-# verifies the binary against it itself, and it aborts without the file, so
-# there is no check left for the role to add. The download rides on TLS to
-# the GitLab package registry at the pinned path.
-
 - name: install | Check whether this version is already installed
   changed_when: false
   failed_when: false
@@ -59,8 +39,6 @@
   ansible.builtin.command:
     cmd: /usr/local/bin/rke2 --version
 
-# `creates` is not usable here: the binary exists after any install, so it would
-# make an upgrade a no-op. The version string is what actually decides.
 - name: install | Run the installer
   when: >-
     _reg_rke2_node_installed['rc'] != 0
@@ -80,8 +58,5 @@
     state: directory
     owner: root
     group: root
-    # 0755, because RKE2's own components traverse this path as non-root and
-    # because RKE2 sets it to this itself. A role that enforced 0700 here would
-    # take the node down on its second run, which is the Phase 2 and Phase 3
-    # lesson in a third service.
+
     mode: "0755"

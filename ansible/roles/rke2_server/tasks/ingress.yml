@@ -1,12 +1,5 @@
 ---
-# A HelmChartConfig rather than a chart of our own. RKE2 deploys the packaged
-# rke2-traefik chart itself once ingress-controller selects it; this only
-# supplies values for it, which is the supported way to influence a packaged
-# chart without taking ownership of it.
-#
-# Written on the bootstrap server only, for the same reason kube-vip is: the
-# auto-deploy directory is reconciled from every server, so three copies of the
-# same object would be three servers racing to apply it.
+
 - name: ingress | Ensure the auto-deploy manifest directory exists
   ansible.builtin.file:
     path: "{{ rke2_server_data_dir }}/server/manifests"

@@ -1,38 +1,24 @@
 ---
-# Phase 3: GitLab on repo01, becoming Tier 2 of the artifact model.
-#
-# Depends on Phase 2 rather than only on Phase 1: the certificates are issued by
-# the FreeIPA CA and the service names are published in dev.lo, so this cannot
-# run against an environment where core01 is not serving.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
-      # Signs the service certificate requests on core01.
+
       - FREEIPA_ADMIN_PASSWORD
-      # Seeds the GitLab root account on first reconfigure.
+
       - GITLAB_ROOT_PASSWORD
-      # GitLab's OIDC client secret. Required here, on the phase 3 playbook,
-      # rather than only where Keycloak is configured — the secret is authored
-      # rather than generated, which is what lets GitLab carry its single
-      # sign-on configuration from its very first run, long before the cluster
-      # that hosts Keycloak exists. Until Keycloak answers, the sign-in button
-      # fails and the root password still works.
+
       - OIDC_CLIENT_SECRET_GITLAB
 
 - name: Configure phase3 GitLab platform on the repository host
   hosts: repo
   gather_facts: true
   become: true
-  # Without this a task failing late discards the handlers queued earlier, so a
-  # changed compose file sits on disk while the old container keeps running and
-  # the next run sees no change and never restarts it. Same reasoning as
-  # repo01.yml, where that exact failure left a service on the wrong address.
+
   force_handlers: true
   tasks:
-    # Before GitLab: the role asserts the certificate files exist rather than
-    # letting omnibus fail deep inside an nginx template.
+
     - name: gitlab | Include the service certificate role
       tags:
         - ipa_service_cert

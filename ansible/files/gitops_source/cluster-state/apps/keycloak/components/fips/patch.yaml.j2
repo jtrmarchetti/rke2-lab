@@ -12,9 +12,8 @@ spec:
           args:
             - start
             - --optimized=false
-            # Loads the BouncyCastle FIPS provider. Without it the mode below
-            # is enforcement of something that was never loaded, and Keycloak
-            # refuses to build.
+
+
             - --features=fips
           env:
             - name: KC_FIPS_MODE

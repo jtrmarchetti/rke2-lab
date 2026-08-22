@@ -1,11 +1,7 @@
 ---
-# Mounting by label rather than by device path. Device enumeration order is not
-# guaranteed across reboots, and a data disk that silently mounts as the wrong
-# volume is worse than one that fails to mount.
+
 _var_data_volume_mount_source: "LABEL={{ data_volume_label }}"
 
-# Label options differ per filesystem family, so the mkfs flag is derived here
-# rather than being another knob on the role.
 _var_data_volume_mkfs_label_opt:
   ext4: "-L"
   ext3: "-L"

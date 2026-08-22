@@ -1,77 +1,27 @@
 ---
-# The controller's end of the point-to-point WireGuard tunnel to repo01, and
-# the route into 192.168.2.0/24 that every later playbook depends on.
-#
-# This was inline tasks in playbooks/tunnel_controller_access.yml until now,
-# which plan/ANSIBLE_STANDARDS.md forbids twice over — playbooks orchestrate
-# and roles implement, and a public interface with no meta/argument_specs.yml
-# is unvalidated. The gateway end has been a role since Phase 1; only the end
-# that reaches it was loose tasks.
-#
-# Two outputs this role sets as facts, because the play that configures the
-# gateway needs one of them and neither has any other source:
-#
-#   controller_tunnel_local_public_key    this host's WireGuard public key
-#   controller_tunnel_gateway_public_key  the gateway's WireGuard public key
-#
-# Both are derived from private keys rather than pasted. See keys.yml.
+
 controller_tunnel_enabled: true
 
-# Split so the tunnel can be proved without being rewritten, which is what the
-# third play of playbooks/tunnel_controller_access.yml does: the gateway does
-# not exist yet when this end is configured, so a handshake cannot be checked
-# in the same pass that writes the interface.
 controller_tunnel_configure_enabled: true
 controller_tunnel_validate_enabled: true
 
 controller_tunnel_interface: wg0
-# The controller's address inside the tunnel. No environment-independent value:
-# it belongs to this lab's 10.66.66.0/30, so inventory supplies it.
+
 controller_tunnel_address: null
 controller_tunnel_listen_port: 51821
 
-# This host's private key, from ~/.config/rke2lab/env.sh. Never in this
-# repository; see plan/SECRETS.md.
 controller_tunnel_private_key: ""
 
-# The gateway's private key, also from env.sh, and held here for one reason:
-# it is what the gateway's public key is derived from.
-#
-# The alternative was what this environment did until now — the gateway's
-# public key pasted into group_vars as a literal, and this host's public key
-# pasted into the gateway's group_vars as another. Two copies of a value that
-# is a pure function of a secret already present, kept in agreement by hand.
-# Rotating either key meant editing env.sh and then remembering to run
-# `wg pubkey` twice and paste both results, and forgetting produced a tunnel
-# that comes up, reports an interface, and never handshakes.
 controller_tunnel_peer_private_key: ""
 
-# The gateway's public key stated directly, for a controller that does not hold
-# the gateway's private key. Left empty here so derivation is the normal path:
-# when both are set the derived value wins and the role says so.
 controller_tunnel_peer_public_key: ""
 
 controller_tunnel_peer_endpoint: ""
 controller_tunnel_peer_allowed_ips: null
 controller_tunnel_peer_persistent_keepalive: 25
 
-# Subnets routed down the tunnel by an explicit PostUp. wg-quick already routes
-# whatever appears in AllowedIPs, so this is deliberate redundancy for the one
-# route the entire environment is reached through.
 controller_tunnel_route_subnets: []
 
-# --- validation ------------------------------------------------------------
-#
-# plan/PROXMOX.md names this as a Phase 1 mitigation — "add explicit tunnel
-# validation tasks (ping, TCP/22 checks) before running service roles" — and it
-# was never implemented. The failure it catches is the expensive one: a tunnel
-# that is administratively up while the far end is not forwarding, so every
-# playbook after it fails against internal hosts with a connection timeout that
-# names the host and says nothing about the path.
-#
-# An internal address that is not the gateway's tunnel address, so success
-# proves forwarding and SNAT rather than only that the peers can see each
-# other. No default: it is this environment's addressing.
 controller_tunnel_validate_address: null
 controller_tunnel_validate_port: 22
 controller_tunnel_validate_timeout: 30

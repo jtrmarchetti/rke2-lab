@@ -1,22 +1,4 @@
 ---
-# The administrative realm holds administrators and nothing else.
-#
-# An *unfiltered* user federation provider here is the arrangement
-# keycloak_realm was written to undo: it makes every account in the directory
-# an account in the realm that administers every other realm. `dev-lo` is where
-# that federation belongs, and this repository put it there — after having put
-# it here first, which is why the removal is automated rather than described.
-#
-# A filtered provider admitting only the group that administers Keycloak is a
-# different thing, and a deployment that wants one names it in
-# `keycloak_break_glass_allowed_federation`. Everything else goes.
-#
-# Order matters. The provider goes first: while it exists, deleting an imported
-# account is a delete Keycloak may satisfy from the directory again on the next
-# lookup, and the second pass would find the same accounts back.
-#
-# Nothing leaves the directory. These are Keycloak's imported copies; the
-# originals are FreeIPA entries this role never connects to.
 
 - name: federation | Read the administrative realm's federation providers
   changed_when: false
@@ -45,8 +27,6 @@
     ca_path: "{{ keycloak_break_glass_ca_file }}"
     status_code: [204]
 
-# What is left, so that accounts can be matched to the providers that own them
-# rather than deleted for being federated at all.
 - name: federation | Read the federation providers that remain
   changed_when: false
   no_log: "{{ keycloak_break_glass_no_log | bool }}"
@@ -58,8 +38,6 @@
     headers: "{{ _var_keycloak_break_glass_headers }}"
     ca_path: "{{ keycloak_break_glass_ca_file }}"
 
-# Read after the providers are gone rather than before, so that an account
-# imported by one of them cannot be re-imported between the two steps.
 - name: federation | Read every account in the administrative realm
   changed_when: false
   no_log: "{{ keycloak_break_glass_no_log | bool }}"
@@ -71,10 +49,6 @@
     headers: "{{ _var_keycloak_break_glass_headers }}"
     ca_path: "{{ keycloak_break_glass_ca_file }}"
 
-# Selected on `federationLink`, not on a name or a list. An account that names
-# a provider is a copy of a directory entry; an account that does not is a
-# local account, and this task must never be the reason a local administrator
-# stops existing.
 - name: federation | Delete the accounts an absent federation left behind
   changed_when: true
   no_log: "{{ keycloak_break_glass_no_log | bool }}"

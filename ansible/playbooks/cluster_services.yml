@@ -1,34 +1,13 @@
 ---
-# Phase 6b — the artifact side of the cluster services.
-#
-# This playbook does not deploy anything into the cluster. Flux does that, from
-# the cluster-state repository in GitLab, and the split is the point: what a
-# component *is* belongs in Git, and what a component is *made of* belongs
-# here, on repo01, in the artifact manifest.
-#
-# Two things happen. The 6b charts and images are staged and published into
-# GitLab, and every node's containerd rewrite map is refreshed so those images
-# resolve to the mirror. The second is why the node plays exist at all: RKE2
-# regenerates containerd's hosts.toml from registries.yaml at service start, so
-# a changed registries.yaml is inert until the node restarts. The rewrite map is
-# host-level, so a namespace added under an already-listed upstream host never
-# changes this file; only adding a new upstream host does, and that is the one
-# case where this rolling restart (agents first) is the price.
-#
-# See plan/PHASE6_IMPLEMENTATION.md.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
       - GITLAB_ROOT_PASSWORD
-      # Signs the cluster's intermediate CA on core01.
+
       - FREEIPA_ADMIN_PASSWORD
 
-# The cluster's own certificate authority, signed by the domain's. It runs on
-# the controller because that is where the intermediate's private key is
-# generated and where it stays: what reaches the cluster is a SealedSecret,
-# produced from these files by kubeseal.
 - name: Issue the cluster intermediate CA from the domain authority
   hosts: controller
   gather_facts: true
@@ -42,9 +21,7 @@
           {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
         ipa_sub_ca_common_name: "{{ inventory_ipa_sub_ca_common_name }}"
         ipa_sub_ca_crl_url: "{{ inventory_ipa_sub_ca_crl_url }}"
-        # The chain check's trust anchor: the domain CA controller_trust keeps
-        # current on this host. A rebuild that rotated the root makes the
-        # check fail and the intermediate reissue against the new one.
+
         ipa_sub_ca_domain_ca_file: "{{ inventory_controller_trust_ca_path }}"
         ipa_sub_ca_ipa_host: "{{ inventory_cluster_services_ipa_host }}"
         ipa_sub_ca_ocsp_url: "{{ inventory_ipa_sub_ca_ocsp_url }}"
@@ -75,9 +52,6 @@
           tags:
             - artifact_stage
 
-    # Before publishing, because publishing a chart is what needs it. Charts
-    # are pushed as OCI artifacts and helm is the only client that produces the
-    # media types a chart needs.
     - name: cluster_services | Include the Helm CLI role
       tags:
         - helm_cli
@@ -119,26 +93,16 @@
           tags:
             - rke2_publish
 
-# Agents first. A worker restart evicts workloads and costs nothing else; a
-# server restart takes an etcd member with it, so the smaller blast radius goes
-# first and any problem with the rendered file is found on a node that is not
-# holding quorum.
 - name: Refresh the containerd registry rewrites on the workers
   hosts: kubewk
   gather_facts: true
   become: true
   serial: 1
   force_handlers: true
-  # The flag rke2_node's restart handler is gated on. It is set by the
-  # rke2_server and rke2_agent roles during a build, and neither of those runs
-  # here — this play changes one file on a node that is already running, which
-  # is exactly the case the handler exists for.
+
   vars:
     _rke2_service_running: true
-    # kubectl ships inside the RKE2 data directory, so it moves when that
-    # moves. Same value as playbooks/kubewk.yml uses, and for the same reason:
-    # a worker has no kubeconfig of its own, so the question is put to a
-    # server.
+
     _cluster_services_kubectl: >-
       /data1/rancher/rke2/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
@@ -184,9 +148,6 @@
           tags:
             - rke2_node
 
-    # Storage prerequisites, on the workers only: Longhorn runs nowhere else.
-    # Before the restart rather than after, so a node that needs both gets
-    # both in one pass.
     - name: cluster_services | Include the Longhorn node preparation role
       tags:
         - longhorn_node
@@ -198,8 +159,6 @@
           tags:
             - longhorn_node
 
-    # Flushed here rather than at the end of the play so the wait below tests
-    # the node that was just restarted rather than the one before it.
     - name: cluster_services | Apply any queued restart before moving to the next node
       ansible.builtin.meta: flush_handlers
 
@@ -226,10 +185,7 @@
   force_handlers: true
   vars:
     _rke2_service_running: true
-    # kubectl ships inside the RKE2 data directory, so it moves when that
-    # moves. Same value as playbooks/kubewk.yml uses, and for the same reason:
-    # a worker has no kubeconfig of its own, so the question is put to a
-    # server.
+
     _cluster_services_kubectl: >-
       /data1/rancher/rke2/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
@@ -278,14 +234,6 @@
     - name: cluster_services | Apply any queued restart before moving to the next server
       ansible.builtin.meta: flush_handlers
 
-    # A server is back long before etcd has caught up, and starting the next
-    # server's restart against a cluster that is still one member short is how
-    # a rolling restart becomes an outage on storage this slow.
-    #
-    # Retried rather than waited on directly, because the host this question is
-    # delegated to is itself one of the servers being restarted: while it is
-    # down, kubectl does not time out politely, it fails immediately with a
-    # refused connection. The retry loop is what turns that into waiting.
     - name: cluster_services | Wait for every etcd member to be running again
       changed_when: false
       delegate_to: "{{ _cluster_services_control_host }}"

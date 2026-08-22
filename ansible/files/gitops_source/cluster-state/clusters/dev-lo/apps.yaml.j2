@@ -1,7 +1,6 @@
 {{ ansible_managed | comment }}
-# Workloads. Depends on the whole infrastructure layer: an app that needs a
-# PVC or a certificate before the CSI driver and the issuer exist will fail in
-# a way that points at the app rather than at what is missing.
+
+
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

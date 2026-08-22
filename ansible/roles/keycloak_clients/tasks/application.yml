@@ -1,13 +1,5 @@
 ---
-# One application: its client, its roles, the mapper that puts those roles in
-# the token, and the group mappings that grant them.
-#
-# Included in a loop from main.yml, so `_item_keycloak_clients_application` is
-# the entry being configured throughout, and every `_var_keycloak_clients_*`
-# expression in vars/main.yml resolves against it.
 
-# A fresh token per application. See token.yml: master issues 60 second access
-# tokens, and this file makes about a dozen calls.
 - name: application | Obtain a fresh admin token
   ansible.builtin.include_tasks: token.yml
 
@@ -35,10 +27,6 @@
     body: "{{ _var_keycloak_clients_definition }}"
     status_code: [201]
 
-# Update in place rather than create-only, for the reason keycloak_ldap
-# documents at length: a client created on a run whose redirect URI was wrong
-# is a client every later run finds by name and leaves alone, so the fix sits
-# committed, applied, and not in effect.
 - name: application | Update the existing client to match this definition
   when:
     - (_var_keycloak_clients_present | bool)
@@ -78,10 +66,6 @@
     headers: "{{ _var_keycloak_clients_headers }}"
     ca_path: "{{ keycloak_clients_ca_file }}"
 
-# The secret has its own endpoint and its own comparison, because it is the one
-# field of a client a GET never discloses. Compared rather than written
-# unconditionally: a PUT on every run would report a change forever, and the
-# signal that says the realm matches env.sh would be gone.
 - name: application | Read the secret the client currently holds
   changed_when: false
   no_log: "{{ keycloak_clients_no_log | bool }}"

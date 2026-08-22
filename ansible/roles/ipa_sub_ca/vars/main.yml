@@ -1,17 +1,11 @@
 ---
-# Local paths. The key never leaves the directory it is written into.
+
 _var_ipa_sub_ca_key: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_common_name }}.key"
 _var_ipa_sub_ca_csr: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_common_name }}.csr"
 _var_ipa_sub_ca_crt: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_common_name }}.crt"
 
-# Scratch paths inside the signing container. /tmp is the tmpfs the read-only
-# FreeIPA container can write; everything written there is public material and
-# is removed in the same session that creates it.
 _var_ipa_sub_ca_remote_profile: "/tmp/{{ ipa_sub_ca_profile_id }}.cfg"
 _var_ipa_sub_ca_remote_csr: "/tmp/{{ ipa_sub_ca_common_name }}.csr"
 _var_ipa_sub_ca_remote_crt: "/tmp/{{ ipa_sub_ca_common_name }}.pem"
 
-# Templates for this role live in ansible/files/ipa_sub_ca/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_ipa_sub_ca_files_dir: "{{ role_path | dirname | dirname }}/files/ipa_sub_ca"

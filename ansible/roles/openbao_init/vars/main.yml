@@ -1,7 +1,5 @@
 ---
-# The initialisation output, resolved lazily so these are only valid inside the
-# block that ran it. Kept here rather than in set_fact because set_fact would
-# persist unseal keys in the play's fact cache.
+
 _var_openbao_init_keys: >-
   {{ (_reg_openbao_init_result['stdout'] | default('{}') | from_json)
      ['unseal_keys_b64'] | default([]) }}

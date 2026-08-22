@@ -1,15 +1,5 @@
 ---
-# The CLI that creates every VM in the environment, and the project virtual
-# environment that holds the Proxmox provider.
-#
-# Both were prose in plan/CONTROLLER.md's cold start until now, which made the
-# IaC half of a rebuild depend on someone remembering two commands — on the one
-# host whose loss makes everything else unrebuildable.
 
-# The three pins travel together and none of them has a safe default, so a
-# caller that passes two of them is a half-finished edit rather than a
-# configuration choice. Asserted here because the alternative failure is
-# get_url reporting an unparseable URL, which reads as a network problem.
 - name: pulumi | Assert the release is fully pinned
   ansible.builtin.assert:
     that:
@@ -44,9 +34,6 @@
         state: directory
         suffix: pulumi
 
-    # Downloaded over TLS from the release URL pinned in inventory, so the
-    # integrity rides on the transport and the pinned source rather than on a
-    # recorded checksum.
     - name: pulumi | Download the release tarball
       ansible.builtin.get_url:
         url: "{{ controller_runtime_pulumi_url | trim }}"
@@ -65,11 +52,6 @@
         state: directory
         mode: "0755"
 
-    # The tarball contains a single pulumi/ directory of binaries, and the
-    # conventional install is that directory as ~/.pulumi/bin — which is what
-    # Pulumi's own installer produces and what every Pulumi document assumes is
-    # on PATH. Copied rather than unpacked straight there so a failed or
-    # truncated extraction cannot leave a half-replaced CLI in place.
     - name: pulumi | Install the binaries
       ansible.builtin.copy:
         src: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi/"
@@ -84,12 +66,6 @@
         path: "{{ _reg_controller_runtime_tmp['path'] | default('') }}"
         state: absent
 
-# Separate from the automation virtual environment on purpose: this one tracks
-# the Proxmox provider and the Pulumi SDK, that one tracks Ansible, and pinning
-# them together would mean an Ansible upgrade forcing a provider upgrade.
-#
-# The provider plugin itself is not installed here. The CLI downloads it on
-# first use into its own plugin cache, which is the only path Pulumi supports.
 - name: pulumi | Ensure the project virtual environment has pinned packages
   ansible.builtin.pip:
     requirements: >-
@@ -100,9 +76,6 @@
           controller_runtime_pulumi_project_venv] | path_join }}
     virtualenv_command: "{{ controller_runtime_venv_command }}"
 
-# Proves the CLI runs, which the download alone does not: an architecture
-# mismatch or a missing loader shows up here rather than on the first `pulumi
-# up` of a rebuild.
 - name: pulumi | Prove the installed CLI reports the pinned version
   when: not ansible_check_mode
   changed_when: false

@@ -1,10 +1,4 @@
 ---
-# Relocates existing daemon state onto the data volume.
-#
-# Only runs for a root that still holds data at its package-default path and
-# has not already been relocated, so a second run of the role does nothing and
-# reports nothing. That check is what makes this safe to leave in the Phase 1
-# playbook forever rather than running it once by hand.
 
 - name: migrate | Determine which roots still hold data at the default path
   register: _reg_container_storage_src_stat
@@ -24,9 +18,6 @@
   ansible.builtin.stat:
     path: "{{ _item_container_storage_move['dest'] }}"
 
-# A root qualifies when the source is a real directory and not already a
-# symlink into the destination, and the destination does not yet exist. The
-# symlink test matters because that is what this role leaves behind.
 - name: migrate | Select the roots that need relocating
   ansible.builtin.set_fact:
     _container_storage_pending: >-
@@ -51,12 +42,7 @@
 - name: migrate | Relocate the container roots onto the data volume
   when: (_container_storage_pending | length) > 0
   block:
-    # The compose file is discovered rather than assumed. `--project-directory`
-    # alone finds only the default filenames, and GitLab's project is
-    # docker-compose.gitlab.yml — so a stop issued that way silently did
-    # nothing, the daemon killed PostgreSQL on its own 15 second timeout, and
-    # the run reported success. Naming the file with -f is the fix; discovering
-    # it keeps this role from having to know each service's conventions.
+
     - name: migrate | Find the compose file in each project directory
       register: _reg_container_storage_compose_find
       loop: "{{ container_storage_graceful_compose_dirs }}"
@@ -71,8 +57,6 @@
           - "compose*.yaml"
         file_type: file
 
-    # Fails loudly. A tolerated "no configuration file" is what turned a
-    # missing graceful stop into a silent one.
     - name: migrate | Assert every compose project directory yielded a file
       loop: "{{ _reg_container_storage_compose_find['results'] }}"
       loop_control:
@@ -95,11 +79,6 @@
              | map(attribute='files') | flatten
              | map(attribute='path') | list }}
 
-    # Compose first, and with its own timeout. Stopping the daemon does not
-    # honour a container's stop_grace_period — the daemon applies its own
-    # --shutdown-timeout of 15 seconds and then kills what is left, which is
-    # how a database comes back corrupt. See the containerized services rules
-    # in plan/OVERVIEW.md.
     - name: migrate | Stop the compose projects gracefully
       changed_when: true
       loop: "{{ _container_storage_compose_files }}"
@@ -119,9 +98,6 @@
         name: "{{ _item_container_storage_unit }}"
         state: stopped
 
-    # Verify rather than trust. plan/OVERVIEW.md records that stopping a unit
-    # is not the same as the processes being gone, and copying a live
-    # containerd's snapshot tree is how a migration produces a corrupt store.
     - name: migrate | Confirm no container daemon process survives
       changed_when: false
       failed_when: _reg_container_storage_pgrep['rc'] == 0
@@ -137,16 +113,7 @@
       ansible.builtin.command:
         cmd: pgrep -x "{{ _item_container_storage_daemon }}"
 
-    # -aHAX preserves hardlinks, ACLs and extended attributes. Overlay
-    # snapshots depend on all three, and a plain copy silently produces an
-    # image store that fails on the next pull rather than at copy time.
-    #
-    # command, not ansible.posix.synchronize: this is a local-to-local copy on
-    # the managed host, and synchronize builds its own src/dest host prefixes
-    # from the delegation, which makes a same-host copy ambiguous. The guard is
-    # the block's own selection of roots that have not been moved, plus
-    # `creates`, so a re-run does nothing.
-    - name: migrate | Copy each root onto the data volume # noqa: command-instead-of-module yaml[line-length]
+    - name: migrate | Copy each root onto the data volume # noqa: command-instead-of-module
       loop: "{{ _container_storage_pending }}"
       loop_control:
         loop_var: _item_container_storage_pending
@@ -167,10 +134,6 @@
         group: root
         mode: "{{ _item_container_storage_pending['mode'] }}"
 
-    # The old tree is renamed rather than deleted. It is the rollback, and it
-    # stays until a later run is given container_storage_remove_rollback,
-    # which is deliberately not the default: reclaiming the space is worth
-    # less than being able to put the daemon back the way it was.
     - name: migrate | Set the old root aside as a rollback copy
       loop: "{{ _container_storage_pending }}"
       loop_control:
@@ -194,11 +157,6 @@
         name: "{{ _item_container_storage_unit }}"
         state: started
 
-    # Required, not belt-and-braces. Both compose projects run with
-    # `restart: unless-stopped`, and `docker compose stop` is exactly the
-    # manual stop that policy refuses to undo — so the daemon comes back and
-    # the services do not. `up -d` rather than `start` so a container that was
-    # lost with the old root is recreated from the migrated image.
     - name: migrate | Bring the compose projects back up
       changed_when: true
       loop: "{{ _container_storage_compose_files | default([]) }}"
@@ -207,9 +165,6 @@
       ansible.builtin.command:
         cmd: docker compose -f {{ _item_container_storage_compose_file }} up -d
 
-# Proves the daemon is actually using the new path, rather than that the
-# service reports active. A daemon that failed to read the new root falls back
-# to running with an empty one and looks perfectly healthy.
 - name: migrate | Confirm the Docker daemon is using the relocated root
   when: "'docker.service' in _container_storage_present_units"
   changed_when: false

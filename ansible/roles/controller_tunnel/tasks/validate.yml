@@ -1,17 +1,4 @@
 ---
-# Proof that the tunnel carries traffic, which plan/PROXMOX.md asked for in
-# Phase 1 and nothing ever delivered.
-#
-# The three checks are deliberately different questions, and each one fails
-# where the fault actually is rather than three playbooks later:
-#
-#   1. The interface exists and the gateway is a peer of it.  — this end
-#   2. The gateway has completed a handshake.                 — both ends, keys
-#   3. An internal address answers on a TCP port.             — forwarding, SNAT
-#
-# Without them, a gateway that is up but not forwarding shows up as every
-# subsequent playbook timing out against an internal host, with an error that
-# names the host and says nothing about the path to it.
 
 - name: validate | Read the interface state
   changed_when: false
@@ -34,13 +21,6 @@
       `systemctl status {{ _var_controller_tunnel_service }}`.
     quiet: true
 
-# `latest-handshakes` reports a Unix timestamp per peer, and 0 means the peers
-# have never spoken. That is the signature of mismatched keys — the interface
-# comes up regardless, because WireGuard has no connection to fail to make.
-#
-# Retried rather than asserted once: PersistentKeepalive is 25 seconds, so a
-# tunnel that has just been restarted has legitimately not handshaken yet, and
-# a single check would fail on exactly the run that fixed it.
 - name: validate | Wait for a completed handshake with the gateway
   when: not ansible_check_mode
   changed_when: false
@@ -57,10 +37,6 @@
       | awk '$1 == "{{ controller_tunnel_gateway_public_key }}" { print $2 }'
     executable: /bin/bash
 
-# The check the other two cannot make. A handshake proves the peers agree on
-# keys; it says nothing about whether the gateway forwards into
-# 192.168.2.0/24 or SNATs the reply, which are separate settings on the far end
-# and are what actually carry every Ansible connection after this playbook.
 - name: validate | Prove an internal address is reachable through the tunnel
   when:
     - not ansible_check_mode

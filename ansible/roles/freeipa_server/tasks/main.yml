@@ -17,8 +17,6 @@
   ansible.builtin.hostname:
     name: "{{ freeipa_server_hostname }}"
 
-# The installer resolves its own name before FreeIPA is answering DNS, and
-# there is no external resolver on this network to fall back to.
 - name: main | Ensure the FreeIPA host name resolves locally
   when: (freeipa_server_enabled | bool)
   ansible.builtin.lineinfile:
@@ -27,11 +25,6 @@
     regexp: "^{{ freeipa_server_ip_address | regex_escape }}\\s"
     state: present
 
-# Ubuntu ships a `127.0.1.1 <hostname>` line in /etc/hosts. It resolves before
-# the entry above, and ipa-server-install refuses a server whose own name maps
-# to a loopback address ("cannot use loopback IP address 127.0.1.1"), so the
-# install aborts during validation. Nothing else needs that line here: the
-# host's name resolves through the real address written above.
 - name: main | Ensure the FreeIPA host name does not resolve to a loopback address
   when: (freeipa_server_enabled | bool)
   ansible.builtin.lineinfile:
@@ -40,9 +33,6 @@
       ^127\.0\.1\.1\s+.*{{ freeipa_server_hostname | regex_escape }}
     state: absent
 
-# Must happen before the container starts: named binds port 53 as the domain
-# comes up, and the installer's own client step resolves the new server through
-# this file. See freeipa_server_manage_resolver in defaults for the reasoning.
 - name: main | Ensure systemd-resolved is not holding port 53
   when:
     - (freeipa_server_enabled | bool)
@@ -54,8 +44,6 @@
     enabled: false
     masked: true
 
-# follow: false replaces the stub-resolv.conf symlink itself rather than
-# writing through it to a file systemd-resolved owns and rewrites.
 - name: main | Ensure the host resolves through its own FreeIPA instance
   when:
     - (freeipa_server_enabled | bool)
@@ -92,13 +80,6 @@
     group: root
     mode: "0750"
 
-# The data directory needs the world-execute bit, unlike the compose directory.
-# The container relocates /etc/krb5.conf, /etc/ipa and other configuration into
-# /data through symlinks, and its services run as non-root users (ipaapi, apache)
-# that must traverse this directory to read them. At 0750 they cannot: kinit
-# fails with "Permission denied while initializing Kerberos 5 library" and every
-# API login returns HTTP 500. Only the traverse bit is granted here; the
-# sensitive material below keeps the permissions FreeIPA gives it.
 - name: main | Ensure the FreeIPA data directory exists
   when: (freeipa_server_enabled | bool)
   ansible.builtin.file:
@@ -132,9 +113,6 @@
   community.docker.docker_image_load:
     path: "{{ freeipa_server_image_tarball_path }}"
 
-# A tarball built from a differently tagged image loads under that other tag,
-# and compose would then try to pull an image that does not exist on an
-# air-gapped host. Fail here instead of timing out on a pull.
 - name: main | Verify the expected image tag is present after loading
   when:
     - (freeipa_server_enabled | bool)
@@ -175,11 +153,6 @@
     group: root
     mode: "0640"
 
-# Compose adopts an existing container only if it carries this project's label.
-# One created any other way — a hand-run `docker run`, or an attempt aborted
-# before compose ever managed it — holds the name and makes every subsequent
-# run fail with a name conflict. Remove that one. A container this project
-# already owns is left for compose to reconcile.
 - name: main | Check which compose project owns an existing FreeIPA container
   when:
     - (freeipa_server_enabled | bool)
@@ -214,22 +187,6 @@
     wait: true
     wait_timeout: "{{ freeipa_server_install_timeout }}"
 
-# A container that cannot start at all restarts forever under `unless-stopped`,
-# and the bootstrap poll below would then sit through its entire timeout before
-# saying so. Catch it here instead.
-#
-# A failing install is not quick: the installer's DNS pre-checks alone spend
-# about 70 seconds timing out before named exists, so one full crash cycle runs
-# to roughly 90 seconds, and two cycles the ~180s the poll budget below covers.
-#
-# It runs only when compose actually started or restarted the container, and it
-# is a health check, not a blind sleep: it polls docker_container_info until
-# the container reports running. A healthy container answers on the first or
-# second poll, so a fast-starting install no longer pays a fixed wall-time
-# wait. A crash-looping container resets between restarts and never reads as
-# stably running, so it burns the whole (retries x delay) budget — the same
-# ~180s the old fixed 210s wait bought — and only then does the restart-count
-# assert below, which is not gated on this task, fail the run.
 - name: main | Confirm the FreeIPA container is running, not crash-looping
   when:
     - (freeipa_server_enabled | bool)
@@ -270,8 +227,6 @@
       docker logs {{ freeipa_server_container_name }}
     quiet: true
 
-# First boot runs the full domain bootstrap inside the container, which takes
-# several minutes and finishes long after `docker compose up` returns.
 - name: main | Wait for the domain bootstrap to complete
   when:
     - (freeipa_server_enabled | bool)
@@ -299,14 +254,10 @@
       docker logs {{ freeipa_server_container_name }}
     quiet: true
 
-# Everything above proves the container is up. This proves the domain serves,
-# which is a different claim and the one callers depend on.
 - name: main | Include the readiness checks
   when: (freeipa_server_enabled | bool)
   ansible.builtin.include_tasks: readiness.yml
 
-# Safe to write records only after readiness: they go through the IPA API, which
-# is the last thing to become usable.
 - name: main | Include the service DNS zone and record tasks
   when:
     - (freeipa_server_enabled | bool)
@@ -314,16 +265,12 @@
       or ((freeipa_server_dns_zones | length) > 0)
   ansible.builtin.include_tasks: dns_records.yml
 
-# Before the forward zone below, because the forward zone is what needs it: a
-# delegated subdomain cannot be resolved while DNSSEC validation is on.
 - name: main | Include the BIND options tasks
   when:
     - (freeipa_server_enabled | bool)
     - not ansible_check_mode
   ansible.builtin.include_tasks: named_options.yml
 
-# After the records, and for the same reason: this goes through the IPA CLI,
-# which is only usable once the domain serves.
 - name: main | Include the DNS forward zone tasks
   when:
     - (freeipa_server_enabled | bool)

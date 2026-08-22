@@ -1,41 +1,18 @@
 ---
 container_storage_enabled: true
 
-# The data volume the container daemons store everything under. Defaults to the
-# mount data_volume creates, because that is the volume every host in
-# TARGETS.md carries for exactly this purpose.
 container_storage_base: /data1
 
-# Where each daemon keeps its state once relocated. Both are moved, and moving
-# only one is the trap this role exists to prevent: with Docker's containerd
-# image store, layer content lives under the containerd root and only the
-# container metadata lives under the Docker root.
 container_storage_docker_root: /data1/docker
 container_storage_containerd_root: /data1/containerd
 
-# Modes the daemons themselves apply to their roots, taken from a running host
-# rather than chosen here. Declaring a different mode would mean the role and
-# the daemon re-apply competing values on alternate runs — the failure
-# plan/OVERVIEW.md records from GitLab and FreeIPA.
 container_storage_docker_mode: "0710"
 container_storage_containerd_mode: "0700"
 
-# Compose projects to shut down gracefully before the daemons are stopped for a
-# migration. Daemon shutdown honours its own --shutdown-timeout (15s), not a
-# container's stop_grace_period, so a database left to the daemon is killed
-# mid-write. Callers pass the directories holding their compose projects.
 container_storage_graceful_compose_dirs: []
 
-# How long to allow each compose project to stop. Must be at least the longest
-# stop_grace_period among the projects above; GitLab's is 5m.
 container_storage_compose_stop_timeout: 360
 
-# Migration moves real data and cannot run in check mode. Set false to write
-# the configuration and skip relocating anything that already exists.
 container_storage_migrate: true
 
-# Whether to delete the .migrated rollback copies left by a previous
-# relocation. Deliberately false: reclaiming the space matters less than being
-# able to put a daemon back the way it was. Set true on a later run, once the
-# services have proved healthy on the new path.
 container_storage_remove_rollback: false

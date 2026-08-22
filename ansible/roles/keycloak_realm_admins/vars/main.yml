@@ -8,10 +8,6 @@ _var_keycloak_realm_admins_admin_api: >-
   {{ keycloak_realm_admins_url }}/admin/realms/{{
   keycloak_realm_admins_realm }}
 
-# The group as the realm holds it, looked up by name in what the LDAP group
-# mapper imported. Empty rather than undefined when it is absent, so the
-# assertion in main.yml is what reports it instead of a filter raising on a
-# list with nothing in it.
 _var_keycloak_realm_admins_group_id: >-
   {{ (_reg_keycloak_realm_admins_groups['json'] | default([])
       | selectattr('name', 'equalto', keycloak_realm_admins_group)
@@ -22,14 +18,6 @@ _var_keycloak_realm_admins_client_id: >-
       | selectattr('clientId', 'equalto', keycloak_realm_admins_client)
       | list | first | default({}))['id'] | default('') }}
 
-# The roles to grant, as full representations — which is what the role-mapping
-# endpoint takes, identifier included, rather than a list of names — minus
-# whatever the group already holds.
-#
-# Read twice from the same expression: once to decide what to post, and once
-# after the post to decide whether anything is still missing. It resolves
-# against whatever `_reg_keycloak_realm_admins_granted` holds at the time,
-# which is why the task that grants and the assertion that checks can share it.
 _var_keycloak_realm_admins_missing: >-
   {{ _reg_keycloak_realm_admins_roles['json'] | default([])
      | selectattr('name', 'in', keycloak_realm_admins_roles)

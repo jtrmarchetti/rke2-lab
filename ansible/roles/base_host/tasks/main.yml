@@ -17,11 +17,6 @@
     path: /etc/apt/apt.conf.d/99repo-proxy
     state: absent
 
-# The cacher on repo01 (apt-cacher-ng) has been observed to 500 a cold update
-# burst and half-close the client connection; apt then sits in CLOSE-WAIT
-# without failing or retrying, and the task never returns (2026-08-21,
-# kubecp02: two /usr/lib/apt/methods/http workers blocked on FIN'd sockets).
-# This drop-in is what bounds that failure class — see base_host defaults.
 - name: main | Ensure apt acquire tuning is present for proxy hosts
   when:
     - (base_host_apt_proxy_enabled | bool)
@@ -64,20 +59,10 @@
     path: "{{ _var_base_host_split_dns_netplan_path }}"
     state: absent
 
-# A freshly imaged VM enables these out of the box: apt-daily runs within
-# minutes of boot and a periodic unattended upgrade takes the dpkg frontend
-# lock for its whole duration. Any apt task that lands in that window fails
-# with "Unable to acquire the dpkg frontend lock" — the cold-build race that
-# a steady-state host can never show, because the timers only matter right
-# after boot. When base_host_apt_unattended_upgrade is false the whole
-# unattended path is turned off at every trigger site so upgrades happen
-# only under Ansible control. Running base_host first on every host makes
-# this the guard that no later apt task races against.
 - name: main | Ensure periodic unattended upgrades are disabled in apt config
   when: not (base_host_apt_unattended_upgrade | bool)
   ansible.builtin.copy:
-    # Lowest-priority number so 10periodic and 20auto-upgrades cannot
-    # re-enable the value; highest-priority numbers read last.
+
     dest: /etc/apt/apt.conf.d/00no-unattended-upgrades
     content: APT::Periodic::Unattended-Upgrade "0";
     mode: "0644"
@@ -99,38 +84,20 @@
 - name: main | Ensure the unattended-upgrades shutdown hook is disabled
   when: not (base_host_apt_unattended_upgrade | bool)
   ansible.builtin.systemd:
-    # The service is the "Unattended Upgrades Shutdown" hook:
-    # unattended-upgrade-shutdown --wait-for-signal, held by the VM from
-    # boot until shutdown. Disabling stops it starting on the next boot;
-    # any in-flight upgrade finishes on its own, and the timers above
-    # stop it from being started again. state: stopped is deliberately
-    # not used: the unit is active by design while a boot is live, so a
-    # stop here would report changed on every steady-state run.
+
     name: unattended-upgrades
     enabled: false
 
 - name: main | Ensure apt cache is updated
-  # The cacher's 500 half-close can park apt-get's methods/* workers in
-  # CLOSE-WAIT; they then hold /var/lib/apt/lists/lock and make the next
-  # attempt hang on the lock instead of fetching. A task-level `timeout:` does
-  # NOT make `retries`/`until` fire (it kills the task, not the fetch — proven
-  # 2026-08-21 on kubewk01: timed out at the cap then fataled, no RETRYING), so
-  # the bound is set on the command itself: `timeout ... apt-get update` returns
-  # a clean failure (rc 124) that `until` can retry. The per-attempt pkill sweep
-  # (first lines) reaps orphans a previous attempt left behind, so every attempt
-  # starts from a clean lock. Runs on all hosts; the sweep is a no-op where
-  # there is nothing to reap.
+
   register: _reg_base_host_apt_update
   retries: "{{ base_host_apt_update_retries }}"
   delay: "{{ base_host_apt_update_delay }}"
   until: _reg_base_host_apt_update.rc == 0
   ansible.builtin.shell: |
-    # Reap orphans from any previously-parked attempt so this one gets a clean lock.
     pkill -9 -f 'AnsiballZ_ap[t]' 2>/dev/null || true
     pkill -9 -f '/usr/lib/apt/methods/[a-z]+' 2>/dev/null || true
     pkill -9 -x apt-get 2>/dev/null || true
-    # Bounded fetch: a park that never fails returns rc 124 at the cap and the
-    # task retries, instead of hanging the run forever.
     exec timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
 
 - name: main | Ensure base packages are installed

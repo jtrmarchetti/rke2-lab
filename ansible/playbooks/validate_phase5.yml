@@ -1,28 +1,10 @@
 ---
-# Phase 5 validation. Mirrors the Test section of
-# plan/PHASE5_IMPLEMENTATION.md: the workers join, the air gap still holds on
-# them, the ingress controller is the one Phase 5 chose, and the control plane
-# carries the taint that keeps work off it.
-#
-# Every check is a transaction, for the reason Phase 4's validation states: a
-# service that is active and a file that exists are both true of a node that
-# cannot pull an image, and the next phase is where that surfaces.
-#
-# None of the jsonpath expressions below contain a space or a double quote. The
-# command module applies shell-like quoting to its argument, so an expression
-# containing either arrives at kubectl mangled and fails whatever the cluster is
-# actually doing. That cost Phase 4 a full retry budget.
 
 - name: Validate the RKE2 workers
   hosts: kubewk
   gather_facts: true
   become: true
   tasks:
-    # --- The disks --------------------------------------------------------
-    #
-    # Both of them, and before anything else. A worker whose /data1 is missing
-    # is filling its 32 GB OS disk with containerd's image store, and a worker
-    # whose CSI disk is missing will fail Phase 6 rather than this phase.
 
     - name: validate_phase5 | Validate both data volumes are mounted
       vars:
@@ -39,12 +21,6 @@
           and Longhorn's on the second; on the OS disk either one fills a 32 GB
           volume silently.
         quiet: true
-
-    # --- The air gap ------------------------------------------------------
-    #
-    # The same two checks the servers get, because a worker is the more likely
-    # place for the air gap to be quietly broken: it is the node someone would
-    # be tempted to seed a tarball onto to get a join working.
 
     - name: validate_phase5 | Validate no air-gap image tarball was seeded on the worker
       register: _reg_validate_seeded
@@ -63,9 +39,6 @@
           path would pass here and fail in Phase 6.
         quiet: true
 
-    # Pulling by the upstream name is the point: it succeeds only if the
-    # rewrite, the deploy token and the CA trust are all correct, and given the
-    # negative test below it can only have been served by GitLab.
     - name: validate_phase5 | Pull an image by its upstream name through the mirror
       changed_when: false
       register: _reg_validate_pull
@@ -104,7 +77,6 @@
           route to the internet breaks the premise every phase is built on.
         quiet: true
 
-# Cluster-level checks, asked once from a host that can see the API.
 - name: Validate the cluster the workers joined
   hosts: kubecp
   gather_facts: false
@@ -115,18 +87,13 @@
       --kubeconfig /etc/rancher/rke2/rke2.yaml
     _validate_worker_label: node-role.kubernetes.io/worker=true
     _validate_test_namespace: phase5-validate
-    # rke2-traefik, not traefik. The packaged chart names its workload after
-    # itself, so the upstream chart's selector finds nothing here and the check
-    # reports Traefik running nowhere while three replicas are running fine.
+
     _validate_traefik_label: app.kubernetes.io/name=rke2-traefik
   tasks:
     - name: validate_phase5 | Ask the cluster-level questions from one server
-      # Asked once, from whichever server the play reaches first. Every check
-      # below is a question about the cluster rather than about a node, so
-      # the answer does not depend on which server is asked.
+
       run_once: true
       block:
-        # --- Membership -------------------------------------------------------
 
         - name: validate_phase5 | Wait for every node to report Ready
           changed_when: false
@@ -177,9 +144,6 @@
               playbooks/kubewk.yml and its absence means that play did not run.
             quiet: true
 
-        # etcd is a control plane concern and adding agents must not have touched
-        # it. Checked here because a Phase 5 change that damaged etcd would
-        # otherwise be found in Phase 6.
         - name: validate_phase5 | Read the etcd member health
           changed_when: false
           register: _reg_validate_etcd
@@ -198,8 +162,6 @@
               etcd does not have a member running on every server:
               {{ _reg_validate_etcd['stdout_lines'] }}.
             quiet: true
-
-        # --- The taint --------------------------------------------------------
 
         - name: validate_phase5 | Read the taints on the control plane
           changed_when: false
@@ -239,8 +201,6 @@
               nothing will schedule anywhere. The taint belongs on the control
               plane only.
             quiet: true
-
-        # --- Ingress ----------------------------------------------------------
 
         - name: validate_phase5 | Read the ingress classes
           changed_when: false
@@ -287,13 +247,6 @@
               HelmChartConfig node selector and the control plane taint.
             quiet: true
 
-        # --- A real workload --------------------------------------------------
-        #
-        # The one check that proves the phase rather than its parts: a pod that is
-        # scheduled by the scheduler, placed by the taint, and whose image came
-        # through the mirror. Created and removed here, because a validation run
-        # should leave the cluster as it found it.
-
         - name: validate_phase5 | Create the validation namespace
           changed_when: _reg_validate_ns['rc'] == 0
           failed_when:
@@ -334,9 +287,6 @@
               {{ _validate_kubectl }} -n {{ _validate_test_namespace }}
               get pods -o jsonpath={.items[*].spec.nodeName}
 
-        # Removed before the assertion, so a failed check still cleans up after
-        # itself rather than leaving a namespace behind for the next run to trip
-        # on.
         - name: validate_phase5 | Remove the validation namespace
           changed_when: true
           ansible.builtin.command:

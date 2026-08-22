@@ -1,26 +1,20 @@
 {{ ansible_managed | comment }}
-#
-# RKE2 server configuration. See plan/PHASE4_IMPLEMENTATION.md for why each of
-# the less obvious settings is here.
+
 
 token: {{ rke2_server_token }}
 {% if not (rke2_server_bootstrap | bool) %}
 
-# The fixed registration address. Only seeds this node's client-side load
-# balancer: once joined, the agent syncs the full apiserver endpoint list from
-# the kubernetes service and holds connections to every server, so a server
-# outage does not need this address to be up.
+
+
 server: https://{{ rke2_server_api_address }}:{{ rke2_server_supervisor_port }}
 {% else %}
 
-# No `server:` line. Its absence is what makes this the initial etcd member;
-# RKE2 needs no cluster-init flag.
+
 {% endif %}
 
 node-ip: {{ rke2_server_node_ip }}
 
-# Everything the API is reachable by, so adding a path later is not a
-# certificate reissue and a rolling restart.
+
 tls-san:
 {% for _item_rke2_server_san in rke2_server_tls_san %}
   - {{ _item_rke2_server_san }}
@@ -38,8 +32,7 @@ disable:
 {% endif %}
 
 {% if rke2_server_ingress_controller | length > 0 %}
-# The first value also becomes the default ingress class. Traefik rather than
-# ingress-nginx because ingress-nginx is end of life; see the role defaults.
+
 ingress-controller:
 {% for _item_rke2_server_controller in rke2_server_ingress_controller %}
   - {{ _item_rke2_server_controller }}
@@ -47,26 +40,23 @@ ingress-controller:
 {% endif %}
 
 {% if rke2_server_node_taints | length > 0 %}
-# Applied by the kubelet at first registration only, so this affects a rebuilt
-# node and not one already in the cluster. The running nodes are tainted with
-# kubectl by playbooks/kubewk.yml.
+
+
 node-taint:
 {% for _item_rke2_server_taint in rke2_server_node_taints %}
   - {{ _item_rke2_server_taint }}
 {% endfor %}
 {% endif %}
 
-# Without this, containerd falls back to the real upstream registry when the
-# mirror misses. On this network that fallback cannot succeed anyway, but it
-# turns a precise "the mirror does not have this image" into a connect timeout
-# thirty seconds later and hides the failure worth seeing.
+
+
 disable-default-registry-endpoint: true
 
 etcd-snapshot-schedule-cron: "{{ rke2_server_etcd_snapshot_schedule }}"
 etcd-snapshot-retention: {{ rke2_server_etcd_snapshot_retention }}
 
 {% if rke2_server_etcd_args | length > 0 %}
-# Tolerances for slow storage, not tuning for speed. See the role defaults.
+
 etcd-arg:
 {% for _item_rke2_server_etcd_arg in rke2_server_etcd_args %}
   - {{ _item_rke2_server_etcd_arg }}
@@ -74,14 +64,10 @@ etcd-arg:
 {% endif %}
 
 {% if rke2_server_expose_metrics | bool %}
-# Control plane metrics, reachable from off the node.
-#
-# Each of these components binds to 127.0.0.1 unless told otherwise, and the
-# ServiceMonitors kube-prometheus-stack ships scrape the node address. Without
-# this the chart reports the entire control plane down on a cluster that is
-# healthy, which is worse than no alerting: etcdInsufficientMembers fires while
-# all three members are Ready. See the role defaults for what each listener
-# exposes.
+
+
+
+
 etcd-expose-metrics: true
 
 kube-controller-manager-arg:
@@ -90,13 +76,10 @@ kube-controller-manager-arg:
 kube-scheduler-arg:
   - bind-address=0.0.0.0
 
-# kube-proxy runs on every node, servers included, so this is set here and in
-# the agent configuration both. Unlike the two above it is plain HTTP with no
-# authentication in front of it.
+
 kube-proxy-arg:
   - metrics-bind-address=0.0.0.0
 
 {% endif %}
-# The kubeconfig this file writes contains cluster-admin credentials. RKE2
-# defaults it to 0600 already; stated here so a change is a decision.
+
 write-kubeconfig-mode: "0600"

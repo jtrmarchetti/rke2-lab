@@ -1,38 +1,27 @@
 {{ ansible_managed | comment }}
-#
-# RKE2 agent configuration. See plan/PHASE5_IMPLEMENTATION.md.
-#
-# Far shorter than the server's, and every absence is deliberate: an agent runs
-# no etcd, terminates no API traffic, and selects no CNI. It joins, and the
-# cluster tells it the rest.
+
+
+
 
 token: {{ rke2_agent_token }}
 
-# The fixed registration address, held by kube-vip. Seeds this agent's
-# client-side load balancer; once joined it syncs the full apiserver endpoint
-# list and holds connections to every server, so a server outage does not need
-# this address to be up.
+
+
 server: https://{{ rke2_agent_server_address }}:{{ rke2_agent_supervisor_port }}
 
 node-ip: {{ rke2_agent_node_ip }}
 
 data-dir: {{ rke2_agent_data_dir }}
 
-# Without this, containerd falls back to the real upstream registry when the
-# mirror misses. On this network that fallback cannot succeed anyway, but it
-# turns a precise "the mirror does not have this image" into a connect timeout
-# thirty seconds later and hides the failure worth seeing.
+
+
 disable-default-registry-endpoint: true
 
-# No node-label for the worker role here. The NodeRestriction admission plugin
-# forbids a kubelet from setting any label under node-role.kubernetes.io/, so
-# passing one would be refused and the node would register without it. The label
-# is applied with kubectl by playbooks/kubewk.yml instead.
+
 
 {% if rke2_agent_expose_metrics | bool %}
-# kube-proxy's metrics listener, bound off 127.0.0.1 so the chart's kube-proxy
-# ServiceMonitor has an endpoint on this node. Plain HTTP, no authentication;
-# the servers carry the same setting.
+
+
 kube-proxy-arg:
   - metrics-bind-address=0.0.0.0
 {% endif %}

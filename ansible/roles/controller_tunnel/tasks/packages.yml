@@ -1,9 +1,4 @@
 ---
-# Installed here as well as by controller_runtime, and deliberately so: this
-# role is what makes `wg` and `wg-quick` load-bearing, and a role whose first
-# real task shells out to a binary it did not ensure exists fails with "command
-# not found" instead of installing it. Both use ansible.builtin.apt with
-# state: present, so whichever runs second is a no-op.
 
 - name: packages | Ensure the WireGuard tooling is installed
   ansible.builtin.apt:

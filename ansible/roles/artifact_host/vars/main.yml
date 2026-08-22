@@ -10,43 +10,25 @@ _var_artifact_host_site_available: >-
 _var_artifact_host_site_enabled: >-
   /etc/apache2/sites-enabled/artifact-host.conf
 
-# Shipped enabled by the Ubuntu package and serving /var/www/html on the same
-# port. Left in place it would answer for any Host header the vhost below does
-# not match, from any source address.
 _var_artifact_host_default_site_enabled: >-
   /etc/apache2/sites-enabled/000-default.conf
 
-# Named to sort last in conf-enabled. Apache applies the last value it reads
-# for a server-wide directive, and the packaged security.conf sets
-# ServerTokens OS. A name that sorted before it would be read and then silently
-# overridden by the package default.
 _var_artifact_host_hardening_conf: >-
   /etc/apache2/conf-available/zzz-artifact-host.conf
 _var_artifact_host_hardening_enabled: >-
   /etc/apache2/conf-enabled/zzz-artifact-host.conf
 
-# The names this role used before it was renamed to sort last. Removed so a
-# host configured by the earlier version does not keep serving a stale copy.
 _var_artifact_host_hardening_legacy:
   - /etc/apache2/conf-enabled/artifact-host.conf
   - /etc/apache2/conf-available/artifact-host.conf
 
-# autoindex renders the browsable listing the operator uses to see what is
-# staged.
 _var_artifact_host_modules_enabled:
   - autoindex
 
-# Modules the artifact host has no use for. Each one widens what the server can
-# be asked to do, so they are disabled rather than left at the packaged
-# default. cgi and cgid in particular would give a read-only file server an
-# execution path.
 _var_artifact_host_modules_disabled:
   - cgi
   - cgid
   - userdir
   - status
 
-# Templates for this role live in ansible/files/artifact_host/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_artifact_host_files_dir: "{{ role_path | dirname | dirname }}/files/artifact_host"

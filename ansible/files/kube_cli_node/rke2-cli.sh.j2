@@ -1,23 +1,18 @@
 {{ ansible_managed | comment }}
-#
-# Interactive shell setup for operating this node. The binaries themselves are
-# symlinked into {{ kube_cli_node_link_dir }} rather than added to PATH here,
-# because a profile script is only read by a login shell and `ssh host kubectl
-# get nodes` is not one.
+
+
+
 {% if kube_cli_node_kubeconfig | length > 0 %}
 
-# Exported only when it is readable. The kubeconfig is 0600 root-owned, so a
-# devops shell that exported it regardless would fail every command with a
-# permission error that reads like a broken cluster. An unprivileged shell gets
-# no KUBECONFIG at all, which is the honest answer; `sudo -i` gets a working one.
+
+
 if [ -r "{{ kube_cli_node_kubeconfig }}" ]; then
     KUBECONFIG="{{ kube_cli_node_kubeconfig }}"
     export KUBECONFIG
 fi
 {% endif %}
 
-# Interactive shells only. $- contains 'i' exactly when this is one, and
-# aliases and completion are meaningless anywhere else.
+
 case $- in
     *i*)
 {% if kube_cli_node_alias | length > 0 %}
