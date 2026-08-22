@@ -402,8 +402,8 @@ def run_standalone(argv: list[str]) -> int:
         endpoint=endpoint,
         username=username,
         password=password,
-        node_name=os.getenv("PROXMOX_VE_NODE", "proxmox-kube"),
-        datastore_ids=(os.getenv("PROXMOX_VE_DATASTORE", "local-lvm"),),
+        node_name=os.getenv("PROXMOX_VE_NODE", "proxmox-rke2"),
+        datastore_ids=(os.getenv("PROXMOX_VE_DATASTORE", "dev-lo-data"),),
         fallback_password_file=fallback,
     )
     try:

@@ -6,10 +6,10 @@ config:
   deployment:phaseLimit: 2
   # Optional: if omitted, the stack downloads and imports Ubuntu 24.04 cloud image.
   # deployment:templateVmId: 9000
-  deployment:templateNodeName: proxmox-kube
-  deployment:imageDatastoreId: local
-  deployment:datastoreId: local-lvm
-  deployment:cloudInitDatastoreId: local-lvm
+  deployment:templateNodeName: proxmox-rke2
+  deployment:imageDatastoreId: dev-lo-directory
+  deployment:datastoreId: dev-lo-data
+  deployment:cloudInitDatastoreId: dev-lo-data
   # For lvmthin, leave unset (provider/proxmox defaults), or set to raw if needed.
   # deployment:diskFileFormat: raw
   deployment:externalBridge: vmbr0

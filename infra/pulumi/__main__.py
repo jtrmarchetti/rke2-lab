@@ -50,7 +50,7 @@ provider_settings = ProviderSettings(
         "PROXMOX_VE_INSECURE",
         True,
     ),
-    node_name=proxmox_cfg.get("nodeName") or "proxmox-kube",
+    node_name=proxmox_cfg.get("nodeName") or "proxmox-rke2",
 )
 
 phase_limit = deployment_cfg.get_int("phaseLimit") or 2
@@ -71,8 +71,8 @@ if external_bridge == internal_bridge and not allow_shared_bridge:
 common_settings = VmCommonSettings(
     template_node_name=deployment_cfg.get("templateNodeName") or provider_settings.node_name,
     template_vm_id=template_vm_id,
-    datastore_id=deployment_cfg.get("datastoreId") or "local-lvm",
-    cloud_init_datastore_id=deployment_cfg.get("cloudInitDatastoreId") or "local-lvm",
+    datastore_id=deployment_cfg.get("datastoreId") or "dev-lo-data",
+    cloud_init_datastore_id=deployment_cfg.get("cloudInitDatastoreId") or "dev-lo-data",
     vm_username=deployment_cfg.get("vmUsername") or "devops",
     vm_ssh_public_key=_get_required_value(
         deployment_cfg,
@@ -84,7 +84,7 @@ common_settings = VmCommonSettings(
     disk_file_format=deployment_cfg.get("diskFileFormat"),
     disk_cache=deployment_cfg.get("diskCache") or "writeback",
 )
-image_datastore_id = deployment_cfg.get("imageDatastoreId") or "local"
+image_datastore_id = deployment_cfg.get("imageDatastoreId") or "dev-lo-directory"
 
 provider = build_provider(provider_settings)
 vm_specs = build_vm_specs(external_bridge=external_bridge, internal_bridge=internal_bridge)
