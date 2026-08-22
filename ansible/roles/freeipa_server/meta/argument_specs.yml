@@ -64,10 +64,15 @@ argument_specs:
           password in output.
         type: bool
         required: false
-      freeipa_server_settle_timeout:
+      freeipa_server_settle_retries:
         description: >-
-          Seconds to let the container settle before checking whether it is
-          crash-looping.
+          How many times to poll the container for a stably-running state before
+          giving up; a crash-looper burns the whole budget and the restart-count
+          assert then fails the run.
+        type: int
+        required: false
+      freeipa_server_settle_delay:
+        description: Seconds between container-settle polls.
         type: int
         required: false
       freeipa_server_manage_resolver:

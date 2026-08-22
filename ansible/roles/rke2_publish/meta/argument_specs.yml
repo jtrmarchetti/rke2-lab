@@ -104,6 +104,19 @@ argument_specs:
         required: false
         default: 10
         description: Seconds between those attempts.
+      rke2_publish_mirror_task_retries:
+        type: int
+        required: false
+        default: 3
+        description: >-
+          Task-level retries on a whole failed skopeo copy, on top of the
+          in-invocation --retry-times. A re-invocation is safe: skopeo reuses
+          the blobs a previous attempt already pushed.
+      rke2_publish_mirror_task_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between those copy attempts.
       rke2_publish_no_log:
         type: bool
         required: false

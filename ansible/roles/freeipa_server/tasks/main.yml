@@ -218,24 +218,32 @@
 # and the bootstrap poll below would then sit through its entire timeout before
 # saying so. Catch it here instead.
 #
-# The wait is this long because a failing install is not always quick: the
-# installer's DNS pre-checks alone spend about 70 seconds timing out before
-# named exists, so one full crash cycle runs to roughly 90 seconds. A shorter
-# wait sees zero restarts and lets a doomed run proceed to the 30-minute poll.
+# A failing install is not quick: the installer's DNS pre-checks alone spend
+# about 70 seconds timing out before named exists, so one full crash cycle runs
+# to roughly 90 seconds, and two cycles the ~180s the poll budget below covers.
 #
-# It runs only when compose actually started or restarted the container. A
-# settle sleep after a run that changed nothing is pure wall time, and this
-# was the shape that paid 3.5 minutes of it on every steady-state run. A
-# crash-looping container that compose did not touch is still caught: the
-# restart-count assert below is not gated on this task.
-- name: main | Allow the FreeIPA container a moment to settle
+# It runs only when compose actually started or restarted the container, and it
+# is a health check, not a blind sleep: it polls docker_container_info until
+# the container reports running. A healthy container answers on the first or
+# second poll, so a fast-starting install no longer pays a fixed wall-time
+# wait. A crash-looping container resets between restarts and never reads as
+# stably running, so it burns the whole (retries x delay) budget — the same
+# ~180s the old fixed 210s wait bought — and only then does the restart-count
+# assert below, which is not gated on this task, fail the run.
+- name: main | Confirm the FreeIPA container is running, not crash-looping
   when:
     - (freeipa_server_enabled | bool)
     - not ansible_check_mode
     - (_reg_freeipa_server_compose is not skipped)
     - (_reg_freeipa_server_compose is changed)
-  ansible.builtin.wait_for:
-    timeout: "{{ freeipa_server_settle_timeout }}"
+  changed_when: false
+  failed_when: false
+  register: _reg_freeipa_server_stability
+  until: (_reg_freeipa_server_stability.container.State.Running | default(false))
+  retries: "{{ freeipa_server_settle_retries }}"
+  delay: "{{ freeipa_server_settle_delay }}"
+  community.docker.docker_container_info:
+    name: "{{ freeipa_server_container_name }}"
 
 - name: main | Read the FreeIPA container restart count
   when:

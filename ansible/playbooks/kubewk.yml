@@ -85,12 +85,16 @@
   hosts: kubewk
   gather_facts: true
   become: true
-  # One at a time. Agents joining have none of etcd's quorum problem, so this is
-  # not strictly required the way it is for the servers. It is kept because
-  # three nodes pulling the full image set through one GitLab simultaneously is
-  # the other reliable way to make this lab's storage unhappy, and because a
-  # failed join is much easier to read when only one node was moving.
-  serial: "{{ kubewk_serial | default(1) }}"
+    # Two at a time. Agents joining have none of etcd's quorum problem, so the
+  # joiner's host build and image pulls are free to overlap — the only reason
+  # this ever ran one at a time was to keep three nodes pulling the full image
+  # set through one GitLab from making the lab's storage unhappy, and to keep
+  # a failed join easy to read. Two at a time keeps that blast radius while
+  # removing the serial wall; a failed join still names one node.
+  #
+  # `-e kubewk_serial=1` forces the old one-at-a-time behaviour when the lab's
+  # storage or the GitLab download path is under load.
+  serial: "{{ kubewk_serial | default(2) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role

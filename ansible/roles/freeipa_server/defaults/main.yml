@@ -120,7 +120,11 @@ freeipa_server_ready_retries: 60
 freeipa_server_ready_delay: 10
 freeipa_server_ready_timeout: 300
 
-# How long to let the container settle before judging whether it is stable.
-# Long enough to cover two crash cycles of a failing install; see the task that
-# uses it for why a shorter wait misses a crash loop entirely.
-freeipa_server_settle_timeout: 210
+# Bounded poll that confirms the container is stably running before the
+# restart-count assert. Healthy containers pass on the first couple of polls, so
+# a fast install no longer pays a fixed sleep; a crash-looping one keeps
+# resetting and burns the whole budget (retries x delay ~= the old 210s) before
+# the assert catches it. See the "Confirm the FreeIPA container is running"
+# task for the reasoning.
+freeipa_server_settle_retries: 21
+freeipa_server_settle_delay: 10

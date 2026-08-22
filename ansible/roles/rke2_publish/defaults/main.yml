@@ -97,6 +97,13 @@ rke2_publish_skopeo_binary: /usr/bin/skopeo
 # Passed to skopeo. An internal link and a registry on the same host, so a
 # retry here covers a restarting GitLab rather than a flaky network.
 rke2_publish_mirror_retries: 3
+# Task-level retries on a whole failed skopeo copy, on top of the skopeo
+# --retry-times above. 2026-08-21: a transient source-leg abort (an 89 MB
+# blob PATCH answered "client disconnected / unexpected EOF", registry status
+# 499) outpaced the in-invocation retries once and fataled the run. The copy
+# is idempotent, so re-invoking it is safe and only re-pulls the missing part.
+rke2_publish_mirror_task_retries: 3
+rke2_publish_mirror_task_delay: 30
 
 # Helm charts to publish, Phase 6b. Each entry names the chart as the registry
 # will hold it — `name` and `version` become the OCI repository and tag, and

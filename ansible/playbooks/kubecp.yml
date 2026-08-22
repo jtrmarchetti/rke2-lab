@@ -71,27 +71,47 @@
           tags:
             - rke2_publish
 
-# serial: 1, because the first server has to be answering before the second one
-# is told to join it, and because a rolling restart of a three-member etcd is
-# the only safe kind. RKE2's own client-side load balancer makes the cluster
-# tolerant of a server being down once it is formed; it does not make forming
-# one in parallel a good idea.
+# Two batches, and the order between them is the point.
+#
+# Batch 1 is the bootstrap server, alone. It is the one that *starts* the
+# cluster: it omits `server:`, so nothing else may be told to join it until it
+# is answering — /readyz ok, its own node Ready, and the kube-vip VIP up. The
+# whole reason the first server runs by itself is that there is no cluster to
+# join until it has made one.
+#
+# Batch 2 is the remaining servers, in parallel. A joiner has none of the
+# bootstrap's constraint: two new etcd members joining a healthy one-member
+# cluster is ordinary and safe — the quorum argument only bites when you
+# *restart* members of an already-formed, even-sized etcd, not when fresh
+# members register against a live VIP. Running the joiners' host build (base,
+# data volume, time, RKE2 install and image pulls) against each other in
+# parallel is exactly what used to be hidden behind a blanket serial: 1, and it
+# is the largest wall-clock cost of a cold Phase 4.
+#
+# `-e kubecp_serial=1` restores the old fully-serial, one-at-a-time behaviour,
+# and `-e kubecp_serial=N` (N at least the group size) puts every server in one
+# batch, all at once. That last one is what an even-sized etcd recovers with:
+# a two-member cluster has a quorum of two, so no amount of one-at-a-time
+# restarting can reach it, and both members must come up together. `[1, 2]`
+# is the default; 1 is the conservative override; N is the recovery override.
+#
+# The invariant this split depends on: the bootstrap server is the first host
+# in the kubecp inventory order, so it is the one that lands in batch 1. That
+# is the same assumption serial: 1 made, and the assert below only proves the
+# bootstrap host is *in* the group, not that it is *first*. If a future edit
+# repoints inventory_kubecp_bootstrap_host at a host that is not first in the
+# group, the batch seam falls on the wrong host and a joiner ends up in batch
+# 1 with no live cluster to join. Keep the bootstrap host first in the group.
 - name: Form the RKE2 control plane
   hosts: kubecp
   gather_facts: true
   become: true
-  # One at a time, because the first server has to be answering before the
-  # second is told to join it, and because a rolling restart of a three-member
-  # etcd is the only safe kind. RKE2's client-side load balancer makes a formed
-  # cluster tolerant of a server being down; it does not make forming one in
-  # parallel a good idea.
-  #
-  # Overridable for one case that the default gets wrong: an even-sized etcd.
-  # A two-member cluster has a quorum of two, so restarting it one node at a
-  # time can never succeed — the first node waits for a peer that this play will
-  # not start until the first node is ready. Recovering from that state needs
-  # `-e kubecp_serial=3`, and it is the only time that flag is correct.
-  serial: "{{ kubecp_serial | default(1) }}"
+  # [1, 2]: the bootstrap server runs its whole task series alone, then the
+  # other servers build and join together. -e kubecp_serial=1 restores fully
+  # serial; -e kubecp_serial=N (N >= group size) runs the whole group at once,
+  # which is the only way to recover an even-sized etcd that cannot be
+  # restarted one member at a time.
+  serial: "{{ kubecp_serial | default([1, 2]) }}"
   force_handlers: true
   tasks:
     # Which host started the cluster is inventory data, not something to infer

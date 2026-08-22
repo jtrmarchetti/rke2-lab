@@ -14,8 +14,56 @@ base_host_packages:
 base_host_apt_proxy_enabled: true
 base_host_apt_proxy_url: null
 
+# Bounded acquire for hosts that talk to the apt-cacher-ng proxy on repo01,
+# written to /etc/apt/apt.conf.d/99repo-acquire only when the proxy is used.
+# Observed 2026-08-21: a cold update burst got a 500 from the proxy (a racing
+# store write on the temp file), the proxy half-closed the connection, and
+# apt sat in CLOSE-WAIT without failing or retrying — the cache-update task
+# never returned. These knobs make that failure class bounded: a failed fetch
+# retries, a connection with no data in flight times out, and pipelined
+# keep-alive reuse against the proxy (whose abort path leaves half-closed
+# sockets — the misbehaving-proxy case apt's man page names) is disabled.
+# Values chosen for a LAN cache: 5 fetches, a 5-minute no-data bound, no
+# pipelining.
+base_host_apt_acquire_retries: 5
+base_host_apt_acquire_timeout: 300
+base_host_apt_acquire_pipeline_depth: 0
+
+# Task-level retries on the cache update, on top of Acquire::Retries: a
+# transient proxy failure must cost a bounded re-try, never a failed run.
+base_host_apt_update_retries: 3
+base_host_apt_update_delay: 30
+
+# Per-attempt wall-clock cap on the apt-get update command itself (the cache-
+# update task runs `exec timeout -k 30 <cap> apt-get update`). Acquire::Retries
+# and the task retries above only run *after* an attempt fails; they never run
+# for the one case that is actually unbounded - an in-process acquire that parks
+# on a proxy half-close (a FIN'd socket the methods/http worker never closes,
+# Recv-Q=1) and therefore never fails at all. Without a cap the task hangs
+# indefinitely (observed 2026-08-21 on kubecp03: two http workers parked in
+# CLOSE-WAIT against apt-cacher-ng, 70+ min, no progress). The cap is on the
+# command, not a task-level `timeout:`, because a task-level timeout KILLS the
+# task and bypasses retries/until entirely (proven 2026-08-21 on kubewk01:
+# timed out at the cap, fataled with zero RETRYING lines). With the cap on the
+# command, a parked fetch exits 124 and the task retries. Sized above the
+# worst-case internal retry budget so transient failures still complete, and
+# below "never" so a stuck acquire counts as a failed attempt that retries.
+base_host_apt_update_timeout: 1800
+
 base_host_manage_hostname: false
 base_host_target_hostname: ""
+
+# A freshly imaged Ubuntu VM starts apt-daily(-upgrade) within minutes of
+# boot, and a periodic unattended upgrade holds the dpkg frontend lock for
+# its whole duration. Any apt task that lands inside that window dies with
+# "Unable to acquire the dpkg frontend lock" — a cold-build race that never
+# reproduces on steady-state hosts, because the timers only matter right
+# after boot. Hosts are therefore upgraded only under Ansible control: when
+# this is false (the default) the role disables the unattended-upgrade path
+# at every trigger site (the apt.conf drop-in, the apt-daily timers, and
+# the unattended-upgrades shutdown hook). Set it true on a host where
+# unattended upgrades are actually wanted.
+base_host_apt_unattended_upgrade: false
 
 # Split DNS for hosts that must resolve both internal and upstream names.
 # Only repo01 needs this; internal hosts resolve everything from core01.

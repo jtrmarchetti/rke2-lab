@@ -30,9 +30,19 @@
 # that moves the tag between runs can move what the mirror holds. Accepted
 # trade for a lab air gap; the tag is still the pin the whole build uses.
 - name: mirror_copy | Copy the image into the GitLab registry
+  # The skopeo --retry-times above re-attempts a failed *transfer*; it does not
+  # cover a transfer that aborts cleanly enough to end the whole invocation
+  # (observed 2026-08-21: an 89 MB keycloak blob hit "client disconnected /
+  # unexpected EOF" (registry status 499) on the flaky source leg, skopeo
+  # exited non-zero, and this task fataled a two-hour run). A task-level retry
+  # re-runs the copy; skopeo is idempotent, so a re-invocation reuses every
+  # blob the previous attempt already pushed and only fills the gap.
   changed_when: _reg_rke2_publish_mirror_result['rc'] == 0
   no_log: "{{ rke2_publish_no_log | bool }}"
   register: _reg_rke2_publish_mirror_result
+  retries: "{{ rke2_publish_mirror_task_retries }}"
+  delay: "{{ rke2_publish_mirror_task_delay }}"
+  until: _reg_rke2_publish_mirror_result['rc'] == 0
   ansible.builtin.command:
     cmd: >-
       {{ rke2_publish_skopeo_binary }} copy --all --preserve-digests
