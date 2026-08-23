@@ -13,4 +13,5 @@ Procedures, in the order you are most likely to need them.
    storage-longhorn
    storage-pvc
    node-maintenance
+   testing-cluster
    common-issues
