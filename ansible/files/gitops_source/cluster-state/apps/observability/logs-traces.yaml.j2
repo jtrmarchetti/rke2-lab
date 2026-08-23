@@ -31,6 +31,8 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
+  driftDetection:
+    mode: warn
 
   dependsOn:
     - name: kube-prometheus-stack
@@ -143,6 +145,8 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
+  driftDetection:
+    mode: warn
   dependsOn:
     - name: kube-prometheus-stack
   chart:
@@ -217,6 +221,8 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
+  driftDetection:
+    mode: warn
   dependsOn:
     - name: loki
   chart:
