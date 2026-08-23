@@ -64,7 +64,6 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-
 @dataclass(frozen=True)
 class CleanupSettings:
     endpoint: str
@@ -74,7 +73,6 @@ class CleanupSettings:
     datastore_ids: tuple[str, ...]
     insecure: bool = True
     fallback_password_file: str | None = None
-
 
 def _read_fallback_password(settings: CleanupSettings) -> str:
     """Read the PVE host root SSH password from the configured fallback file.
@@ -93,7 +91,6 @@ def _read_fallback_password(settings: CleanupSettings) -> str:
     if not password:
         raise RuntimeError("fallback password file is empty")
     return password
-
 
 class PveClient:
     """Minimal PVE API client (ticket flow, stdlib only)."""
@@ -230,7 +227,6 @@ class PveClient:
                 return "" if exit_status in ("OK", 0, "0") else str(exit_status)
         return "task still running after poll window"
 
-
 def find_orphans(client: PveClient, ticket: str) -> list[tuple[str, str]]:
     """Return (datastore, volume_name) pairs of content whose VMID no VM owns.
 
@@ -264,7 +260,6 @@ def find_orphans(client: PveClient, ticket: str) -> list[tuple[str, str]]:
                 orphans.append(key)
     return orphans
 
-
 _SSH_CMD_TIMEOUT_S = 30
 _SSH_EXIT_MARKER = "PVE_CLEANUP_SSH_EXIT="
 _SSH_CLIENT_OPTS = [
@@ -273,7 +268,6 @@ _SSH_CLIENT_OPTS = [
     "-o", "BatchMode=no",
     "-o", "ConnectTimeout=10",
 ]
-
 
 def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: str) -> str:
     """Remove ``label`` (``<datastore>:<volume>``) on the PVE host over root
@@ -329,7 +323,6 @@ def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: 
         return f"ssh to {host} failed (exit {ssh_exit}): {body[-400:]}"
     return f"ssh to {host} returned no remote exit status: {body[-400:]}"
 
-
 def clean_orphans(settings: CleanupSettings, apply: bool = False) -> list[str]:
     """Remove orphan per-VM storage content. Returns a list of human-readable
     result lines (for logging) and performs deletion only when ``apply`` is set.
@@ -380,7 +373,6 @@ def clean_orphans(settings: CleanupSettings, apply: bool = False) -> list[str]:
             lines.append(f"  removed {label}")
     return lines
 
-
 def run_standalone(argv: list[str]) -> int:
     """CLI entry: ``python3 -m modules.pve_cleanup [--apply]``.
 
@@ -413,7 +405,6 @@ def run_standalone(argv: list[str]) -> int:
         print(f"preflight cleanup failed: {exc}")
         return 1
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(run_standalone(sys.argv[1:]))

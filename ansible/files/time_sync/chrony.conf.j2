@@ -1,14 +1,8 @@
-
 {{ ansible_managed | comment }}
-
-
-
-
 
 {% for _item_time_sync_source in time_sync_sources %}
 {{ time_sync_source_directive }} {{ _item_time_sync_source }}
 {% endfor %}
-
 
 driftfile /var/lib/chrony/chrony.drift
 

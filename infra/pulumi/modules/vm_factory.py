@@ -3,14 +3,12 @@ from dataclasses import dataclass
 import pulumi
 import pulumi_proxmoxve as proxmox
 
-
 @dataclass(frozen=True)
 class VmNicSpec:
     bridge: str
     ipv4_cidr: str
     ipv4_gateway: str | None = None
     model: str = "virtio"
-
 
 @dataclass(frozen=True)
 class VmSpec:
@@ -27,7 +25,6 @@ class VmSpec:
     tags: list[str]
     cpu_type: str = "host"
 
-
 @dataclass(frozen=True)
 class VmCommonSettings:
     template_node_name: str
@@ -42,7 +39,6 @@ class VmCommonSettings:
     disk_cache: str = "writeback"
     disk_io_thread: bool = True
     scsi_hardware: str = "virtio-scsi-single"
-
 
 def _disk_args(
     common: VmCommonSettings,
@@ -72,7 +68,6 @@ def _disk_args(
         disk_args.append(proxmox.VmLegacyDiskArgs(**disk_kwargs))
     return disk_args
 
-
 def _network_args(nics: list[VmNicSpec]) -> list[proxmox.VmLegacyNetworkDeviceArgs]:
     network_args: list[proxmox.VmLegacyNetworkDeviceArgs] = []
     for nic in nics:
@@ -83,7 +78,6 @@ def _network_args(nics: list[VmNicSpec]) -> list[proxmox.VmLegacyNetworkDeviceAr
             )
         )
     return network_args
-
 
 def _ip_config_args(nics: list[VmNicSpec]) -> list[proxmox.VmLegacyInitializationIpConfigArgs]:
     ip_args: list[proxmox.VmLegacyInitializationIpConfigArgs] = []
@@ -97,7 +91,6 @@ def _ip_config_args(nics: list[VmNicSpec]) -> list[proxmox.VmLegacyInitializatio
             )
         )
     return ip_args
-
 
 def create_vm(
     spec: VmSpec,

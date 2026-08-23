@@ -2,14 +2,6 @@ logoutput: syslog
 
 internal: {{ socks5_proxy_listen_address }} port = {{ socks5_proxy_listen_port }}
 
-
-
-
-
-
-
-
-
 {% for _item_socks5_proxy_interface in socks5_proxy_external_interfaces %}
 external: {{ _item_socks5_proxy_interface }}
 {% endfor %}

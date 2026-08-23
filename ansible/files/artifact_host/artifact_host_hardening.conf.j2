@@ -1,13 +1,9 @@
 {{ ansible_managed | comment }}
 
-
-
-
 ServerTokens Prod
 ServerSignature Off
 
 TraceEnable Off
-
 
 <Directory {{ artifact_host_document_root }}>
     RemoveHandler .php .phar .cgi .pl .py .sh

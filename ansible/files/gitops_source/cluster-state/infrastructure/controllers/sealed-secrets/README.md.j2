@@ -1,9 +1,6 @@
-
-
 The first component Flux deploys here, and it is deliberately the smallest
 useful one: it proves reconciliation end to end, and everything the secrets
 model does later depends on it existing.
-
 
 `controller.yaml` is the vendor's release asset, unmodified:
 
@@ -23,7 +20,6 @@ Nothing in this file is rewritten for the airgap. The image reference stays
 to `registry.gitlab.dev.lo` through the containerd rewrite — the same property
 that let Flux itself bootstrap without `--registry`.
 
-
 v0.38.4, and the choice needed care in both directions.
 
 v0.38.2, v0.38.3 and v0.38.4 were cut within three hours of each other on
@@ -36,12 +32,10 @@ GitHub assets and no container image at all. v0.38.4 is the release that
 finally pushed. Falling back would have produced an `ImagePullBackOff` that
 looked like a broken mirror rather than an absent upstream image.
 
-
 `kube-system`, which is the upstream default and where `kubeseal` looks
 without being told otherwise. Moving it to its own namespace would mean
 passing `--controller-namespace` on every seal, forever, and editing the
 vendored manifest — which would cost the checksum above.
-
 
 The controller generates its own key pair on first start and stores it as a
 Secret labelled `sealedsecrets.bitnami.com/sealed-secrets-key` in

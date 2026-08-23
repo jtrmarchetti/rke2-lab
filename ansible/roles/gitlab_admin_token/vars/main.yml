@@ -41,11 +41,9 @@ _var_gitlab_admin_token_web_script: |
       urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
       urllib.request.HTTPSHandler(context=ctx))
 
-
   def get(path):
       with opener.open(base + path, timeout=60) as response:
           return response.read().decode()
-
 
   def post_form(path, fields):
       body = urllib.parse.urlencode(fields).encode()
@@ -56,7 +54,6 @@ _var_gitlab_admin_token_web_script: |
       with opener.open(request, timeout=60) as response:
           return response.read().decode()
 
-
   def api_get(path, token):
       request = urllib.request.Request(
           base + path,
@@ -65,7 +62,6 @@ _var_gitlab_admin_token_web_script: |
       with urllib.request.urlopen(request, context=ctx,
                                   timeout=60) as response:
           return json.load(response)
-
 
   sign_in = get("/users/sign_in")
   csrf = re.search(r'name="authenticity_token" value="([^"]+)"',

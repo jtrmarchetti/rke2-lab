@@ -1,9 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -67,7 +63,6 @@ spec:
         app.kubernetes.io/name: kube-vip-ds
     spec:
 
-
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
       containers:
@@ -97,7 +92,6 @@ spec:
               value: "true"
             - name: cp_namespace
               value: kube-system
-
 
             - name: vip_leaderelection
               value: "true"

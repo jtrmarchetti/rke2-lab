@@ -1,11 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -19,7 +13,6 @@ metadata:
   namespace: longhorn-system
 spec:
   interval: 30m
-
 
   timeout: 30m
   chart:
@@ -41,7 +34,6 @@ spec:
   values:
     defaultSettings:
 
-
       defaultDataPath: /var/lib/longhorn
 
       createDefaultDiskLabeledNodes: false
@@ -50,18 +42,14 @@ spec:
       storageOverProvisioningPercentage: 100
       storageMinimalAvailablePercentage: 15
 
-
       concurrentReplicaRebuildPerNodeLimit: 1
       concurrentAutomaticEngineUpgradePerNodeLimit: 1
-
 
       nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
       replicaReplenishmentWaitInterval: 1800
 
-
       backupTarget: ""
     persistence:
-
 
       defaultClass: true
       defaultClassReplicaCount: 2
@@ -78,15 +66,6 @@ spec:
       replicas: 1
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
-
-
-
-
-
-
-
-
-
 
     ingress:
       enabled: false

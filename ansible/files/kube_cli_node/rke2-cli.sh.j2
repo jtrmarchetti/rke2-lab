@@ -1,17 +1,12 @@
 {{ ansible_managed | comment }}
 
-
-
 {% if kube_cli_node_kubeconfig | length > 0 %}
-
-
 
 if [ -r "{{ kube_cli_node_kubeconfig }}" ]; then
     KUBECONFIG="{{ kube_cli_node_kubeconfig }}"
     export KUBECONFIG
 fi
 {% endif %}
-
 
 case $- in
     *i*)

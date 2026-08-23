@@ -1,10 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -20,11 +15,9 @@ data:
       - name: Loki
         type: loki
 
-
         uid: loki
         access: proxy
         url: http://loki.observability.svc.cluster.local:3100
-
 
       - name: Tempo
         type: tempo

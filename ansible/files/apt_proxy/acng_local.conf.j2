@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 Port: {{ apt_proxy_bind_port }}
 {% if apt_proxy_bind_addresses | length > 0 %}
 
@@ -14,16 +7,10 @@ BindAddress: {{ apt_proxy_bind_addresses | join(' ') }}
 CacheDir: {{ apt_proxy_cache_dir }}
 LogDir: {{ apt_proxy_log_dir }}
 
-
 ExThreshold: {{ apt_proxy_expire_days }}
-
 
 KeepExtraVersions: {{ apt_proxy_keep_extra_versions }}
 
-
 ExAbortOnProblems: 0
-
-
-
 
 PassThroughPattern: {{ apt_proxy_passthrough_pattern }}

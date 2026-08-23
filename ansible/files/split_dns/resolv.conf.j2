@@ -1,6 +1,5 @@
 {{ ansible_managed | comment }}
 
-
 nameserver 127.0.0.1
 {% if split_dns_search_domain | length > 0 %}
 search {{ split_dns_search_domain }}

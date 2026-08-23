@@ -1,11 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
 {% for _item_rke2_node_key, _item_rke2_node_value in _var_rke2_node_inotify_settings | dictsort %}
 {{ _item_rke2_node_key }} = {{ _item_rke2_node_value }}
 {% endfor %}

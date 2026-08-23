@@ -6,10 +6,7 @@ services:
     container_name: {{ gitlab_container_name }}
     restart: unless-stopped
 
-
     hostname: {{ gitlab_external_hostname }}
-
-
 
     stop_grace_period: 5m
 
@@ -28,7 +25,6 @@ services:
         gitlab_rails['registry_enabled'] = false
 {% endif %}
 
-
         letsencrypt['enable'] = {{ gitlab_letsencrypt_enabled | bool | lower }}
         nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.crt"
         nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.key"
@@ -37,17 +33,13 @@ services:
         registry_nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_registry_hostname }}.key"
 {% endif %}
 
-
         nginx['redirect_http_to_https'] = false
         nginx['listen_port'] = 443
         nginx['listen_https'] = true
 
-
         gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
 
-
         gitlab_rails['gitlab_email_enabled'] = false
-
 
         puma['worker_processes'] = {{ gitlab_puma_worker_processes }}
         sidekiq['concurrency'] = {{ gitlab_sidekiq_concurrency }}
@@ -57,21 +49,12 @@ services:
         gitlab_rails['env'] = { 'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000' }
         gitlab_rails['packages_enabled'] = {{ gitlab_package_registry_enabled | bool | lower }}
 
-
         gitlab_rails['backup_path'] = '/var/opt/gitlab/backups'
 {% if gitlab_oidc_enabled | bool %}
-
-
-
-
-
-
-
 
         gitlab_rails['omniauth_enabled'] = true
         gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
         gitlab_rails['omniauth_block_auto_created_users'] = {{ gitlab_oidc_block_auto_created_users | bool | lower }}
-
 
         gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
 {% if gitlab_oidc_auto_sign_in | bool %}
@@ -85,14 +68,11 @@ services:
               name: 'openid_connect',
               scope: ['openid', 'profile', 'email'],
 
-
-
               response_type: 'code',
               issuer: '{{ gitlab_oidc_issuer }}',
               discovery: true,
               client_auth_method: 'basic',
               uid_field: 'preferred_username',
-
 
               pkce: true,
               client_options: {
@@ -105,13 +85,6 @@ services:
         ]
         gitlab_rails['omniauth_sync_profile_from_provider'] = ['openid_connect']
         gitlab_rails['omniauth_sync_profile_attributes'] = ['email']
-
-
-
-
-
-
-
 
 {% endif %}
 

@@ -1,12 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -39,7 +32,6 @@ spec:
       retries: 3
   values:
     installCRDs: true
-
 
     serviceAccount:
       create: true

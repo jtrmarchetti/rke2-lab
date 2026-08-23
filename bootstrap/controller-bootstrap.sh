@@ -1,37 +1,16 @@
 #!/usr/bin/env bash
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
-
 VENV="${RKE2LAB_VENV:-${HOME}/.venvs/rke2lab}"
 
-
-
-
 PYTHON="${RKE2LAB_PYTHON:-/usr/bin/python3}"
-
 
 COLLECTIONS="${RKE2LAB_COLLECTIONS:-${HOME}/.ansible/collections}"
 
 log() { printf '\n== %s\n' "$*"; }
-
-
-
 
 PACKAGES=(
     ca-certificates
@@ -57,13 +36,11 @@ log "Installing pinned Python dependencies"
 "${VENV}/bin/python" -m pip install \
     --requirement "${REPO_ROOT}/bootstrap/requirements-controller.txt"
 
-
 log "Installing pinned Ansible collections into ${COLLECTIONS}"
 ANSIBLE_COLLECTIONS_PATH="${COLLECTIONS}" \
     "${VENV}/bin/ansible-galaxy" collection install \
     --requirements-file "${REPO_ROOT}/ansible/requirements.yml" \
     --collections-path "${COLLECTIONS}"
-
 
 if [ ! -f "${HOME}/.config/rke2lab/env.sh" ]; then
     log "No ~/.config/rke2lab/env.sh — secrets are not present yet"

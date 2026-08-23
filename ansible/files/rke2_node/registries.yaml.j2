@@ -1,13 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
-
 mirrors:
 {% for _item_rke2_node_upstream, _item_rke2_node_rules in rke2_node_registry_mirrors | groupby('upstream') %}
   {{ _item_rke2_node_upstream }}:

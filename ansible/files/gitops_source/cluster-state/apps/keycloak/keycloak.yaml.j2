@@ -1,19 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -66,7 +52,6 @@ spec:
                   name: keycloak-secrets
                   key: db-password
 
-
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           ports:
@@ -95,10 +80,6 @@ spec:
           requests:
             storage: 5Gi
 ---
-
-
-
-
 
 apiVersion: v1
 kind: Secret
@@ -147,8 +128,6 @@ spec:
           args:
             - start
 
-
-
             - --optimized=false
           env:
             - name: KC_DB
@@ -183,13 +162,6 @@ spec:
             - containerPort: 9000
               name: management
 
-
-
-
-
-
-
-
           volumeMounts:
             - name: domain-ca
               mountPath: /opt/keycloak/conf/truststores
@@ -200,7 +172,6 @@ spec:
               memory: 768Mi
             limits:
               memory: 1280Mi
-
 
           startupProbe:
             httpGet:

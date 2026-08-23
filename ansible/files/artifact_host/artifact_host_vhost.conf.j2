@@ -1,8 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
 <VirtualHost *:{{ artifact_host_listen_port }}>
     ServerName {{ artifact_host_server_name }}
 
@@ -14,21 +11,13 @@
     <Directory {{ artifact_host_document_root }}>
 {% if artifact_host_directory_index_enabled %}
 
-
         Options Indexes SymLinksIfOwnerMatch
         IndexOptions FancyIndexing HTMLTable NameWidth=* SuppressDescription
 {% else %}
         Options SymLinksIfOwnerMatch
 {% endif %}
 
-
         AllowOverride None
-
-
-
-
-
-
 
         <Limit GET HEAD OPTIONS>
             <RequireAny>
@@ -37,7 +26,6 @@
 {% endfor %}
             </RequireAny>
         </Limit>
-
 
         <LimitExcept GET HEAD OPTIONS>
             Require all denied

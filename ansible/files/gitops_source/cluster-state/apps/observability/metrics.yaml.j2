@@ -1,13 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -70,10 +62,8 @@ spec:
     prometheus:
       prometheusSpec:
 
-
         scrapeInterval: 60s
         evaluationInterval: 60s
-
 
         retention: 5d
         retentionSize: 6GB
@@ -94,30 +84,16 @@ spec:
                 requests:
                   storage: 8Gi
 
-
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
         ruleSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
 
-
-
-
-
     kubeProxy:
       service:
 
-
-
         selector:
           component: kube-proxy
-
-
-
-
-
-
-
 
     alertmanager:
       alertmanagerSpec:
@@ -150,7 +126,6 @@ spec:
 
     prometheus-node-exporter:
 
-
       tolerations:
         - operator: Exists
       resources:
@@ -164,7 +139,6 @@ spec:
       enabled: true
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
-
 
       persistence:
         enabled: false
@@ -190,12 +164,10 @@ spec:
           limits:
             memory: 128Mi
 
-
       admin:
         existingSecret: grafana-admin
         userKey: username
         passwordKey: password
-
 
       extraSecretMounts:
         - name: grafana-oidc
@@ -212,16 +184,9 @@ spec:
         auth.anonymous:
           enabled: false
 
-
-
         auth.generic_oauth:
           enabled: true
           name: dev.lo single sign-on
-
-
-
-
-
 
           allow_sign_up: true
           auto_login: false
@@ -234,20 +199,14 @@ spec:
           api_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/userinfo
           signout_redirect_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/logout
 
-
-
           tls_client_ca: /etc/grafana/ca/ca.crt
           use_pkce: true
-
 
           role_attribute_path: >-
             contains(roles[*], 'admin') && 'Admin' ||
             contains(roles[*], 'user') && 'Viewer'
 
-
           role_attribute_strict: true
-
-
 
           allow_assign_grafana_admin: false
       ingress:

@@ -1,12 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -45,7 +38,6 @@ spec:
             - /bin/sh
             - -c
             - |
-
 
               while true; do
                 bao status >/dev/null 2>&1

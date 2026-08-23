@@ -10,7 +10,6 @@ from modules.provider import ProviderSettings, build_provider
 from modules.vm_definitions import build_vm_specs
 from modules.vm_factory import VmCommonSettings, create_vm
 
-
 def _get_required_value(config: pulumi.Config, key: str, env_name: str) -> str:
     config_value = config.get(key)
     if config_value:
@@ -24,7 +23,6 @@ def _get_required_value(config: pulumi.Config, key: str, env_name: str) -> str:
         f"Missing required value for '{key}'. Set config or env var {env_name}."
     )
 
-
 def _get_bool_value(config: pulumi.Config, key: str, env_name: str, default: bool) -> bool:
     config_value = config.get_bool(key)
     if config_value is not None:
@@ -35,7 +33,6 @@ def _get_bool_value(config: pulumi.Config, key: str, env_name: str, default: boo
         return default
 
     return env_value.lower() in {"1", "true", "yes", "on"}
-
 
 proxmox_cfg = pulumi.Config("proxmox")
 deployment_cfg = pulumi.Config("deployment")

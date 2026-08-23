@@ -1,24 +1,11 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: openbao
 ---
-
-
-
 
 apiVersion: v1
 kind: ConfigMap
@@ -27,12 +14,6 @@ metadata:
   namespace: openbao
 data:
   seal.hcl: |
-
-
-
-
-
-
 
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -63,17 +44,13 @@ spec:
       tlsDisable: true
     injector:
 
-
       enabled: false
     server:
-
 
       image:
         registry: quay.io
         repository: openbao/openbao
         tag: 2.6.1
-
-
 
       updateStrategyType: RollingUpdate
       standalone:
@@ -92,7 +69,6 @@ spec:
             node_id = "openbao-0"
           }
 
-
           api_addr = "https://bao.{{ gitops_source_cluster_domain }}"
           cluster_addr = "http://openbao-0.openbao-internal:8201"
       ha:
@@ -104,11 +80,9 @@ spec:
         accessMode: ReadWriteOnce
       auditStorage:
 
-
         enabled: true
         size: 4Gi
         storageClass: longhorn
-
 
       extraVolumes:
         - type: configMap
@@ -124,7 +98,6 @@ spec:
           memory: 256Mi
         limits:
           memory: 512Mi
-
 
       readinessProbe:
         enabled: true

@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 import pulumi_proxmoxve as proxmox
 
-
 @dataclass(frozen=True)
 class ProviderSettings:
     endpoint: str
@@ -10,7 +9,6 @@ class ProviderSettings:
     password: str
     insecure: bool
     node_name: str
-
 
 def build_provider(settings: ProviderSettings) -> proxmox.Provider:
     return proxmox.Provider(

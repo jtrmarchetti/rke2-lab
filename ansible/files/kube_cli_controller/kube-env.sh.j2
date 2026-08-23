@@ -1,11 +1,7 @@
 {{ ansible_managed | comment }}
 
-
-
-
 KUBECONFIG="{{ kube_cli_controller_kubeconfig }}"
 export KUBECONFIG
-
 
 case ":${PATH}:" in
     *":{{ kube_cli_controller_bin_dir }}:"*) ;;

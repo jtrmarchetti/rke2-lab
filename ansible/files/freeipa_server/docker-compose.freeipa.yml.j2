@@ -1,30 +1,10 @@
-
 {{ ansible_managed | comment }}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 services:
   freeipa-server:
     image: {{ freeipa_server_container_image }}
     container_name: {{ freeipa_server_container_name }}
     restart: unless-stopped
-
-
 
     stop_grace_period: 5m
     read_only: true
@@ -39,11 +19,6 @@ services:
     environment:
       IPA_SERVER_HOSTNAME: {{ freeipa_server_hostname }}
       IPA_SERVER_IP: {{ freeipa_server_ip_address }}
-
-
-
-
-
 
     command:
       - "ipa-server-install"

@@ -1,19 +1,14 @@
 {{ ansible_managed | comment }}
 
-
 token: {{ rke2_server_token }}
 {% if not (rke2_server_bootstrap | bool) %}
-
-
 
 server: https://{{ rke2_server_api_address }}:{{ rke2_server_supervisor_port }}
 {% else %}
 
-
 {% endif %}
 
 node-ip: {{ rke2_server_node_ip }}
-
 
 tls-san:
 {% for _item_rke2_server_san in rke2_server_tls_san %}
@@ -41,14 +36,11 @@ ingress-controller:
 
 {% if rke2_server_node_taints | length > 0 %}
 
-
 node-taint:
 {% for _item_rke2_server_taint in rke2_server_node_taints %}
   - {{ _item_rke2_server_taint }}
 {% endfor %}
 {% endif %}
-
-
 
 disable-default-registry-endpoint: true
 
@@ -65,9 +57,6 @@ etcd-arg:
 
 {% if rke2_server_expose_metrics | bool %}
 
-
-
-
 etcd-expose-metrics: true
 
 kube-controller-manager-arg:
@@ -75,7 +64,6 @@ kube-controller-manager-arg:
 
 kube-scheduler-arg:
   - bind-address=0.0.0.0
-
 
 kube-proxy-arg:
   - metrics-bind-address=0.0.0.0

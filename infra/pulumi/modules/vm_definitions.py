@@ -1,6 +1,5 @@
 from .vm_factory import VmNicSpec, VmSpec
 
-
 def build_vm_specs(external_bridge: str, internal_bridge: str) -> dict[str, VmSpec]:
     return {
         "repo01": VmSpec(

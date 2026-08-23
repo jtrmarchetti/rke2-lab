@@ -1,13 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
-
-
-
-
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -24,7 +16,6 @@ data:
     metadata_dir = "/var/lib/garage/meta"
     data_dir = "/var/lib/garage/data"
     db_engine = "sqlite"
-
 
     replication_factor = 1
 
@@ -90,8 +81,6 @@ spec:
           image: dxflrs/garage:v2.3.0
           imagePullPolicy: IfNotPresent
 
-
-
           env:
             - name: GARAGE_RPC_SECRET
               valueFrom:
@@ -148,8 +137,6 @@ spec:
           requests:
             storage: 20Gi
 ---
-
-
 
 apiVersion: networking.k8s.io/v1
 kind: Ingress

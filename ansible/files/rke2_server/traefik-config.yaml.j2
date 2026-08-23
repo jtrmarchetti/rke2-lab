@@ -1,8 +1,5 @@
 {{ ansible_managed | comment }}
 
-
-
-
 ---
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -12,17 +9,8 @@ metadata:
 spec:
   valuesContent: |-
 
-
-
     nodeSelector:
       {{ rke2_server_ingress_node_selector }}: "true"
-
-
-
-
-
-
-
 
     service:
       spec:

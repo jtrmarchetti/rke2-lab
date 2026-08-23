@@ -1,11 +1,6 @@
 {{ ansible_managed | comment }}
 
-
-
-
 token: {{ rke2_agent_token }}
-
-
 
 server: https://{{ rke2_agent_server_address }}:{{ rke2_agent_supervisor_port }}
 
@@ -13,14 +8,9 @@ node-ip: {{ rke2_agent_node_ip }}
 
 data-dir: {{ rke2_agent_data_dir }}
 
-
-
 disable-default-registry-endpoint: true
 
-
-
 {% if rke2_agent_expose_metrics | bool %}
-
 
 kube-proxy-arg:
   - metrics-bind-address=0.0.0.0
