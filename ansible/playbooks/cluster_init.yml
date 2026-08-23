@@ -33,6 +33,7 @@
     - openbao_config
     - openbao_secrets
     - garage_init
+    - flux_unstall
     - ipa_sso_groups
     - keycloak_break_glass
     - keycloak_realm
@@ -244,6 +245,15 @@
         apply:
           tags:
             - openbao_secrets
+
+    - name: cluster_init | Include the Flux unstall role
+      tags:
+        - flux_unstall
+      ansible.builtin.include_role:
+        name: flux_unstall
+        apply:
+          tags:
+            - flux_unstall
 
     - name: cluster_init | Probe whether Keycloak's admin API answers
       register: _reg_keycloak_ready_probe

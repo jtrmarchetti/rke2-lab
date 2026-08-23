@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: flux_unstall
+  author: rke2lab
+  description: >-
+    Heals HelmReleases stranded in the Stalled state after a cold build.
+    Flux burns its install retries the moment a release fails on missing
+    prerequisites, and the helm-controller never retries a Stalled release
+    on its own, so each stalled release is toggled out of the state with
+    a suspend and resume, which resets the retry budget.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - flux
+    - helm
+    - kubernetes
+
+dependencies: []

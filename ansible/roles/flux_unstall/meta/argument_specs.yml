@@ -1,0 +1,49 @@
+---
+argument_specs:
+  main:
+    short_description: Heal HelmReleases stranded in the Stalled state
+    description:
+      - On a cold build Flux can install the observability releases before the
+        prerequisites they read exist. The helm-controller burns its install
+        retries and leaves the release Stalled, which it will never retry on
+        its own.
+      - The role finds every stalled release in the namespace and toggles it
+        with a suspend and resume, which is the only live-verified way to
+        reset the retry budget. It then confirms none stays stalled.
+    options:
+      flux_unstall_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      flux_unstall_namespace:
+        type: str
+        default: observability
+        description: Namespace the HelmReleases are looked up in.
+      flux_unstall_kubectl:
+        type: str
+        description: kubectl invocation, including the kubeconfig.
+      flux_unstall_flux:
+        type: str
+        description: flux CLI invocation, including the kubeconfig.
+      flux_unstall_settle:
+        type: int
+        default: 8
+        description:
+          - Seconds to wait between the suspend and the resume. The controller
+            has to process the suspend before the resume is meaningful.
+      flux_unstall_resume_timeout:
+        type: str
+        default: 10m
+        description:
+          - How long each resume waits for its reconciliation to finish.
+      flux_unstall_retries:
+        type: int
+        default: 10
+        description:
+          - Attempts to confirm the namespace is free of stalled releases after
+            the retry.
+      flux_unstall_delay:
+        type: int
+        default: 30
+        description:
+          - Seconds between those confirmation attempts.

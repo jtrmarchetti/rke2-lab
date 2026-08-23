@@ -1,0 +1,84 @@
+---
+
+- name: flux_unstall | List the releases that report themselves stalled
+  changed_when: false
+  failed_when: false
+  register: _reg_flux_unstall_scan
+  ansible.builtin.command:
+    cmd: >-
+      {{ flux_unstall_kubectl }} get helmrelease -n {{ flux_unstall_namespace }}
+      -o jsonpath="{range .items[*]}{.metadata.name} {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
+
+- name: flux_unstall | Reduce the listing to the stalled release names
+  ansible.builtin.set_fact:
+    _flux_unstall_stalled: >-
+      {{ _reg_flux_unstall_scan['stdout_lines']
+         | default([], true)
+         | select('match', '^.+ True$')
+         | map('regex_replace', ' True$', '')
+         | list }}
+
+- name: flux_unstall | Suspend the stalled releases to reset the retry budget
+  when: >-
+    (flux_unstall_enabled | bool)
+    and (_flux_unstall_stalled | length > 0)
+  changed_when: true
+  loop: "{{ _flux_unstall_stalled }}"
+  loop_control:
+    label: "{{ item }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ flux_unstall_flux }} suspend helmrelease
+      {{ item }} -n {{ flux_unstall_namespace }}
+
+- name: flux_unstall | Let the controller settle after the suspend
+  when: >-
+    (flux_unstall_enabled | bool)
+    and (_flux_unstall_stalled | length > 0)
+  changed_when: false
+  ansible.builtin.command:
+    cmd: "sleep {{ flux_unstall_settle }}"
+
+- name: flux_unstall | Resume the releases and wait for the reconciliation
+  when: >-
+    (flux_unstall_enabled | bool)
+    and (_flux_unstall_stalled | length > 0)
+  changed_when: true
+  loop: "{{ _flux_unstall_stalled }}"
+  loop_control:
+    label: "{{ item }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ flux_unstall_flux }} resume helmrelease
+      {{ item }} -n {{ flux_unstall_namespace }}
+      --timeout {{ flux_unstall_resume_timeout }}
+
+- name: flux_unstall | Confirm no release stays stalled after the retry
+  when: >-
+    (flux_unstall_enabled | bool)
+    and (_flux_unstall_stalled | length > 0)
+  changed_when: false
+  register: _reg_flux_unstall_confirm
+  until: >-
+    _reg_flux_unstall_confirm['stdout_lines']
+    | default([], true)
+    | select('match', '^.+ True$')
+    | list
+    | length == 0
+  retries: "{{ flux_unstall_retries }}"
+  delay: "{{ flux_unstall_delay }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ flux_unstall_kubectl }} get helmrelease -n {{ flux_unstall_namespace }}
+      -o jsonpath="{range .items[*]}{.metadata.name} {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
+
+- name: flux_unstall | Report the releases that were retried
+  when: >-
+    (flux_unstall_enabled | bool)
+    and (_flux_unstall_stalled | length > 0)
+  ansible.builtin.debug:
+    msg: >-
+      {{ _flux_unstall_stalled | join(', ') }}
+      was stalled; it was suspended and resumed to reset its retry
+      budget.
+    verbosity: 0
