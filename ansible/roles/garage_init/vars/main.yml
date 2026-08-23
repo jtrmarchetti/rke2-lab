@@ -3,6 +3,15 @@ _var_garage_init_exec: >-
   {{ garage_init_kubectl }} exec -n {{ garage_init_namespace }}
   {{ garage_init_pod }} --
 
+_var_garage_init_marker:
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: "{{ garage_init_marker_name }}"
+    namespace: "{{ garage_init_namespace }}"
+  data:
+    buckets: "{{ garage_init_buckets | join(' ') }}"
+
 _var_garage_init_access_id: >-
   {{ _reg_garage_init_new_key['stdout'] | default('')
      | regex_search('Key ID:\s+(\S+)', '\1') | first | default('') }}

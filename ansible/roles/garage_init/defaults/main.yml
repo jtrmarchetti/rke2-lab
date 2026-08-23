@@ -25,6 +25,8 @@ garage_init_buckets:
 
 garage_init_key_name: cluster
 
+garage_init_marker_name: garage-buckets-ready
+
 garage_init_env_file: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/env.sh
 

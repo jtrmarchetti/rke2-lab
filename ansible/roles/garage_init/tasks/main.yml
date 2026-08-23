@@ -148,3 +148,11 @@
       The Garage node still holds no role, so it will accept no objects while
       answering on every port and looking healthy from outside.
     quiet: true
+
+- name: main | Publish the buckets-ready marker for the Flux gate
+  when: not ansible_check_mode
+  changed_when: "'unchanged' not in _reg_garage_init_marker['stdout']"
+  register: _reg_garage_init_marker
+  ansible.builtin.command:
+    cmd: "{{ garage_init_kubectl }} apply -f -"
+    stdin: "{{ _var_garage_init_marker | to_nice_yaml }}"

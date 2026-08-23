@@ -64,6 +64,17 @@ argument_specs:
         type: str
         default: cluster
         description: Name of the S3 access key.
+      garage_init_marker_name:
+        type: str
+        default: garage-buckets-ready
+        description:
+          - ConfigMap the role publishes in the Garage namespace once the
+            layout, buckets, and grants are in place.
+          - Flux's `garage-ready` Kustomization health-checks for it and the
+            `observability` Kustomization depends on that gate, so the
+            observability stack holds until the store can actually accept
+            objects. The name is hardcoded in the garage-ready template;
+            keep the two in sync.
       garage_init_env_file:
         type: str
         description: File the one-time secret key is recorded in.
