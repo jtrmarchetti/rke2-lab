@@ -27,16 +27,30 @@
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
       {{ openbao_init_pod }} -- bao status -format=json
 
+- name: main | Parse the read result (an empty dict when the pod was unreachable)
+  ansible.builtin.set_fact:
+    _var_openbao_init_status: >-
+      {{ _reg_openbao_init_status['stdout'] | default('{}', true) | from_json }}
+
+- name: main | Fail with an actionable message when the vault could not be read
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_init_pod }} returned no `bao status` JSON on any attempt:
+      the pod is probably not up yet. On a cold build the OpenBao stack is
+      installed by the Flux cascade, which may still be settling. Re-run
+      this playbook once the cluster workloads are Ready.
+  when: (_var_openbao_init_status | length) == 0
+
 - name: main | Report the vault's state
   ansible.builtin.debug:
     msg: >-
       {{ openbao_init_pod }}: initialised =
-      {{ (_reg_openbao_init_status['stdout'] | from_json)['initialized'] }},
-      sealed = {{ (_reg_openbao_init_status['stdout'] | from_json)['sealed'] }}
+      {{ _var_openbao_init_status['initialized'] | default('unknown') }},
+      sealed = {{ _var_openbao_init_status['sealed'] | default('unknown') }}
     verbosity: 0
 
 - name: main | Initialise the vault
-  when: not ((_reg_openbao_init_status['stdout'] | from_json)['initialized'] | bool)
+  when: not (_var_openbao_init_status['initialized'] | default(false) | bool)
   block:
     - name: main | Run the one-time initialisation
       changed_when: true
@@ -80,7 +94,8 @@
   register: _reg_openbao_init_final
   until: >-
     _reg_openbao_init_final['rc'] == 0
-    and not ((_reg_openbao_init_final['stdout'] | from_json)['sealed'] | bool)
+    and not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+             ['sealed'] | default(false) | bool)
   retries: 10
   delay: 6
   ansible.builtin.command:
@@ -91,8 +106,10 @@
 - name: main | Assert the vault is open
   ansible.builtin.assert:
     that:
-      - (_reg_openbao_init_final['stdout'] | from_json)['initialized'] | bool
-      - not ((_reg_openbao_init_final['stdout'] | from_json)['sealed'] | bool)
+      - (_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+          ['initialized'] | default(false) | bool
+      - not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+          ['sealed'] | default(false) | bool)
     fail_msg: >-
       {{ openbao_init_pod }} is still sealed. If this run initialised it, the
       keys are in {{ openbao_init_env_file }} and can be applied by hand with
