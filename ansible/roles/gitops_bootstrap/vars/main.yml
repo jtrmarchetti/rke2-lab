@@ -18,6 +18,21 @@ _var_gitops_bootstrap_install: >-
   {{ _reg_gitops_bootstrap_installed['rc'] != 0
      or (gitops_bootstrap_force_install | bool) }}
 
+_var_gitops_bootstrap_git_url: >-
+  {{ gitops_bootstrap_gitlab_url }}/{{ gitops_bootstrap_group }}/{{
+  gitops_bootstrap_project }}.git
+
+_var_gitops_bootstrap_push_url: >-
+  {{ gitops_bootstrap_gitlab_url
+     | regex_replace('^https://',
+                     'https://oauth2:'
+                     ~ _var_gitops_bootstrap_admin_token['token'] ~ '@')
+  }}/{{ gitops_bootstrap_group }}/{{
+  gitops_bootstrap_project }}.git
+
+_var_gitops_bootstrap_flux_dir: >-
+  {{ gitops_bootstrap_cluster_dir }}/flux-system
+
 _var_gitops_bootstrap_component_file: >-
   {{ gitops_bootstrap_work_dir }}/{{ gitops_bootstrap_cluster_dir
   }}/flux-system/gotk-components.yaml

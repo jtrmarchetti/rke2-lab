@@ -1,0 +1,87 @@
+---
+
+# The flux-owned subfolder of the cluster-state tree is generated here by the
+# Flux CLI and committed by flux_commit.yml. gitops_source excludes this folder
+# with a pathspec, so the two roles never commit on top of each other.
+#
+# Each flux --export command is run through the command module (which strips one
+# trailing newline from the captured stdout). Every flux --export output ends in
+# exactly one newline, so appending "\n" reconstructs the byte-exact file.
+# gotk-sync.yaml holds the two-object manifest (GitRepository + root
+# Kustomization) and is the concatenation of two commands joined on a single
+# newline. The content: scalars are single-line double-quoted so the \n are
+# real newline escapes and the substituted stdout keeps its own newlines.
+
+- name: flux_files | Recreate the flux-owned folder from the Flux CLI
+  block:
+
+    - name: flux_files | Drop the committed flux files # noqa: command-instead-of-module
+      changed_when: true
+      ansible.builtin.command:
+        cmd: >-
+          git -C {{ gitops_bootstrap_work_dir }} rm -r -f
+          --quiet --ignore-unmatch {{ _var_gitops_bootstrap_flux_dir }}
+
+    - name: flux_files | Ensure the directory exists
+      ansible.builtin.file:
+        path: "{{ gitops_bootstrap_work_dir }}/{{ _var_gitops_bootstrap_flux_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: flux_files | Export the controller manifests # noqa: command-instead-of-module
+      changed_when: true
+      register: _reg_gitops_bootstrap_components
+      ansible.builtin.command:
+        cmd: >-
+          {{ gitops_bootstrap_flux }} install
+          --export
+          --registry ghcr.io/fluxcd
+          --components {{ gitops_bootstrap_controllers | join(',') }}
+
+    - name: flux_files | Export the source object # noqa: command-instead-of-module
+      changed_when: true
+      register: _reg_gitops_bootstrap_source
+      ansible.builtin.command:
+        cmd: >-
+          {{ gitops_bootstrap_flux }} create source git flux-system
+          --url {{ _var_gitops_bootstrap_git_url }}
+          --branch {{ gitops_bootstrap_branch }}
+          --secret-ref {{ gitops_bootstrap_namespace }}
+          --interval 1m
+          --export
+
+    - name: flux_files | Export the root Kustomization # noqa: command-instead-of-module
+      changed_when: true
+      register: _reg_gitops_bootstrap_root_kustomization
+      ansible.builtin.command:
+        cmd: >-
+          {{ gitops_bootstrap_flux }} create kustomization flux-system
+          --path ./{{ gitops_bootstrap_cluster_dir }}
+          --source GitRepository/{{ gitops_bootstrap_namespace }}
+          --prune
+          --interval 10m
+          --export
+
+    - name: flux_files | Write gotk-components.yaml
+      ansible.builtin.copy:
+        content: "{{ _reg_gitops_bootstrap_components['stdout'] }}\n"
+        dest: >-
+          {{ gitops_bootstrap_work_dir }}/{{
+          _var_gitops_bootstrap_flux_dir }}/gotk-components.yaml
+        mode: "0644"
+
+    - name: flux_files | Write gotk-sync.yaml
+      ansible.builtin.copy:
+        content: "{{ _reg_gitops_bootstrap_source['stdout'] }}\n{{ _reg_gitops_bootstrap_root_kustomization['stdout'] }}\n"
+        dest: >-
+          {{ gitops_bootstrap_work_dir }}/{{
+          _var_gitops_bootstrap_flux_dir }}/gotk-sync.yaml
+        mode: "0644"
+
+    - name: flux_files | Write kustomization.yaml
+      ansible.builtin.copy:
+        src: "{{ _var_gitops_bootstrap_files_dir }}/flux-system/kustomization.yaml"
+        dest: >-
+          {{ gitops_bootstrap_work_dir }}/{{
+          _var_gitops_bootstrap_flux_dir }}/kustomization.yaml
+        mode: "0644"

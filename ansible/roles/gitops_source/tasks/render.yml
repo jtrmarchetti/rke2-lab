@@ -7,18 +7,29 @@
     patterns: "*.j2"
     recurse: true
 
-- name: render | Find the files copied without rendering
-  register: _reg_gitops_source_files
-  ansible.builtin.find:
-    paths: "{{ _var_gitops_source_file_root }}"
-    recurse: true
+- name: render | Note whether the clone has a commit yet
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_head
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }}
+      rev-parse --verify --quiet HEAD
+
+- name: render | Recreate the ansible-owned tree from the templates
+  when: _reg_gitops_source_head['rc'] == 0
+  changed_when: true
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} rm -r -f
+      --quiet --ignore-unmatch .
+      ':(exclude){{ _var_gitops_source_flux_dir }}'
 
 - name: render | Create the directory structure
   loop: >-
-    {{ (_reg_gitops_source_templates['files'] + _reg_gitops_source_files['files'])
+    {{ _reg_gitops_source_templates['files']
        | map(attribute='path')
        | map('regex_replace', '^' ~ _var_gitops_source_template_root ~ '/', '')
-       | map('regex_replace', '^' ~ _var_gitops_source_file_root ~ '/', '')
        | map('dirname') | unique | sort }}
   loop_control:
     loop_var: _item_gitops_source_directory
@@ -47,19 +58,3 @@
 
     lstrip_blocks: false
     trim_blocks: true
-
-- name: render | Copy the vendored files
-  loop: "{{ _reg_gitops_source_files['files'] }}"
-  loop_control:
-    loop_var: _item_gitops_source_file
-    label: >-
-      {{ _item_gitops_source_file['path'] | regex_replace('^' ~ _var_gitops_source_file_root
-                                      ~ '/', '') }}
-  vars:
-    _gitops_source_dest: >-
-      {{ _item_gitops_source_file['path']
-         | regex_replace('^' ~ _var_gitops_source_file_root ~ '/', '') }}
-  ansible.builtin.copy:
-    src: "{{ _item_gitops_source_file['path'] }}"
-    dest: "{{ gitops_source_work_dir }}/{{ _gitops_source_dest }}"
-    mode: "0644"

@@ -1,18 +1,21 @@
 ---
 
-- name: commit | Note whether the tree carries work the commit would take
+- name: commit | Note whether the ansible-owned tree carries work
   changed_when: false
   failed_when: false
   register: _reg_gitops_source_tree_dirty
-  ansible.builtin.shell:
-    cmd: >-
-      test -z "$(git -C {{ gitops_source_work_dir }} status --porcelain)"
-
-- name: commit | Stage the rendered tree # noqa: command-instead-of-module
-  changed_when: >-
-    {{ _reg_gitops_source_tree_dirty['rc'] != 0 }}
   ansible.builtin.command:
-    cmd: "git -C {{ gitops_source_work_dir }} add --all"
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} status --porcelain
+      . ':(exclude){{ _var_gitops_source_flux_dir }}'
+
+- name: commit | Stage the ansible-owned tree # noqa: command-instead-of-module
+  changed_when: >-
+    {{ _reg_gitops_source_tree_dirty['stdout'] | length > 0 }}
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} add -A
+      . ':(exclude){{ _var_gitops_source_flux_dir }}'
 
 - name: commit | Look for a difference # noqa: command-instead-of-module
   changed_when: false

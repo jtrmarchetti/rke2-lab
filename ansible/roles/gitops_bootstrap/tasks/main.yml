@@ -10,14 +10,14 @@
       mint an admin token there.
     quiet: true
 
-- name: main | Check the rendered tree is present
+- name: main | Check the inputs the render and install read from disk are present
   when: (gitops_bootstrap_enabled | bool)
   failed_when: not _reg_gitops_bootstrap_inputs['stat']['exists']
   register: _reg_gitops_bootstrap_inputs
   loop:
-    - "{{ _var_gitops_bootstrap_component_file }}"
-    - "{{ _var_gitops_bootstrap_sync_file }}"
     - "{{ gitops_bootstrap_domain_ca_file }}"
+    - "{{ gitops_bootstrap_flux | trim | split(' ') | first }}"
+    - "{{ gitops_bootstrap_kubectl | trim | split(' ') | first }}"
   loop_control:
     loop_var: _item_gitops_bootstrap_input
     label: "{{ _item_gitops_bootstrap_input }}"
@@ -51,6 +51,12 @@
 
     - name: main | Ensure the read-only repository token exists
       ansible.builtin.include_tasks: deploy_token.yml
+
+    - name: main | Regenerate the flux-owned folder from the Flux CLI
+      ansible.builtin.include_tasks: flux_files.yml
+
+    - name: main | Commit and push the regenerated folder
+      ansible.builtin.include_tasks: flux_commit.yml
 
     - name: main | Install the Flux components and the sync objects
       ansible.builtin.include_tasks: install.yml

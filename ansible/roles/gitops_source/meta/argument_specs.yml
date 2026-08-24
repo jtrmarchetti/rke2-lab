@@ -13,6 +13,11 @@ argument_specs:
         template tree disappears from GitLab and an edit made directly in
         GitLab is overwritten. That is deliberate - a repository that accepts
         edits from both ends has two sources of truth and therefore none.
+      - The flux-system folder the gitops_bootstrap role writes is a clean
+        exception. Every commit this role makes is scoped with a git pathspec
+        that excludes it, so the two roles never commit on top of each
+        other and each can force-recreate its own tree without disturbing
+        the other's.
       - Commits only when something changed, because every commit is a new
         revision Flux reconciles the whole cluster against.
     options:
@@ -104,6 +109,8 @@ argument_specs:
         description:
           - Working clone. Cloned once, then synced with the remote tip
             every run and left in place so the pushed tree can be inspected.
+            The clone also carries the flux-system folder, which the Flux
+            bootstrap owns and this role never touches.
       gitops_source_bin_dir:
         type: str
         description: Directory holding kubeseal on this host.

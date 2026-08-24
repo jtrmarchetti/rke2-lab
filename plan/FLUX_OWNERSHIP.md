@@ -73,7 +73,7 @@ own. The split:
 
 | Ansible role / playbook | What it writes | Class | In Flux? |
 |---|---|---|---|
-| `gitops_bootstrap` | Flux controllers, GitRepository + root KZ, `flux-system` repo-credential Secret, sealing-key Secret (restore-only) | One-time bootstrap | No — out-of-band by definition |
+| `gitops_bootstrap` | Regenerates `clusters/dev-lo/flux-system/` (gotk-components, gotk-sync, kustomization) with the Flux CLI `--export` and commits just that folder; installs the generated components, applies the GitRepository + root KZ + `flux-system` repo-credential Secret, restores the sealing-key Secret | Flux-CLI bootstrap, re-runnable | No — out-of-band by definition; the committed files are the generated artifacts |
 | `garage_init` | Garage layout/bucket/key ops (`kubectl exec` in-pod); **marker ConfigMap `garage-buckets-ready`** | Gap: store layout + out-of-band marker | No |
 | `openbao_init` | `kubectl exec` init/unseal | One-time vault bootstrap | No |
 | `openbao_secrets`, `openbao_config`, `openbao_oidc` | OpenBao KV + config via `uri` | Secret provisioning (external) | No |

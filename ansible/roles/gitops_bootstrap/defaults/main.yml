@@ -32,9 +32,17 @@ gitops_bootstrap_sealing_key_file: >-
 gitops_bootstrap_sealing_key_label: >-
   sealedsecrets.bitnami.com/sealed-secrets-key=active
 
+gitops_bootstrap_flux: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
+
 gitops_bootstrap_kubectl: >-
   {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
   --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+gitops_bootstrap_commit_name: rke2lab automation
+gitops_bootstrap_commit_email: automation@dev.lo
+gitops_bootstrap_flux_commit_message: >-
+  Regenerate the flux-system folder from the Flux CLI
 
 gitops_bootstrap_force_install: false
 
