@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -81,12 +80,10 @@ spec:
               value: eth0
             - name: vip_subnet
               value: "32"
-
             - name: cp_enable
               value: "false"
             - name: svc_enable
               value: "true"
-
             - name: svc_election
               value: "true"
             - name: prometheus_server

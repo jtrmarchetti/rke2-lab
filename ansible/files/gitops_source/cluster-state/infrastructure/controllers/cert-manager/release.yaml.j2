@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -29,14 +28,12 @@ spec:
     remediation:
       retries: 3
   upgrade:
-
     crds: CreateReplace
     remediation:
       retries: 3
   values:
     crds:
       enabled: true
-
     resources:
       requests:
         cpu: 10m

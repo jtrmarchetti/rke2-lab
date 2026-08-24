@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -33,7 +32,6 @@ spec:
   timeout: 15m
   driftDetection:
     mode: warn
-
   dependsOn:
     - name: kube-prometheus-stack
   chart:
@@ -51,10 +49,8 @@ spec:
     remediation:
       retries: 2
   values:
-
     deploymentMode: SingleBinary
     loki:
-
       image:
         tag: 3.6.12
       auth_enabled: false
@@ -77,12 +73,10 @@ spec:
         s3:
           endpoint: http://garage.garage.svc.cluster.local:3900
           region: dev-lo
-
           s3ForcePathStyle: true
           insecure: true
       limits_config:
         retention_period: 168h
-
         ingestion_rate_mb: 8
         ingestion_burst_size_mb: 16
       compactor:
@@ -114,7 +108,6 @@ spec:
         enabled: true
         storageClass: longhorn
         size: 5Gi
-
     read:
       replicas: 0
     write:
@@ -131,7 +124,6 @@ spec:
       enabled: false
     gateway:
       enabled: false
-
     sidecar:
       rules:
         enabled: false
@@ -165,7 +157,6 @@ spec:
       retries: 2
   values:
     tempo:
-
       extraEnv:
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
@@ -177,9 +168,7 @@ spec:
             secretKeyRef:
               name: garage-s3
               key: secret_key
-
       memBallastSizeMbs: 64
-
       reportingEnabled: false
       storage:
         trace:
@@ -245,7 +234,6 @@ spec:
       tolerations:
         - operator: Exists
     alloy:
-
       extraPorts:
         - name: otlp-grpc
           port: 4317
@@ -255,7 +243,6 @@ spec:
           port: 4318
           targetPort: 4318
           protocol: TCP
-
       mounts:
         varlog: true
       resources:

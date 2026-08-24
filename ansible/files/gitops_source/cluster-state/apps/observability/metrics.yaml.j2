@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: v1
 kind: Namespace
@@ -35,12 +34,10 @@ spec:
   values:
     crds:
       enabled: true
-
     thanosRuler:
       enabled: false
     windowsMonitoring:
       enabled: false
-
     prometheusOperator:
       admissionWebhooks:
         certManager:
@@ -60,13 +57,10 @@ spec:
             memory: 32Mi
           limits:
             memory: 96Mi
-
     prometheus:
       prometheusSpec:
-
         scrapeInterval: 60s
         evaluationInterval: 60s
-
         retention: 5d
         retentionSize: 6GB
         nodeSelector:
@@ -85,18 +79,14 @@ spec:
               resources:
                 requests:
                   storage: 8Gi
-
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
         ruleSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
-
     kubeProxy:
       service:
-
         selector:
           component: kube-proxy
-
     alertmanager:
       alertmanagerSpec:
         nodeSelector:
@@ -115,7 +105,6 @@ spec:
               resources:
                 requests:
                   storage: 1Gi
-
     kube-state-metrics:
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
@@ -125,9 +114,7 @@ spec:
           memory: 64Mi
         limits:
           memory: 192Mi
-
     prometheus-node-exporter:
-
       tolerations:
         - operator: Exists
       resources:
@@ -136,12 +123,10 @@ spec:
           memory: 32Mi
         limits:
           memory: 64Mi
-
     grafana:
       enabled: true
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
-
       persistence:
         enabled: false
       resources:
@@ -165,12 +150,10 @@ spec:
             memory: 64Mi
           limits:
             memory: 128Mi
-
       admin:
         existingSecret: grafana-admin
         userKey: username
         passwordKey: password
-
       extraSecretMounts:
         - name: grafana-oidc
           secretName: grafana-oidc
@@ -191,31 +174,24 @@ spec:
           oauth_allow_insecure_email_lookup: true
         auth.anonymous:
           enabled: false
-
         auth.generic_oauth:
           enabled: true
           name: dev.lo single sign-on
-
           allow_sign_up: true
           auto_login: false
           client_id: grafana
-
           client_secret: $__file{/etc/grafana/oidc/client-secret}
           scopes: openid profile email
           auth_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/auth
           token_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/token
           api_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/userinfo
           signout_redirect_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/logout
-
           tls_client_ca: /etc/grafana/ca/ca.crt
           use_pkce: true
-
           role_attribute_path: >-
             contains(roles[*], 'admin') && 'Admin' ||
             contains(roles[*], 'user') && 'Viewer'
-
           role_attribute_strict: true
-
           allow_assign_grafana_admin: false
       ingress:
         enabled: true

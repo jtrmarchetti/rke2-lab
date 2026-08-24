@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: v1
 kind: Secret
@@ -7,7 +6,6 @@ metadata:
   name: longhorn-auth-ca
   namespace: longhorn-system
 data:
-
   ca.crt: >-
     {{ lookup('file', gitops_source_domain_ca_file, rstrip=false) | b64encode }}
 ---
@@ -30,11 +28,9 @@ spec:
         node-role.kubernetes.io/worker: "true"
       containers:
         - name: oauth2-proxy
-
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
           imagePullPolicy: IfNotPresent
           args:
-
             - --provider=keycloak-oidc
             - --oidc-issuer-url=https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}
             - --client-id=longhorn
@@ -43,19 +39,15 @@ spec:
             - --upstream=http://longhorn-frontend.longhorn-system.svc.cluster.local:80
             - --allowed-role=longhorn:admin
             - --allowed-role=longhorn:user
-
             - --http-address=0.0.0.0:4180
-
             - --reverse-proxy=true
             - --cookie-secure=true
             - --cookie-samesite=lax
-
             - --cookie-expire=1h
             - --cookie-refresh=15m
             - --email-domain=*
             - --skip-provider-button=true
             - --set-xauthrequest=true
-
             - --pass-basic-auth=false
             - --pass-user-headers=true
           env:

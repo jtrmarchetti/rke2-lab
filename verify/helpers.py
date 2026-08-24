@@ -662,6 +662,9 @@ def make_test_users() -> tuple[TestUser, TestUser]:
 
 
 def provision_user(u: TestUser) -> None:
+    # Self-heal: a run whose teardown failed may have left this user
+    # behind. Remove it (no-op if absent) so the strict add below works.
+    ipa_user_del(u.name)
     ipa_user_add(u.name, u.email, u.password)
     for group in u.groups:
         ipa_group_add_member(group, u.name)

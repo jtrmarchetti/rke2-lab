@@ -1,12 +1,10 @@
 {{ ansible_managed | comment }}
-
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: openbao
 ---
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -45,15 +43,12 @@ spec:
       enabled: true
       tlsDisable: true
     injector:
-
       enabled: false
     server:
-
       image:
         registry: quay.io
         repository: openbao/openbao
         tag: 2.6.2
-
       updateStrategyType: RollingUpdate
       standalone:
         enabled: true
@@ -81,11 +76,9 @@ spec:
         storageClass: longhorn
         accessMode: ReadWriteOnce
       auditStorage:
-
         enabled: true
         size: 4Gi
         storageClass: longhorn
-
       extraVolumes:
         - type: configMap
           name: openbao-seal
@@ -100,7 +93,6 @@ spec:
           memory: 256Mi
         limits:
           memory: 512Mi
-
       readinessProbe:
         enabled: true
         path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
@@ -115,7 +107,6 @@ spec:
               - bao.{{ gitops_source_cluster_domain }}
         annotations:
           cert-manager.io/cluster-issuer: k8s-ca
-
     ui:
       enabled: true
       serviceType: ClusterIP
