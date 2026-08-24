@@ -23,7 +23,7 @@ The pieces
      - Signal
      - What it does
    * - Prometheus
-     - kube-prometheus-stack 88.3.0
+     - kube-prometheus-stack 88.5.4
      - Metrics
      - Scrapes every target in the cluster every 60s, stores the samples, and
        evaluates the alert rules. The datasource behind almost every dashboard

@@ -22,7 +22,7 @@ Cluster
      - RKE2's packaged charts
      - Follows the RKE2 release
    * - kube-vip
-     - ``v1.2.2``
+     - ``v1.2.3``
      - ``group_vars/kubecp/main.yml``
 
 GitOps-managed
@@ -39,25 +39,25 @@ GitOps-managed
      - ``v1.21.1``
      - ``cluster-state/infrastructure/controllers/cert-manager``
    * - Longhorn
-     - ``1.11.3``
+     - ``1.12.1``
      - ``.../controllers/longhorn``
    * - OpenBao
-     - ``0.29.1`` (app 2.6.1)
+     - ``0.29.2`` (app 2.6.2)
      - ``.../controllers/openbao``
    * - External Secrets
      - ``2.9.0``
      - ``.../controllers/external-secrets``
    * - Sealed Secrets
-     - ``0.38.4``
+     - ``0.39.1``
      - ``.../controllers/sealed-secrets``
    * - Keycloak
-     - ``26.7.1``
+     - ``26.7.2``
      - ``cluster-state/apps/keycloak``
    * - Garage
      - ``2.3.0``
      - ``cluster-state/apps/garage``
    * - kube-prometheus-stack
-     - ``88.3.0``
+     - ``88.5.4``
      - ``cluster-state/apps/observability``
    * - Loki
      - ``7.3.0``
@@ -69,10 +69,10 @@ GitOps-managed
      - ``1.11.1``
      - ``cluster-state/apps/observability``
    * - oauth2-proxy (Longhorn)
-     - ``v7.15.3``
+     - ``v7.15.4``
      - ``cluster-state/apps/longhorn-auth``
    * - PostgreSQL (Keycloak)
-     - ``17.7-alpine``
+     - ``17.11-alpine``
      - ``cluster-state/apps/keycloak``
 
 Every chart is also listed in ``inventory_rke2_publish_chart_sets``

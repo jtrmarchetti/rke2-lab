@@ -15,7 +15,7 @@ gitlab_letsencrypt_enabled: false
 gitlab_ssl_source_dir: null
 
 gitlab_container_name: gitlab
-gitlab_container_image: "gitlab/gitlab-ce:19.2.2-ce.0"
+gitlab_container_image: "gitlab/gitlab-ce:19.3.0-ce.0"
 gitlab_compose_dir: /opt/rke2lab/gitlab
 
 gitlab_data_root: /data1/gitlab
@@ -23,7 +23,7 @@ gitlab_data_root: /data1/gitlab
 gitlab_backup_dir: /data1/gitlab/data/backups
 
 gitlab_image_tarball_url: null
-gitlab_image_tarball_path: /var/tmp/gitlab-ce-19.2.2-ce.0.tar
+gitlab_image_tarball_path: /var/tmp/gitlab-ce-19.3.0-ce.0.tar
 
 gitlab_runtime_packages:
   - docker.io

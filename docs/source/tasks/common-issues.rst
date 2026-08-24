@@ -117,7 +117,7 @@ order of likelihood:
 single-platform. Copy with ``--all --preserve-digests``: charts that pin by
 digest cannot resolve a rewritten manifest.
 
-**A bare ``postgres:17.7-alpine`` will not pull.** Docker Hub official images
+**A bare ``postgres:17.11-alpine`` will not pull.** Docker Hub official images
 resolve to ``docker.io/library/*``; the ``^library/`` rule is what covers them.
 
 Pods

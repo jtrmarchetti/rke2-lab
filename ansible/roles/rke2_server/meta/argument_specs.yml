@@ -111,7 +111,7 @@ argument_specs:
         description: Whether to deploy kube-vip for the virtual address.
       rke2_server_kube_vip_image:
         type: str
-        default: ghcr.io/kube-vip/kube-vip:v1.2.2
+        default: ghcr.io/kube-vip/kube-vip:v1.2.3
         description:
           - Upstream image reference. The rewrite to the GitLab path happens
             inside containerd, so the upstream name is what belongs here.

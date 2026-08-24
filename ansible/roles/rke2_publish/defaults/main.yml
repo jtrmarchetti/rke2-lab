@@ -42,8 +42,8 @@ rke2_publish_image_sets:
 
 rke2_publish_extra_images:
   - name: kube-vip
-    tarball: kube-vip-v1.2.2.tar
-    image: ghcr.io/kube-vip/kube-vip:v1.2.2
+    tarball: kube-vip-v1.2.3.tar
+    image: ghcr.io/kube-vip/kube-vip:v1.2.3
 
 rke2_publish_mirror_images: "{{ _var_rke2_publish_manifest_mirrors }}"
 rke2_publish_skopeo_package: skopeo

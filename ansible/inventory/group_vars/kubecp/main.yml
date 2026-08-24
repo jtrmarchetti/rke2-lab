@@ -68,7 +68,7 @@ inventory_rke2_server_node_taints:
   - CriticalAddonsOnly=true:NoExecute
 
 inventory_rke2_server_kube_vip_enabled: true
-inventory_rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.2
+inventory_rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.3
 inventory_rke2_server_kube_vip_interface: eth0
 
 inventory_base_host_split_dns_domains:

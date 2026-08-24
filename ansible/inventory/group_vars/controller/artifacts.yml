@@ -23,8 +23,8 @@ inventory_controller_artifacts:
     consumed_by: kube_cli_controller
 
   kubeseal:
-    version: 0.38.4
-    url: http://192.168.2.99/sealed-secrets/kubeseal-0.38.4-linux-amd64.tar.gz
+    version: 0.39.1
+    url: http://192.168.2.99/sealed-secrets/kubeseal-0.39.1-linux-amd64.tar.gz
     source: repo01
     consumed_by: kube_cli_controller
 

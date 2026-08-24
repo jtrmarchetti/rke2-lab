@@ -5,8 +5,8 @@ model does later depends on it existing.
 `controller.yaml` is the vendor's release asset, unmodified:
 
 ```text
-https://github.com/bitnami/sealed-secrets/releases/download/v0.38.4/controller.yaml
-sha256  8334764279b7dc3c758ce954c5e08cbf6d959bd977db49b872b2b722a123b202
+https://github.com/bitnami/sealed-secrets/releases/download/v0.39.1/controller.yaml
+sha256  bddc9187b441f986b1921d87ca6bc8b04bd51059b76514808784fbdd0f7898fe
 ```
 
 It is vendored rather than pulled from a `HelmRepository` because the cluster
@@ -16,11 +16,12 @@ chart is not. The cost is that upgrading means fetching the new asset rather
 than bumping a version field, and that cost is paid once per release.
 
 Nothing in this file is rewritten for the airgap. The image reference stays
-`docker.io/bitnami/sealed-secrets-controller:0.38.4` and the nodes resolve it
+`docker.io/bitnami/sealed-secrets-controller:0.39.1` and the nodes resolve it
 to `registry.gitlab.dev.lo` through the containerd rewrite — the same property
 that let Flux itself bootstrap without `--registry`.
 
-v0.38.4, and the choice needed care in both directions.
+The current pin, v0.39.1, follows the 0.38.x selection, which needed care in
+both directions.
 
 v0.38.2, v0.38.3 and v0.38.4 were cut within three hours of each other on
 2026-07-03, and the vendor labels v0.38.3 and v0.38.4 "Incomplete release for

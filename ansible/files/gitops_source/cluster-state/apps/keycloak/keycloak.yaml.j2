@@ -39,7 +39,7 @@ spec:
         node-role.kubernetes.io/worker: "true"
       containers:
         - name: postgres
-          image: postgres:17.7-alpine
+          image: postgres:17.11-alpine
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_DB
@@ -123,7 +123,7 @@ spec:
         node-role.kubernetes.io/worker: "true"
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.7.1
+          image: quay.io/keycloak/keycloak:26.7.2
           imagePullPolicy: IfNotPresent
           args:
             - start

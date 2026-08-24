@@ -117,7 +117,7 @@ inventory_gitlab_root_password: "{{ lookup('env', 'GITLAB_ROOT_PASSWORD') }}"
 inventory_gitlab_letsencrypt_enabled: false
 inventory_gitlab_ssl_source_dir: /etc/ssl/dev.lo
 
-inventory_gitlab_container_image: gitlab/gitlab-ce:19.2.2-ce.0
+inventory_gitlab_container_image: gitlab/gitlab-ce:19.3.0-ce.0
 inventory_gitlab_data_root: /data1/gitlab
 inventory_gitlab_registry_enabled: true
 inventory_gitlab_package_registry_enabled: true
@@ -150,8 +150,8 @@ inventory_rke2_publish_package_version: 1.35.7+rke2r1
 
 inventory_rke2_publish_extra_images:
   - name: kube-vip
-    tarball: kube-vip-v1.2.2.tar
-    image: ghcr.io/kube-vip/kube-vip:v1.2.2
+    tarball: kube-vip-v1.2.3.tar
+    image: ghcr.io/kube-vip/kube-vip:v1.2.3
   - name: flux-source-controller
     tarball: source-controller-v1.9.4.tar
     artifact_dir: "{{ inventory_artifact_stage_root }}/flux"
@@ -170,27 +170,27 @@ inventory_rke2_publish_extra_images:
     image: ghcr.io/fluxcd/notification-controller:v1.9.3
 
   - name: sealed-secrets-controller
-    tarball: sealed-secrets-controller-0.38.4.tar
+    tarball: sealed-secrets-controller-0.39.1.tar
     artifact_dir: "{{ inventory_artifact_stage_root }}/sealed-secrets"
-    image: docker.io/bitnami/sealed-secrets-controller:0.38.4
+    image: docker.io/bitnami/sealed-secrets-controller:0.39.1
 
 inventory_rke2_publish_chart_sets:
   - name: cert-manager
     version: v1.21.1
     dest: charts/cert-manager-v1.21.1.tgz
   - name: longhorn
-    version: 1.11.3
-    dest: charts/longhorn-1.11.3.tgz
+    version: 1.12.1
+    dest: charts/longhorn-1.12.1.tgz
   - name: external-secrets
     version: 2.9.0
     dest: charts/external-secrets-2.9.0.tgz
   - name: openbao
-    version: 0.29.1
-    dest: charts/openbao-0.29.1.tgz
+    version: 0.29.2
+    dest: charts/openbao-0.29.2.tgz
 
   - name: kube-prometheus-stack
-    version: 88.3.0
-    dest: charts/kube-prometheus-stack-88.3.0.tgz
+    version: 88.5.4
+    dest: charts/kube-prometheus-stack-88.5.4.tgz
   - name: loki
     version: 7.3.0
     dest: charts/loki-7.3.0.tgz
@@ -210,7 +210,7 @@ inventory_base_host_split_dns_domains:
   - dev.lo
 
 inventory_gitlab_image_tarball_url: >-
-  http://192.168.2.99/gitlab/gitlab-ce-19.2.2-ce.0.tar
+  http://192.168.2.99/gitlab/gitlab-ce-19.3.0-ce.0.tar
 
 inventory_gitlab_monitoring_allowed_networks:
   - 127.0.0.0/8

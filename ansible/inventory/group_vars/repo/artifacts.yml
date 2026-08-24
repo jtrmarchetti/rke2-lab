@@ -13,8 +13,8 @@ inventory_artifact_stage_manifest:
     phase: 3
     retention: bootstrap
     type: image
-    image: gitlab/gitlab-ce:19.2.2-ce.0
-    dest: gitlab/gitlab-ce-19.2.2-ce.0.tar
+    image: gitlab/gitlab-ce:19.3.0-ce.0
+    dest: gitlab/gitlab-ce-19.3.0-ce.0.tar
 
   - name: rke2-images-core
     phase: 4
@@ -76,8 +76,8 @@ inventory_artifact_stage_manifest:
     phase: 4
     retention: transit
     type: image
-    image: ghcr.io/kube-vip/kube-vip:v1.2.2
-    dest: rke2/kube-vip-v1.2.2.tar
+    image: ghcr.io/kube-vip/kube-vip:v1.2.3
+    dest: rke2/kube-vip-v1.2.3.tar
 
   - name: rke2-images-traefik
     phase: 5
@@ -135,16 +135,16 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: image
-    image: docker.io/bitnami/sealed-secrets-controller:0.38.4
-    dest: sealed-secrets/sealed-secrets-controller-0.38.4.tar
+    image: docker.io/bitnami/sealed-secrets-controller:0.39.1
+    dest: sealed-secrets/sealed-secrets-controller-0.39.1.tar
 
   - name: kubeseal-cli
     phase: 6
     retention: bootstrap
     type: file
     url: >-
-      https://github.com/bitnami/sealed-secrets/releases/download/v0.38.4/kubeseal-0.38.4-linux-amd64.tar.gz
-    dest: sealed-secrets/kubeseal-0.38.4-linux-amd64.tar.gz
+      https://github.com/bitnami/sealed-secrets/releases/download/v0.39.1/kubeseal-0.39.1-linux-amd64.tar.gz
+    dest: sealed-secrets/kubeseal-0.39.1-linux-amd64.tar.gz
 
   - name: helm-cli
     phase: 6
@@ -196,43 +196,43 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-manager:v1.11.3
+    image: docker.io/longhornio/longhorn-manager:v1.12.1
 
   - name: longhorn-engine
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-engine:v1.11.3
+    image: docker.io/longhornio/longhorn-engine:v1.12.1
 
   - name: longhorn-instance-manager
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-instance-manager:v1.11.3
+    image: docker.io/longhornio/longhorn-instance-manager:v1.12.1
 
   - name: longhorn-share-manager
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-share-manager:v1.11.3
+    image: docker.io/longhornio/longhorn-share-manager:v1.12.1
 
   - name: longhorn-ui
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-ui:v1.11.3
+    image: docker.io/longhornio/longhorn-ui:v1.12.1
 
   - name: longhorn-cli
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/longhorn-cli:v1.11.3
+    image: docker.io/longhornio/longhorn-cli:v1.12.1
 
   - name: longhorn-backing-image-manager
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/backing-image-manager:v1.11.3
+    image: docker.io/longhornio/backing-image-manager:v1.12.1
 
   - name: longhorn-csi-attacher
     phase: 6
@@ -244,13 +244,13 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/csi-provisioner:v6.3.0
+    image: docker.io/longhornio/csi-provisioner:v5.3.0
 
   - name: longhorn-csi-resizer
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/csi-resizer:v2.2.0
+    image: docker.io/longhornio/csi-resizer:v2.2.1
 
   - name: longhorn-csi-snapshotter
     phase: 6
@@ -274,15 +274,15 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/longhornio/support-bundle-kit:v0.0.88
+    image: docker.io/longhornio/support-bundle-kit:v0.0.92
 
   - name: longhorn-chart
     phase: 6
     retention: transit
     type: file
     url: >-
-      https://github.com/longhorn/charts/releases/download/longhorn-1.11.3/longhorn-1.11.3.tgz
-    dest: charts/longhorn-1.11.3.tgz
+      https://github.com/longhorn/charts/releases/download/longhorn-1.12.1/longhorn-1.12.1.tgz
+    dest: charts/longhorn-1.12.1.tgz
 
   - name: external-secrets
     phase: 6
@@ -302,7 +302,7 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/openbao/openbao:2.6.1
+    image: quay.io/openbao/openbao:2.6.2
 
   - name: garage
     phase: 6
@@ -314,39 +314,39 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/keycloak/keycloak:26.7.1
+    image: quay.io/keycloak/keycloak:26.7.2
 
   - name: oauth2-proxy
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
 
   - name: postgres
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/library/postgres:17.7-alpine
+    image: docker.io/library/postgres:17.11-alpine
 
   - name: openbao-chart
     phase: 6
     retention: transit
     type: file
     url: >-
-      https://github.com/openbao/openbao-helm/releases/download/openbao-0.29.1/openbao-0.29.1.tgz
-    dest: charts/openbao-0.29.1.tgz
+      https://github.com/openbao/openbao-helm/releases/download/openbao-0.29.2/openbao-0.29.2.tgz
+    dest: charts/openbao-0.29.2.tgz
 
   - name: prometheus
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/prometheus/prometheus:v3.13.2-distroless
+    image: quay.io/prometheus/prometheus:v3.14.0-distroless
 
   - name: alertmanager
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/prometheus/alertmanager:v0.33.1
+    image: quay.io/prometheus/alertmanager:v0.34.0
 
   - name: node-exporter
     phase: 6
@@ -358,31 +358,25 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/prometheus-operator/prometheus-operator:v0.93.0
+    image: quay.io/prometheus-operator/prometheus-operator:v0.93.1
 
   - name: prometheus-config-reloader
     phase: 6
     retention: transit
     type: mirror
-    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.91.0
-
-  - name: prometheus-config-reloader-operator
-    phase: 6
-    retention: transit
-    type: mirror
-    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.93.0
+    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.93.1
 
   - name: kube-state-metrics
     phase: 6
     retention: transit
     type: mirror
-    image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.19.1
+    image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
 
   - name: grafana
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/grafana/grafana:13.1.3
+    image: docker.io/grafana/grafana:13.2.0
 
   - name: grafana-sidecar
     phase: 6
@@ -419,8 +413,8 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-88.3.0/kube-prometheus-stack-88.3.0.tgz
-    dest: charts/kube-prometheus-stack-88.3.0.tgz
+      https://github.com/prometheus-community/helm-charts/releases/download/kube-prometheus-stack-88.5.4/kube-prometheus-stack-88.5.4.tgz
+    dest: charts/kube-prometheus-stack-88.5.4.tgz
 
   - name: loki-chart
     phase: 6

@@ -37,7 +37,7 @@ rke2_server_expose_metrics: true
 
 rke2_server_kube_vip_enabled: true
 
-rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.2
+rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.3
 rke2_server_kube_vip_interface: eth0
 rke2_server_kube_vip_lease_duration: 15
 rke2_server_kube_vip_renew_deadline: 10
