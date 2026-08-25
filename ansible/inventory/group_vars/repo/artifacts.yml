@@ -2,6 +2,10 @@
 
 inventory_artifact_stage_manifest:
 
+  # Held at almalinux-8 (FreeIPA 4.9): the almalinux-10 tag ships 389-DS 3.x,
+  # which dropped the BDB backend that the 4.9 DS database uses, so it cannot
+  # upgrade the domain in place. See repo memory
+  # freeipa-almalinux10-upgrade-failure.md.
   - name: freeipa-server
     phase: 2
     retention: bootstrap
@@ -21,7 +25,7 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-core.linux-amd64.tar.zst
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/rke2-images-core.linux-amd64.tar.zst
     dest: rke2/rke2-images-core.linux-amd64.tar.zst
 
   - name: rke2-images-cilium
@@ -29,7 +33,7 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-cilium.linux-amd64.tar.zst
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/rke2-images-cilium.linux-amd64.tar.zst
     dest: rke2/rke2-images-cilium.linux-amd64.tar.zst
 
   - name: rke2-images-core-list
@@ -37,7 +41,7 @@ inventory_artifact_stage_manifest:
     retention: bootstrap
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-core.linux-amd64.txt
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/rke2-images-core.linux-amd64.txt
     dest: rke2/rke2-images-core.linux-amd64.txt
 
   - name: rke2-images-cilium-list
@@ -45,7 +49,7 @@ inventory_artifact_stage_manifest:
     retention: bootstrap
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-cilium.linux-amd64.txt
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/rke2-images-cilium.linux-amd64.txt
     dest: rke2/rke2-images-cilium.linux-amd64.txt
 
   - name: rke2-binary
@@ -53,7 +57,7 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2.linux-amd64.tar.gz
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/rke2.linux-amd64.tar.gz
     dest: rke2/rke2.linux-amd64.tar.gz
 
   - name: rke2-checksums
@@ -61,7 +65,7 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/sha256sum-amd64.txt
+      https://github.com/rancher/rke2/releases/download/v1.36.3%2Brke2r1/sha256sum-amd64.txt
     dest: rke2/sha256sum-amd64.txt
 
   - name: rke2-install-script
@@ -69,7 +73,7 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://raw.githubusercontent.com/rancher/rke2/v1.35.7%2Brke2r1/install.sh
+      https://raw.githubusercontent.com/rancher/rke2/v1.36.3%2Brke2r1/install.sh
     dest: rke2/install.sh
 
   - name: kube-vip
@@ -78,22 +82,6 @@ inventory_artifact_stage_manifest:
     type: image
     image: ghcr.io/kube-vip/kube-vip:v1.2.3
     dest: rke2/kube-vip-v1.2.3.tar
-
-  - name: rke2-images-traefik
-    phase: 5
-    retention: transit
-    type: file
-    url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-traefik.linux-amd64.tar.zst
-    dest: rke2/rke2-images-traefik.linux-amd64.tar.zst
-
-  - name: rke2-images-traefik-list
-    phase: 5
-    retention: bootstrap
-    type: file
-    url: >-
-      https://github.com/rancher/rke2/releases/download/v1.35.7%2Brke2r1/rke2-images-traefik.linux-amd64.txt
-    dest: rke2/rke2-images-traefik.linux-amd64.txt
 
   - name: flux-source-controller
     phase: 6
@@ -151,8 +139,8 @@ inventory_artifact_stage_manifest:
     retention: bootstrap
     type: file
     url: >-
-      https://get.helm.sh/helm-v3.21.4-linux-amd64.tar.gz
-    dest: charts/helm-v3.21.4-linux-amd64.tar.gz
+      https://get.helm.sh/helm-v4.2.4-linux-amd64.tar.gz
+    dest: charts/helm-v4.2.4-linux-amd64.tar.gz
 
   - name: cert-manager-controller
     phase: 6
@@ -388,25 +376,28 @@ inventory_artifact_stage_manifest:
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/grafana/loki:3.6.12
+    image: docker.io/grafana/loki:3.7.6
 
+  # The tag the pinned loki chart (7.3.0, appVersion 3.6.12) resolves to when
+  # no image tag override is given. Mirrored so a rollback to chart defaults
+  # still pulls from the registry mirror.
   - name: loki-chart-default
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/grafana/loki:3.6.11
+    image: docker.io/grafana/loki:3.6.12
 
   - name: tempo
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/grafana/tempo:2.9.0
+    image: docker.io/grafana/tempo:2.10.8
 
   - name: alloy
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/grafana/alloy:v1.18.1
+    image: docker.io/grafana/alloy:v1.19.0
 
   - name: kube-prometheus-stack-chart
     phase: 6
@@ -437,5 +428,5 @@ inventory_artifact_stage_manifest:
     retention: transit
     type: file
     url: >-
-      https://github.com/grafana/helm-charts/releases/download/alloy-1.11.1/alloy-1.11.1.tgz
-    dest: charts/alloy-1.11.1.tgz
+      https://github.com/grafana/helm-charts/releases/download/alloy-1.12.0/alloy-1.12.0.tgz
+    dest: charts/alloy-1.12.0.tgz

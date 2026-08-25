@@ -3,9 +3,9 @@
 inventory_controller_artifacts:
 
   pulumi-cli:
-    version: 3.256.0
+    version: 3.259.0
     url: >-
-      https://get.pulumi.com/releases/sdk/pulumi-v3.256.0-linux-x64.tar.gz
+      https://get.pulumi.com/releases/sdk/pulumi-v3.259.0-linux-x64.tar.gz
     source: upstream
     consumed_by: controller_runtime
 
@@ -29,7 +29,7 @@ inventory_controller_artifacts:
     consumed_by: kube_cli_controller
 
   kubectl:
-    version: v1.35.7+rke2r1
+    version: v1.36.3+rke2r1
     url: null
     source: cluster
     consumed_by: kube_cli_controller
@@ -43,14 +43,14 @@ inventory_controller_artifacts:
     pinned_in: infra/pulumi/__main__.py
 
   python-automation:
-    version: ansible 13.4.0, ansible-core 2.20.3
+    version: ansible 14.3.1, ansible-core 2.21.3
     url: null
     source: upstream
     consumed_by: controller_runtime
     pinned_in: bootstrap/requirements-controller.txt
 
   python-pulumi:
-    version: pulumi 3.256.0, pulumi_proxmoxve 8.3.0
+    version: pulumi 3.259.0, pulumi_proxmoxve 8.4.1
     url: null
     source: upstream
     consumed_by: controller_runtime
@@ -64,7 +64,7 @@ inventory_controller_artifacts:
     pinned_in: ansible/requirements.yml
 
   pulumi-proxmoxve-plugin:
-    version: 8.3.0
+    version: 8.4.1
     url: null
     source: upstream
     consumed_by: pulumi

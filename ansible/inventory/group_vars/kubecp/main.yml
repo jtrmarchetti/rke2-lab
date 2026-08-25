@@ -26,7 +26,7 @@ inventory_data_volume_mount_path: /data1
 
 inventory_rke2_node_enabled: true
 inventory_rke2_node_type: server
-inventory_rke2_node_version: 1.35.7+rke2r1
+inventory_rke2_node_version: 1.36.3+rke2r1
 inventory_rke2_node_data_dir: /data1/rancher/rke2
 inventory_rke2_node_ca_url: http://192.168.2.99/certs/dev.lo-ca.crt
 inventory_rke2_node_gitlab_url: https://gitlab.dev.lo

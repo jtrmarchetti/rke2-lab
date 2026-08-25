@@ -146,7 +146,7 @@ inventory_rke2_publish_deploy_token_username: >-
 inventory_rke2_publish_deploy_token_value: >-
   {{ lookup('env', 'GITLAB_REGISTRY_TOKEN') }}
 
-inventory_rke2_publish_package_version: 1.35.7+rke2r1
+inventory_rke2_publish_package_version: 1.36.3+rke2r1
 
 inventory_rke2_publish_extra_images:
   - name: kube-vip
@@ -198,8 +198,8 @@ inventory_rke2_publish_chart_sets:
     version: 1.24.4
     dest: charts/tempo-1.24.4.tgz
   - name: alloy
-    version: 1.11.1
-    dest: charts/alloy-1.11.1.tgz
+    version: 1.12.0
+    dest: charts/alloy-1.12.0.tgz
 
 inventory_helm_cli_enabled: true
 
@@ -219,6 +219,6 @@ inventory_gitlab_monitoring_allowed_networks:
   - 10.66.66.0/30
 
 inventory_helm_cli_url: >-
-  http://192.168.2.99/charts/helm-v3.21.4-linux-amd64.tar.gz
+  http://192.168.2.99/charts/helm-v4.2.4-linux-amd64.tar.gz
 
 inventory_ipa_service_cert_trust_ca_path: /usr/local/share/ca-certificates/dev.lo.crt
