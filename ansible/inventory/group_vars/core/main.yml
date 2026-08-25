@@ -66,6 +66,9 @@ inventory_freeipa_server_dns_records:
     value: 192.168.2.20
 
 inventory_freeipa_server_container_name: freeipa-server
+# Held at almalinux-8 (FreeIPA 4.9): the almalinux-10 tag ships 389-DS 3.x,
+# which cannot upgrade the BDB-backed 4.9 DS database in place (repo memory:
+# freeipa-almalinux10-upgrade-failure.md).
 inventory_freeipa_server_container_image: freeipa/freeipa-server:almalinux-8
 
 inventory_freeipa_server_data_dir: /data1/freeipa
