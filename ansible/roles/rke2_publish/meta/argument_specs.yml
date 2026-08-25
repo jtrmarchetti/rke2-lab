@@ -218,7 +218,7 @@ argument_specs:
         description: Generic package name.
       rke2_publish_package_version:
         type: str
-        default: 1.35.7+rke2r1
+        default: 1.36.3+rke2r1
         description:
           - Generic package version. GitLab validates this as semver, so the
             RKE2 tag's leading v is dropped and +rke2r1 is build metadata.

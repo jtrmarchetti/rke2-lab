@@ -20,7 +20,7 @@ controller_runtime_venv_command: /usr/bin/python3 -m venv
 
 controller_runtime_requirements: bootstrap/requirements-controller.txt
 
-controller_runtime_ansible_version: "13.4.0"
+controller_runtime_ansible_version: "14.3.1"
 
 controller_runtime_collections_path: >-
   {{ ansible_facts['env']['HOME'] }}/.ansible/collections

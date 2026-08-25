@@ -1,5 +1,110 @@
 ---
 
+- name: image_set | Check for a tarball on disk
+  ansible.builtin.stat:
+    path: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}"
+  register: _reg_rke2_publish_set_tarball
+
+- name: image_set | Check for an image list on disk
+  when: _item_rke2_publish_set['list'] is defined
+  ansible.builtin.stat:
+    path: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}"
+  register: _reg_rke2_publish_set_list_stat
+
+- name: image_set | Check for the list's source marker
+  # The staging step records which URL the on-disk list came from in a
+  # marker file next to it. Absence of that marker means the body may
+  # still name the previous release, so the list is refetched even when
+  # it exists: the tarball must contain what the list promises.
+  when:
+    - not ansible_check_mode
+    - _item_rke2_publish_set['list'] is defined
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+       | list | length) > 0
+  ansible.builtin.stat:
+    path: >-
+      {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}.published.{{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+          | first).url | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  register: _reg_rke2_publish_set_list_marker
+
+- name: image_set | Check for the tarball's source marker
+  when:
+    - not ansible_check_mode
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+       | list | length) > 0
+  ansible.builtin.stat:
+    path: >-
+      {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}.published.{{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+          | first).url | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  register: _reg_rke2_publish_set_tarball_marker
+
+- name: image_set | Refetch the image list from its manifest URL
+  # Retention deletes staged bodies after a successful push, so a set that
+  # still publishes must re-fetch whatever it no longer has on disk. The
+  # URL comes from the manifest entry named after the file: re-publishing
+  # must not depend on whatever an earlier run happened to stage. force:
+  # because an old on-disk copy is exactly the case this repairs —
+  # Last-Modified would keep a stale list that still names the previous
+  # release, and the set would then compute nothing missing.
+  when:
+    - not ansible_check_mode
+    - _item_rke2_publish_set['list'] is defined
+    - >-
+      not (_reg_rke2_publish_set_list_stat.stat.exists | default(false))
+      or not (_reg_rke2_publish_set_list_marker.stat.exists | default(false))
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+       | list | length) > 0
+  ansible.builtin.get_url:
+    url: >-
+      {{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+          | first).url }}
+    dest: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}"
+    force: true
+
+- name: image_set | Record the source the list was refetched from
+  when:
+    - not ansible_check_mode
+    - _item_rke2_publish_set['list'] is defined
+    - >-
+      not (_reg_rke2_publish_set_list_stat.stat.exists | default(false))
+      or not (_reg_rke2_publish_set_list_marker.stat.exists | default(false))
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+       | list | length) > 0
+  vars:
+    _rke2_publish_list_marker: >-
+      {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['list'] }}.published.{{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['list']))
+          | first).url | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  ansible.builtin.copy:
+    content: ""
+    force: false
+    dest: "{{ _rke2_publish_list_marker }}"
+    owner: root
+    group: root
+    mode: "0644"
+    # Writing the marker after the refetch is what makes the gate above
+    # settle: once it exists, the next run sees a source-matched marker
+    # and leaves the list alone, so a steady-state run reports no change.
+
 - name: image_set | Read the release image list
   when: _item_rke2_publish_set['list'] is defined
   register: _reg_rke2_publish_set_list
@@ -40,6 +145,61 @@
                | list)
          | rejectattr(1, 'in', _var_rke2_publish_existing_refs)
          | map(attribute=0) | list }}
+
+- name: image_set | Refetch the tarball from its manifest URL
+  # Gated on missing images so a set that is already fully published does
+  # not re-download a multi-GB body it no longer needs. When the tarball
+  # exists but has no source marker matching the current manifest URL it
+  # is equally refetched: a leftover from the previous release would fail
+  # the "contains what the list promised" check below.
+  when:
+    - not ansible_check_mode
+    - _rke2_publish_set_missing | length > 0
+    - >-
+      not (_reg_rke2_publish_set_tarball.stat.exists | default(false))
+      or not (_reg_rke2_publish_set_tarball_marker.stat.exists | default(false))
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+       | list | length) > 0
+  ansible.builtin.get_url:
+    url: >-
+      {{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+          | first).url }}
+    dest: "{{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}"
+    force: true
+
+- name: image_set | Record the source the tarball was refetched from
+  when:
+    - not ansible_check_mode
+    - _rke2_publish_set_missing | length > 0
+    - >-
+      not (_reg_rke2_publish_set_tarball.stat.exists | default(false))
+      or not (_reg_rke2_publish_set_tarball_marker.stat.exists | default(false))
+    - >-
+      (rke2_publish_manifest
+       | selectattr('type', 'equalto', 'file')
+       | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+       | list | length) > 0
+  vars:
+    _rke2_publish_tarball_marker: >-
+      {{ _var_rke2_publish_set_dir }}/{{ _item_rke2_publish_set['tarball'] }}.published.{{ (rke2_publish_manifest
+          | selectattr('type', 'equalto', 'file')
+          | selectattr('dest', 'equalto', (_var_rke2_publish_set_dir | basename ~ '/' ~ _item_rke2_publish_set['tarball']))
+          | first).url | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  ansible.builtin.copy:
+    content: ""
+    force: false
+    dest: "{{ _rke2_publish_tarball_marker }}"
+    owner: root
+    group: root
+    mode: "0644"
+    # The retention step writes this same marker before it deletes the
+    # body, and the staging step writes it after a download: one byte-
+    # identical scheme, three writers.
 
 - name: image_set | Report this set
   ansible.builtin.debug:

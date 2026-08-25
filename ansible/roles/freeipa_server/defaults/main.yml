@@ -22,6 +22,9 @@ freeipa_server_ntp: false
 freeipa_server_ntp_servers: []
 
 freeipa_server_container_name: freeipa-server
+# Held at almalinux-8 (FreeIPA 4.9) - see repo memory
+# freeipa-almalinux10-upgrade-failure.md for why the 3.x tag cannot take over
+# the running domain in place.
 freeipa_server_container_image: "freeipa/freeipa-server:almalinux-8"
 freeipa_server_compose_dir: /opt/rke2lab/freeipa
 freeipa_server_data_dir: /data1/freeipa

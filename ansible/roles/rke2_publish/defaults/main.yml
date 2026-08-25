@@ -35,10 +35,8 @@ rke2_publish_image_sets:
   - name: cilium
     tarball: rke2-images-cilium.linux-amd64.tar.zst
     list: rke2-images-cilium.linux-amd64.txt
-
-  - name: traefik
-    tarball: rke2-images-traefik.linux-amd64.tar.zst
-    list: rke2-images-traefik.linux-amd64.txt
+    # RKE2 >= 1.36 ships the Traefik ingress images inside rke2-images-core;
+    # the standalone rke2-images-traefik tarball no longer exists.
 
 rke2_publish_extra_images:
   - name: kube-vip
@@ -60,7 +58,7 @@ rke2_publish_chart_sets: []
 rke2_publish_helm_binary: /usr/local/bin/helm
 
 rke2_publish_package_name: rke2
-rke2_publish_package_version: 1.35.7+rke2r1
+rke2_publish_package_version: 1.36.3+rke2r1
 rke2_publish_package_files:
   - install.sh
   - rke2.linux-amd64.tar.gz

@@ -26,7 +26,7 @@ argument_specs:
         description: Which RKE2 node type to install.
       rke2_node_version:
         type: str
-        default: 1.35.7+rke2r1
+        default: 1.36.3+rke2r1
         description:
           - RKE2 release to install. Must equal the version rke2_publish
             uploaded to the package registry.

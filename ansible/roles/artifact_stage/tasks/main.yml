@@ -25,29 +25,66 @@
       end.
     quiet: true
 
-- name: main | Find the markers of artifacts already published to GitLab
+- name: main | Note which manifest entries hold a marker for their own source
   when: (artifact_stage_enabled | bool)
-  register: _reg_artifact_stage_markers
+  register: _reg_artifact_stage_marker_stat
+  loop: "{{ _var_artifact_stage_local }}"
+  loop_control:
+    loop_var: _item_artifact_stage_local
+    label: "{{ _item_artifact_stage_local['name'] | default('<unnamed>') }}"
+  vars:
+    # The marker is named after the source the artifact was staged from:
+    # the entry's url, or its image reference, reduced to characters
+    # that are safe in a file name. An entry counts as published only
+    # while a marker for its *current* source exists, so a re-pinned
+    # or version-bumped artifact re-stages instead of being skipped;
+    # version-agnostic dests (rke2/install.sh and friends) cannot
+    # shadow each other.
+    _artifact_stage_marker_source: >-
+      {{ _item_artifact_stage_local.get('url',
+         _item_artifact_stage_local.get('image', ''))
+         | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  ansible.builtin.stat:
+    path: >-
+      {{ artifact_stage_root }}/{{ _item_artifact_stage_local['dest']
+         }}{{ _var_artifact_stage_published_suffix
+         }}.{{ _artifact_stage_marker_source }}
+    get_checksum: false
+
+- name: main | Map the markers back to manifest entry names
+  when: (artifact_stage_enabled | bool)
+  ansible.builtin.set_fact:
+    _artifact_stage_marked_names: >-
+      {{ _reg_artifact_stage_marker_stat['results'] | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists')
+         | map(attribute='_item_artifact_stage_local.name')
+         | list }}
+
+- name: main | Find first-generation markers that record no source
+  when: (artifact_stage_enabled | bool)
+  register: _reg_artifact_stage_legacy_markers
   ansible.builtin.find:
     paths: "{{ artifact_stage_root }}"
     patterns: "*{{ _var_artifact_stage_published_suffix }}"
     recurse: true
     file_type: file
 
-- name: main | Map the markers back to manifest entry names
-  when: (artifact_stage_enabled | bool)
-  vars:
-    _artifact_stage_marked_dests: >-
-      {{ _reg_artifact_stage_markers['files'] | map(attribute='path')
-         | map('regex_replace', '^' ~ artifact_stage_root ~ '/', '')
-         | map('regex_replace',
-                _var_artifact_stage_published_suffix | regex_escape ~ '$', '')
-         | list }}
-  ansible.builtin.set_fact:
-    _artifact_stage_marked_names: >-
-      {{ _var_artifact_stage_local
-         | selectattr('dest', 'in', _artifact_stage_marked_dests)
-         | map(attribute='name') | list }}
+- name: main | Remove first-generation markers
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_reg_artifact_stage_legacy_markers['files'] | length > 0)
+    - not ansible_check_mode
+  loop: "{{ _reg_artifact_stage_legacy_markers['files'] }}"
+  loop_control:
+    loop_var: _item_artifact_stage_legacy_marker
+    label: "{{ _item_artifact_stage_legacy_marker['path'] | trim }}"
+  ansible.builtin.file:
+    path: "{{ _item_artifact_stage_legacy_marker['path'] }}"
+    state: absent
+    # The first-generation markers are bare `touch` files that record
+    # nothing, so they would block re-staging forever; a marker that
+    # names its source is safe to hand to the check above.
 
 - name: main | Ensure the destination directories exist
   when: (artifact_stage_enabled | bool)
