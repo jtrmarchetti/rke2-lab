@@ -2,7 +2,7 @@
 RKE2 and the node stack
 =======================
 
-RKE2 v1.35.7+rke2r1 on six nodes: three servers running the API and etcd, three
+RKE2 v1.36.3+rke2r1 on six nodes: three servers running the API and etcd, three
 workers running everything else. RKE2 packages its own containerd, CNI, ingress
 and DNS, so most of this layer is installed and upgraded by the RKE2 release
 rather than by Flux.
@@ -114,9 +114,10 @@ ingress one.
 
 .. note::
 
-   Traefik is here because ingress-nginx reached end of life in March 2026, not
-   because it was always RKE2's default. It was not; RKE2 makes Traefik the
-   default for new clusters from v1.36.
+   Traefik is here because ingress-nginx reached end of life in March 2026.
+   From v1.36 on, RKE2 makes Traefik the default for new clusters, and the
+   standalone ``rke2-images-traefik`` airgap tarball was retired — the Traefik
+   images ship inside ``rke2-images-core``.
 
 kube-vip
 ========

@@ -12,7 +12,7 @@ copyright = "dev.lo lab"
 
 # The environment this guide describes, not a version of the guide itself.
 # Bump it when the cluster's Kubernetes minor version changes.
-release = "RKE2 v1.35.7+rke2r1"
+release = "RKE2 v1.36.3+rke2r1"
 version = release
 
 extensions = [

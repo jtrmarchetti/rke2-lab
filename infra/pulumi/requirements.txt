@@ -10,8 +10,8 @@
 # The proxmoxve provider plugin is not listed here and cannot be. The Pulumi
 # CLI downloads it into its own plugin cache on first use, which is the only
 # path Pulumi supports.
-pulumi==3.256.0
-pulumi-proxmoxve==8.3.0
+pulumi==3.259.0
+pulumi-proxmoxve==8.4.1
 # Host-SSH fallback in modules/pve_cleanup.py (pvesm free of orphan LVs when
 # the PVE 9.2 API DELETE /content 501s). ptyprocess is pexpect's dep.
 pexpect==4.9.0

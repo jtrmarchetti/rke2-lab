@@ -68,7 +68,7 @@ The pieces
      - The trace database. Receives spans over OTLP, stores them by trace ID,
        and answers "show me trace X". Retains 48h; blocks go to Garage
    * - Alloy
-     - Alloy 1.11.1
+     - Alloy 1.12.0
      - Logs + traces
      - The collector, a DaemonSet on all six nodes. Reads every container's log
        file and pushes to Loki, and accepts OTLP spans from anything in the

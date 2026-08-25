@@ -2,7 +2,7 @@
 Versions
 ========
 
-What is running, as of 2026-08-17. Every version here is pinned in a file, not
+What is running, as of 2026-08-24. Every version here is pinned in a file, not
 in prose — the file is named in the last column, and it is the thing to edit.
 
 Cluster
@@ -16,7 +16,7 @@ Cluster
      - Version
      - Pinned in
    * - RKE2
-     - ``1.35.7+rke2r1``
+     - ``1.36.3+rke2r1``
      - ``group_vars/kubecp|kubewk/main.yml``
    * - Cilium, CoreDNS, Traefik
      - RKE2's packaged charts
@@ -66,7 +66,7 @@ GitOps-managed
      - ``1.24.4``
      - ``cluster-state/apps/observability``
    * - Alloy
-     - ``1.11.1``
+     - ``1.12.0``
      - ``cluster-state/apps/observability``
    * - oauth2-proxy (Longhorn)
      - ``v7.15.4``
@@ -92,10 +92,10 @@ Controller and hosts
      - Version
      - Pinned in
    * - Ansible
-     - ``13.4.0``
+     - ``14.3.1``
      - ``bootstrap/requirements-controller.txt``
    * - ansible-lint
-     - ``26.3.0``
+     - ``26.8.0``
      - ``bootstrap/requirements-controller.txt``
    * - Pulumi CLI, k9s, Flux CLI, kubeseal
      - see manifest
