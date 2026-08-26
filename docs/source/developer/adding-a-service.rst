@@ -149,6 +149,10 @@ identity as variables — domain, realm, addresses — and nothing else. A chart
 version hoisted into ``group_vars`` turns a readable manifest into a variable
 lookup with no reader.
 
+**Ordering that cannot be expressed in the tree** — waiting on something that
+Flux's ``healthChecks`` cannot see, for instance — is out of band and gets the
+marker-and-gate treatment; the full story is in :doc:`ansible-patterns`.
+
 4. Secrets
 ==========
 
@@ -235,8 +239,8 @@ reported as success:
 8. Document it
 ==============
 
-Add the service to :doc:`managing-services`, to
-:doc:`../reference/service-urls`, and — if it is a new technology rather than
+Add the service to :doc:`../sysadmin/day-to-day`, to
+:doc:`../sysadmin/urls-and-access`, and — if it is a new technology rather than
 another workload — give it a page under :doc:`../components/index`. Add any
-credential it introduces to :doc:`rotating-credentials`. See
+credential it introduces to :doc:`../sysadmin/rotating-credentials`. See
 :doc:`../reference/maintaining-this-guide`.

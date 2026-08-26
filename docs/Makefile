@@ -1,4 +1,4 @@
-# Build the sysadmin guide.
+# Build the environment guide (sysadmin + developer sections).
 #
 #   python3 -m venv ~/.venvs/rke2lab-docs
 #   ~/.venvs/rke2lab-docs/bin/pip install -r docs/requirements.txt

@@ -1,6 +1,6 @@
-====================================
+=====================================
 Testing the cluster: the verify suite
-====================================
+=====================================
 
 The repository ships a pytest harness in ``verify/`` that checks the running
 estate end to end: it drives the *same* flows a person would (the service's

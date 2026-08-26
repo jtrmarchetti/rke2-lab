@@ -25,28 +25,46 @@ What triggers an update
    * - If the change…
      - Then update
    * - Adds or removes a service
-     - :doc:`../tasks/managing-services`, :doc:`service-urls`, and a page
-       under :doc:`../components/index` if it is a new technology
+     - :doc:`../sysadmin/day-to-day`, :doc:`../sysadmin/urls-and-access`,
+       and a page under :doc:`../components/index` if it is a new technology;
+       a developer who repeats the onboarding adds what surprised them to
+       :doc:`../developer/adding-a-service`
    * - Adds or removes a credential
-     - :doc:`../tasks/rotating-credentials`, and the secret table in
+     - :doc:`../sysadmin/rotating-credentials`, and the secret table in
        :doc:`../components/secrets`
    * - Changes a URL, hostname or address
-     - :doc:`service-urls` and :doc:`../orientation`
+     - :doc:`../sysadmin/urls-and-access` and :doc:`../orientation`
    * - Bumps a version
-     - :doc:`versions`
+     - :doc:`../sysadmin/versions` — and, if the way a version is moved
+       changed, :doc:`../developer/upgrades`
    * - Changes VM sizing, disks or the network
-     - :doc:`../orientation` and :doc:`../tasks/node-maintenance`
+     - :doc:`../orientation` and :doc:`../sysadmin/maintenance`
    * - Changes how a change reaches the cluster
-     - :doc:`../tasks/adding-a-service` and :doc:`../components/gitops`
+     - :doc:`../developer/adding-a-service`,
+       :doc:`../developer/automation-design` and :doc:`../components/gitops`
+   * - Changes an Ansible role, playbook or variable rule
+     - :doc:`../developer/ansible-design` — the layout and naming claims on
+       that page are the ones most likely to go stale
+   * - Adds an Ansible pattern or changes one (marker, gate, recovery path)
+     - :doc:`../developer/ansible-patterns`, and the ownership record in
+       ``plan/FLUX_OWNERSHIP.md`` if the split itself moved
+   * - Changes a design decision (a component, a model, a constraint)
+     - The owning ``plan/`` document, :doc:`../developer/infrastructure-design`
+       if it names that decision, and the component page under
+       :doc:`../components/index`
    * - Cost you an hour to diagnose
-     - :doc:`../tasks/common-issues` — this is the highest-value page in the
-       guide and it only grows by someone adding what bit them
+     - :doc:`../sysadmin/troubleshooting` — this is the highest-value page in
+       the guide and it only grows by someone adding what bit them
+   * - Adds a new health signal or makes one redundant
+     - :doc:`../sysadmin/health-checks`, keeping its counts checked against
+       the live cluster
 
 House style
 ===========
 
 * **Write for a sysadmin with no Kubernetes.** Expand the acronym once, then
-  use it.
+  use it. The two audiences are the operator and the developer; both assume
+  the same zero Kubernetes background.
 * **Commands over prose.** If the reader will type it, show it.
 * **Say why, once, where it is surprising.** Two replicas rather than three,
   no forwarders on ``core01``, authored client secrets — each of those is a

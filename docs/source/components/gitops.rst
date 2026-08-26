@@ -3,7 +3,7 @@ Flux and GitOps
 ====================
 
 Flux reconciles the whole cluster from ``platform/cluster-state`` in GitLab.
-Five Kustomizations, eight HelmReleases, and no route to the internet: the
+Seven Kustomizations, eight HelmReleases, and no route to the internet: the
 charts come from ``oci://registry.gitlab.dev.lo/rke2/charts`` and the images
 from the same registry.
 
@@ -59,7 +59,7 @@ The rule that catches people
 **The repository in GitLab is not the source.** It is rendered from
 ``ansible/files/gitops_source/cluster-state`` by ``playbooks/gitops.yml``, and
 a commit made in GitLab is overwritten on the next render — by design. See
-:doc:`../tasks/adding-a-service`.
+:doc:`../developer/adding-a-service`.
 
 The one exception is ``clusters/dev-lo/flux-system/``. That folder is owned
 by the Flux CLI: the ``gitops_bootstrap`` role regenerates it with
@@ -105,4 +105,4 @@ How Flux authenticates
 * The registry: the ``rke2-nodes`` deploy token, sealed into the repository as
   a docker config Secret.
 
-Rotating either is in :doc:`../tasks/rotating-credentials`.
+Rotating either is in :doc:`../sysadmin/rotating-credentials`.

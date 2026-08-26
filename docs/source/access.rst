@@ -165,7 +165,7 @@ Access is granted in FreeIPA, not in Keycloak, and never in the service:
 
 Every application has exactly two groups, ``<app>-admins`` and ``<app>-users``,
 which Keycloak maps to two client roles named ``admin`` and ``user``. What the
-two mean is each service's own business — see :doc:`tasks/managing-services`.
+two mean is each service's own business — see :doc:`sysadmin/day-to-day`.
 
 Break-glass
 ===========

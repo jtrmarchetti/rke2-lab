@@ -23,3 +23,5 @@ __pycache__/
 
 # Docs — the built site is generated from docs/source, never committed.
 docs/_build/
+
+agent_plans/

@@ -1,6 +1,9 @@
-=================
-Managing services
-=================
+=========================
+Day-to-day administration
+=========================
+
+The things you do constantly in this environment: where each service is, how
+to get someone in, restarting a workload, and making a change stick.
 
 Where things are
 ================
@@ -42,7 +45,8 @@ Where things are
      - None; internal network and tunnel only
 
 All ``k8s.dev.lo`` names resolve to ``192.168.2.41`` and need the SOCKS proxy
-and the domain CA from your workstation — see :doc:`../access`.
+and the domain CA from your workstation — see :doc:`../access` for how and
+:doc:`urls-and-access` for the full list of addresses.
 
 Granting someone access
 =======================
@@ -106,7 +110,7 @@ Making a change stick
 
 Editing a live resource with ``kubectl edit`` is reverted by Flux, usually
 within minutes. It is a fine way to test a hypothesis and never a way to
-configure anything. The real path is :doc:`adding-a-service`.
+configure anything. The real path is :doc:`../developer/adding-a-service`.
 
 Scaling
 =======

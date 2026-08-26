@@ -2,6 +2,11 @@
 Addresses and URLs
 =========================
 
+Every address and URL the estate exposes, and how to reach the web ones from
+your workstation — the tunnel for shell, the SOCKS proxy for browsers, and the
+domain CA that makes the certificates validate. The full walkthrough is in
+:doc:`../access`; this page is the lookup table.
+
 Web and API
 ===========
 

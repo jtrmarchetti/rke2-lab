@@ -247,7 +247,7 @@ nothing about the second. Confirm that what you repaired was what was breaking
 you.
 
 **A node will not restart cleanly.** ``pgrep -a etcd`` after
-``rke2-killall.sh``. See :doc:`node-maintenance`.
+``rke2-killall.sh``. See :doc:`maintenance`.
 
 **Volumes degraded across the board.** A worker is down, or its
 ``/var/lib/longhorn`` did not mount. :doc:`storage-longhorn`.

@@ -180,7 +180,7 @@ watch files as a matter of course.
    fsnotify watcher: too many open files`` — because the allocation returns
    ``EMFILE``, which usually does mean file descriptors. ``fs.file-max`` is not
    the problem and raising ``ulimit`` does not help. See
-   :doc:`../tasks/common-issues`.
+   :doc:`../sysadmin/troubleshooting`.
 
 The values are ceilings rather than allocations; nothing is reserved by raising
 them, and the kernel memory a fully used allowance would cost is well under a

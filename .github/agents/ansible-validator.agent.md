@@ -43,8 +43,9 @@ Fail the review if any of the following are present:
 - Inventory desired-state anti-patterns (for example desired state in extra vars).
 - Tagging/handler misuse that can cause unsafe or non-functional partial runs.
 - **Stale documentation.** A change that alters how the environment is operated
-  — a service, a credential, a URL, an address, a version, a storage decision —
-  and does not update the sysadmin guide in `docs/` is blocking, as is one that
+  or extended — a service, a credential, a URL, an address, a version, a storage
+  decision, a design decision — and does not update the documentation site in
+  `docs/` (the sysadmin and developer sections) is blocking, as is one that
   leaves a `plan/` claim it invalidated standing. See
   `docs/source/reference/maintaining-this-guide.rst` for which page a given
   change obliges.

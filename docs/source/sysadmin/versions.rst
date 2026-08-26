@@ -4,6 +4,8 @@ Versions
 
 What is running, as of 2026-08-24. Every version here is pinned in a file, not
 in prose — the file is named in the last column, and it is the thing to edit.
+How to move a version is in :doc:`../developer/upgrades`; this page is the
+table those edits point at.
 
 Cluster
 =======

@@ -5,9 +5,10 @@ Implement → Test → Document** — as defined in `OVERVIEW.md`. A phase does 
 until the previous phase's exit criteria pass.
 
 The fifth step is not optional and is not only about this directory: every phase
-that changes how the environment is *operated* — a service, a credential, a URL,
-a version, or a fault worth recording — updates the sysadmin guide in `docs/`
-before it is called complete. See `OVERVIEW.md`.
+that changes how the environment is *operated or extended* — a service, a
+credential, a URL, a version, a design decision, or a fault worth recording —
+updates the documentation site in `docs/` (both the sysadmin and the developer
+sections) before it is called complete. See `OVERVIEW.md`.
 
 | Phase | Deliverable | Hosts | Artifact tier introduced |
 | --- | --- | --- | --- |
@@ -425,6 +426,7 @@ kube-prometheus-stack, Loki + Alloy, Grafana, Tempo, and the OTel collector.
   in Git" has to mean the Git that survives losing `repo01`.
 - `repo01` holds only bootstrap artifacts; everything else lives in GitLab.
 - The controller can be rebuilt from documentation alone.
-- The sysadmin guide in `docs/` describes what was actually built: every service
-  with a URL, every credential with a rotation procedure, and the faults the
-  phase found in operator form. Added 2026-08-17, with the guide itself.
+- The documentation site in `docs/` describes what was actually built: every
+  service with a URL, every credential with a rotation procedure, the faults the
+  phase found in operator form, and — for the developer section — how the built
+  design is extended. Added 2026-08-17, with the guide itself.
