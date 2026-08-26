@@ -399,6 +399,16 @@ inventory_artifact_stage_manifest:
     type: mirror
     image: docker.io/grafana/alloy:v1.19.0
 
+  # The alloy chart pins its config-reloader sidecar by tag-with-digest
+  # (`configReloader.image.tag: v0.91.0@sha256:…`), so the node asks the
+  # mirror for that exact reference. Mirror the tag it pins; skopeo
+  # --all --preserve-digests makes the digest-pinned index resolve too.
+  - name: alloy-config-reloader
+    phase: 6
+    retention: transit
+    type: mirror
+    image: quay.io/prometheus-operator/prometheus-config-reloader:v0.91.0
+
   - name: kube-prometheus-stack-chart
     phase: 6
     retention: transit
