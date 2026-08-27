@@ -1,26 +1,4 @@
 ---
-# Initialises OpenBao once, and records the keys it hands back.
-#
-# `bao operator init` is the one operation in this lab that produces secrets
-# rather than consuming them, and it can only ever be run once: the unseal keys
-# and the root token are returned exactly once, and a vault whose keys were not
-# captured is a vault whose data is gone. Everything here is arranged around
-# that single fact.
-#
-#   - It reads the vault's state first and does nothing if it is already
-#     initialised. Re-running init against an initialised vault is an error,
-#     and an error is a much better outcome than a second set of keys.
-#   - It writes the keys to env.sh before unsealing with them, so a failure
-#     between the two leaves a recorded set of keys and a sealed vault, rather
-#     than an unsealed vault and no way to unseal it again.
-#   - It runs on the controller. The keys land in the file that already holds
-#     every other secret in the environment, at mode 0600, and never touch a
-#     managed host.
-#
-# The keys are held twice on purpose, and the second copy is Phase 6b's other
-# half: a SealedSecret in Git, which the unsealer loop reads. The two fail in
-# different ways — losing the sealing key does not touch env.sh, and losing the
-# controller does not touch Git — and neither one alone covers both.
 
 - name: main | Assert the required inputs are present
   ansible.builtin.assert:
@@ -36,25 +14,43 @@
 
 - name: main | Read the vault's current state
   changed_when: false
-  # `bao status` exits 2 when the vault is sealed and 1 when it is not yet
-  # initialised. Both are states this role expects to find, not failures.
+
   failed_when: _reg_openbao_init_status['rc'] not in [0, 1, 2]
   register: _reg_openbao_init_status
+  until: >-
+    _reg_openbao_init_status['rc'] in [0, 1, 2]
+    and ('"initialized"' in _reg_openbao_init_status['stdout'])
+  retries: 80
+  delay: 15
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
       {{ openbao_init_pod }} -- bao status -format=json
 
+- name: main | Parse the read result (an empty dict when the pod was unreachable)
+  ansible.builtin.set_fact:
+    _var_openbao_init_status: >-
+      {{ _reg_openbao_init_status['stdout'] | default('{}', true) | from_json }}
+
+- name: main | Fail with an actionable message when the vault could not be read
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_init_pod }} returned no `bao status` JSON on any attempt:
+      the pod is probably not up yet. On a cold build the OpenBao stack is
+      installed by the Flux cascade, which may still be settling. Re-run
+      this playbook once the cluster workloads are Ready.
+  when: (_var_openbao_init_status | length) == 0
+
 - name: main | Report the vault's state
   ansible.builtin.debug:
     msg: >-
       {{ openbao_init_pod }}: initialised =
-      {{ (_reg_openbao_init_status['stdout'] | from_json)['initialized'] }},
-      sealed = {{ (_reg_openbao_init_status['stdout'] | from_json)['sealed'] }}
+      {{ _var_openbao_init_status['initialized'] | default('unknown') }},
+      sealed = {{ _var_openbao_init_status['sealed'] | default('unknown') }}
     verbosity: 0
 
 - name: main | Initialise the vault
-  when: not ((_reg_openbao_init_status['stdout'] | from_json)['initialized'] | bool)
+  when: not (_var_openbao_init_status['initialized'] | default(false) | bool)
   block:
     - name: main | Run the one-time initialisation
       changed_when: true
@@ -68,9 +64,6 @@
           -key-threshold={{ openbao_init_key_threshold }}
           -format=json
 
-    # Before unsealing, deliberately. If this play dies at the next task, the
-    # keys are on disk and the vault is merely sealed; the reverse order could
-    # leave a running vault whose keys exist nowhere.
     - name: main | Record the keys in the controller's secret environment
       no_log: "{{ openbao_init_no_log | bool }}"
       ansible.builtin.blockinfile:
@@ -79,16 +72,6 @@
         create: true
         mode: "0600"
         block: |
-          # OpenBao unseal keys and root token, written by the openbao_init
-          # role.
-          #
-          # This is the break-glass copy. The automation's copy is a
-          # SealedSecret in the cluster-state repository, read by the unsealer
-          # loop; this one is what recovers the vault when the Sealed Secrets
-          # sealing key is lost. Both are needed: they fail differently.
-          #
-          # Seal migration also requires these. They are not cleanup to be
-          # tidied away once auto-unseal works.
           export OPENBAO_UNSEAL_KEYS="{{ _var_openbao_init_keys | join(',') }}"
           export OPENBAO_ROOT_TOKEN="{{ _var_openbao_init_root }}"
 
@@ -111,7 +94,8 @@
   register: _reg_openbao_init_final
   until: >-
     _reg_openbao_init_final['rc'] == 0
-    and not ((_reg_openbao_init_final['stdout'] | from_json)['sealed'] | bool)
+    and not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+             ['sealed'] | default(false) | bool)
   retries: 10
   delay: 6
   ansible.builtin.command:
@@ -122,8 +106,10 @@
 - name: main | Assert the vault is open
   ansible.builtin.assert:
     that:
-      - (_reg_openbao_init_final['stdout'] | from_json)['initialized'] | bool
-      - not ((_reg_openbao_init_final['stdout'] | from_json)['sealed'] | bool)
+      - (_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+          ['initialized'] | default(false) | bool
+      - not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
+          ['sealed'] | default(false) | bool)
     fail_msg: >-
       {{ openbao_init_pod }} is still sealed. If this run initialised it, the
       keys are in {{ openbao_init_env_file }} and can be applied by hand with

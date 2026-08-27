@@ -1,10 +1,4 @@
 ---
-# The administrative realm's shape: there is no `realm-management` client in
-# master, because administering master is not administering an application.
-# `admin` is a realm role there, so the mapping is a realm role mapping.
-#
-# Otherwise identical to client_roles.yml — read what exists, grant only what
-# is missing, never assert an exact set — and identical for the same reasons.
 
 - name: realm_roles | Read the realm's roles
   changed_when: false
@@ -42,9 +36,6 @@
     headers: "{{ _var_keycloak_realm_admins_headers }}"
     ca_path: "{{ keycloak_realm_admins_ca_file }}"
 
-# Additive, for the reason client_roles.yml gives: a group may hold roles this
-# repository does not manage, and a mapping asserted as an exact set would
-# revoke them silently.
 - name: realm_roles | Grant the group the roles it is missing
   when: (_var_keycloak_realm_admins_missing | length) > 0
   changed_when: true

@@ -1,4 +1,1 @@
 ---
-# No handlers. This role installs binaries and writes shell configuration; a
-# shell reads that configuration when it starts, so there is nothing running to
-# restart or reload.

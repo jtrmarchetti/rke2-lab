@@ -1,39 +1,8 @@
 ---
-# Every SealedSecret in the tree, produced here rather than carried as
-# ciphertext.
-#
-# The alternative — committing the sealed files into this repository the way
-# the manifests are committed — looks equivalent and is not. Ciphertext is only
-# ever decryptable by the sealing key that produced it, so a cluster rebuilt
-# with a fresh Sealed Secrets key would find every secret in its own history
-# useless, and the rebuild would stop at the first component that needs a
-# credential. Sealing at play time makes the plaintext the source and the
-# ciphertext a build product, which is the same relationship every other file
-# in the rendered tree has with its template.
-#
-# It costs idempotence unless something is done about it: sealing is randomised
-# — a fresh session key per invocation — so re-sealing unchanged values would
-# produce a different ciphertext and therefore a commit on every single run.
-# The fix is available only because this host holds the sealing key backup:
-# the committed ciphertext is decrypted and compared, and re-sealed only when
-# the plaintext actually differs. A run that changes nothing pushes nothing.
-
-- name: seal | Write the sealing certificate where kubeseal can read it
-  register: _reg_gitops_source_cert_file
-  ansible.builtin.tempfile:
-    state: file
-    suffix: .crt
-
-- name: seal | Populate it from the backed-up key pair
-  ansible.builtin.copy:
-    content: "{{ _var_gitops_source_sealing_cert }}"
-    dest: "{{ _reg_gitops_source_cert_file['path'] }}"
-    mode: "0600"
 
 - name: seal | Read the committed ciphertext # noqa: command-instead-of-module
   changed_when: false
-  # Absent on the first run, when there is no HEAD, and absent for any entry
-  # added since the last one. Both are ordinary, so neither is an error.
+
   failed_when: false
   no_log: "{{ gitops_source_no_log | bool }}"
   register: _reg_gitops_source_prev
@@ -49,9 +18,7 @@
 - name: seal | Decrypt it with the backed-up private key
   when: _item_gitops_source_result['rc'] == 0
   changed_when: false
-  # A committed file this key cannot decrypt is not a failure either: it means
-  # the sealing key was rotated out from under it, and the answer is to re-seal
-  # rather than to stop.
+
   failed_when: false
   no_log: "{{ gitops_source_no_log | bool }}"
   register: _reg_gitops_source_prev_plain
@@ -67,20 +34,10 @@
       -o yaml
     stdin: "{{ _item_gitops_source_result['stdout'] }}"
 
-# Reset first. The list below is built by appending to itself, and a fact
-# outlives the play that set it — so a second run of this role in the same
-# invocation starts from the first run's answers and appends to them. That is
-# not hypothetical: playbooks/site.yml imports gitops.yml twice, deliberately,
-# and the second pass exists because the vault keys were sealed in between. The
-# indexes would then address the first pass's decisions, and a secret that
-# changed between the two would keep its stale ciphertext.
 - name: seal | Forget any decisions from an earlier pass
   ansible.builtin.set_fact:
     _gitops_source_reuse: []
 
-# Booleans only. The comparison needs the plaintext on both sides, and a fact
-# is the wrong place for that, so what is kept is the answer and not the
-# working.
 - name: seal | Decide which entries can keep their committed ciphertext
   no_log: "{{ gitops_source_no_log | bool }}"
   loop: >-
@@ -118,9 +75,6 @@
       {{ _gitops_source_reuse | reject | list | length }} re-sealed
     verbosity: 0
 
-# The unchanged ones go back exactly as they were, ciphertext and header
-# together. Re-encrypting them would be correct and would still churn the
-# commit, which is the thing being avoided.
 - name: seal | Restore the ciphertext that has not changed
   when: _gitops_source_reuse[loop_index] | bool
   no_log: "{{ gitops_source_no_log | bool }}"
@@ -134,6 +88,27 @@
     content: "{{ _item_gitops_source_result['stdout'] }}\n"
     dest: "{{ gitops_source_work_dir }}/{{ _item_gitops_source_result['_item_gitops_source_secret']['path'] }}"
     mode: "0644"
+
+- name: seal | Write the sealing certificate where kubeseal can read it
+  when: >-
+    _gitops_source_reuse | select | list | length
+    < _var_gitops_source_sealed_secrets | length
+  no_log: "{{ gitops_source_no_log | bool }}"
+  register: _reg_gitops_source_cert_file
+  ansible.builtin.tempfile:
+    state: file
+    suffix: .crt
+    path: "{{ lookup('env', 'TMPDIR') | default('/tmp') }}"
+
+- name: seal | Populate it from the backed-up key pair
+  when: >-
+    _gitops_source_reuse | select | list | length
+    < _var_gitops_source_sealed_secrets | length
+  no_log: "{{ gitops_source_no_log | bool }}"
+  ansible.builtin.copy:
+    content: "{{ _var_gitops_source_sealing_cert }}"
+    dest: "{{ _reg_gitops_source_cert_file['path'] }}"
+    mode: "0600"
 
 - name: seal | Seal the ones that changed
   when: not (_gitops_source_reuse[loop_index] | bool)
@@ -160,9 +135,6 @@
       --cert {{ _reg_gitops_source_cert_file['path'] }} -o yaml
     stdin: "{{ _gitops_source_secret | to_nice_yaml }}"
 
-# The comment is prepended here rather than passed through kubeseal, which
-# emits bare YAML and would drop it. Without this the generated files are the
-# only ones in the repository that arrive with no explanation of what they are.
 - name: seal | Write the sealed output with its header
   when: not (_item_gitops_source_result['skipped'] | default(false))
   no_log: "{{ gitops_source_no_log | bool }}"
@@ -179,6 +151,9 @@
     mode: "0644"
 
 - name: seal | Remove the sealing certificate
+  when: >-
+    _gitops_source_reuse | select | list | length
+    < _var_gitops_source_sealed_secrets | length
   ansible.builtin.file:
     path: "{{ _reg_gitops_source_cert_file['path'] }}"
     state: absent

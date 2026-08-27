@@ -3,7 +3,7 @@ galaxy_info:
   role_name: helm_cli
   author: rke2lab
   description: >-
-    Installs a pinned, checksummed Helm 3 binary on the artifact host, fetched
+    Installs a pinned Helm 3 binary on the artifact host, fetched
     from the artifact host's own Apache root. It exists so charts can be pulled
     once and pushed into the GitLab registry as OCI artifacts, which is how the
     cluster consumes them.

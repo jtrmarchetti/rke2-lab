@@ -1,0 +1,91 @@
+---
+
+- name: flux_commit | Note whether the flux-owned folder carries work
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_bootstrap_flux_dirty
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_bootstrap_work_dir }} status --porcelain
+      -- {{ _var_gitops_bootstrap_flux_dir }}
+
+- name: flux_commit | Set the committer identity # noqa: command-instead-of-module
+  changed_when: false
+  loop:
+    - key: user.name
+      value: "{{ gitops_bootstrap_commit_name }}"
+    - key: user.email
+      value: "{{ gitops_bootstrap_commit_email }}"
+  loop_control:
+    loop_var: _item_gitops_bootstrap_git_setting
+    label: "{{ _item_gitops_bootstrap_git_setting['key'] }}"
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_bootstrap_work_dir }} config
+      {{ _item_gitops_bootstrap_git_setting['key'] }}
+      "{{ _item_gitops_bootstrap_git_setting['value'] }}"
+
+- name: flux_commit | Stage the flux-owned folder # noqa: command-instead-of-module
+  when: _reg_gitops_bootstrap_flux_dirty['stdout'] | length > 0
+  changed_when: true
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_bootstrap_work_dir }} add
+      {{ _var_gitops_bootstrap_flux_dir }}
+
+- name: flux_commit | Look for a difference in the staged folder # noqa: command-instead-of-module
+  when: _reg_gitops_bootstrap_flux_dirty['stdout'] | length > 0
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_bootstrap_flux_diff
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_bootstrap_work_dir }} diff --cached --quiet
+      -- {{ _var_gitops_bootstrap_flux_dir }}
+
+- name: flux_commit | Show the difference # noqa: command-instead-of-module
+  when: >-
+    _reg_gitops_bootstrap_flux_dirty['stdout'] | length > 0
+    and _reg_gitops_bootstrap_flux_diff['rc'] != 0
+  changed_when: false
+  register: _reg_gitops_bootstrap_flux_diffstat
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_bootstrap_work_dir }} diff --cached --stat
+      -- {{ _var_gitops_bootstrap_flux_dir }}
+
+- name: flux_commit | Commit the regenerated folder # noqa: command-instead-of-module
+  when:
+    - _reg_gitops_bootstrap_flux_dirty['stdout'] | length > 0
+    - _reg_gitops_bootstrap_flux_diff['rc'] != 0
+  block:
+
+    - name: flux_commit | Create the commit
+      changed_when: true
+      ansible.builtin.command:
+        cmd: >-
+          git -C {{ gitops_bootstrap_work_dir }} commit
+          -m "{{ gitops_bootstrap_flux_commit_message }}"
+          -- {{ _var_gitops_bootstrap_flux_dir }}
+
+    - name: flux_commit | Push it # noqa: command-instead-of-module
+      changed_when: true
+      no_log: "{{ gitops_bootstrap_no_log | bool }}"
+      ansible.builtin.command:
+        cmd: >-
+          git -C {{ gitops_bootstrap_work_dir }} push
+          {{ _var_gitops_bootstrap_push_url }}
+          {{ gitops_bootstrap_branch }}:{{ gitops_bootstrap_branch }}
+
+- name: flux_commit | Summarise the decision
+  vars:
+    _gitops_bootstrap_flux_committed: >-
+      {{ _reg_gitops_bootstrap_flux_dirty['stdout'] | length > 0
+         and (_reg_gitops_bootstrap_flux_diff.rc is defined
+              and _reg_gitops_bootstrap_flux_diff.rc != 0) }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ _reg_gitops_bootstrap_flux_diffstat['stdout_lines']
+         if _gitops_bootstrap_flux_committed
+         else 'flux-system already matches the Flux CLI output, nothing committed' }}
+    verbosity: 0

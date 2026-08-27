@@ -80,11 +80,9 @@ argument_specs:
       gitlab_image_tarball_url:
         type: str
         required: false
-        description: URL of the saved image tarball on the artifact host.
-      gitlab_image_tarball_checksum:
-        type: str
-        required: false
-        description: Checksum specification for the tarball download.
+        description: >-
+          URL of the saved image tarball on the artifact host. The pinned URL
+          and the TLS transport are the integrity control.
       gitlab_image_tarball_path:
         type: path
         required: false

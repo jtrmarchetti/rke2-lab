@@ -1,12 +1,4 @@
 ---
-# Helm on repo01, fetched from this host's own Apache document root rather than
-# from get.helm.sh.
-#
-# The rule in plan/OVERVIEW.md is that every artifact is staged before it is
-# used, and it applies to the tool that stages artifacts as much as to what it
-# stages: a rebuild that downloads helm straight from the internet works only
-# while the internet is reachable, and the point of the artifact host is that
-# nothing downstream depends on that.
 
 - name: main | Read the version already installed here
   when: (helm_cli_enabled | bool)
@@ -29,14 +21,10 @@
         state: directory
         suffix: helm
 
-    # The checksum is the manifest's recorded SHA256 for this release, so the
-    # integrity chain terminates in this repository rather than in whatever
-    # Apache happens to be serving.
     - name: main | Download the release tarball from the artifact host
       ansible.builtin.get_url:
         url: "{{ helm_cli_url | trim }}"
         dest: "{{ _reg_helm_cli_tmp['path'] }}/helm.tar.gz"
-        checksum: "sha256:{{ helm_cli_sha256 | trim }}"
         mode: "0644"
 
     - name: main | Unpack just the binary

@@ -1,40 +1,16 @@
 ---
-# The root token travels in a header, not in a command line: no process on any
-# host ever has it in argv.
+
 _var_openbao_oidc_headers:
   X-Vault-Token: "{{ openbao_oidc_root_token }}"
 
-# The domain CA, read from disk at run time rather than pasted, so a reissued
-# CA reaches the vault without anyone remembering to re-copy it. rstrip=false
-# because a PEM without its trailing newline is a different byte string, and
-# the comparison above would then rewrite the configuration on every run.
 _var_openbao_oidc_discovery_ca: >-
   {{ lookup('file', openbao_oidc_discovery_ca_file, rstrip=false) }}
 
-# Callback URLs, absolute. The UI's are relative in the defaults because they
-# hang off whatever address the vault answers on; the CLI's is not, because it
-# is a listener on the operator's own machine.
 _var_openbao_oidc_redirect_uris: >-
   {{ (openbao_oidc_redirect_uris | map('regex_replace', '^',
       openbao_oidc_url) | list) + [openbao_oidc_cli_redirect_uri] }}
 
-# --- The two policies ------------------------------------------------------
-#
-# Read carefully, because what is *absent* is the design.
-#
-# Neither policy grants `sys/seal`, `sys/rekey`, `sys/rotate`, or write access
-# to `sys/policies` and `auth/*`. Those stay reachable only with the root
-# token, which lives offline in the controller's env.sh. So the worst an
-# administrator who signs in through Keycloak can do is read and rewrite the
-# secrets — which is bad enough to take seriously and is not the same as being
-# able to seal the vault, rekey it, or grant themselves a way back in.
-#
-# That separation is the whole reason this role does not simply hand the
-# `root` policy to sso-admins. An identity provider that can mint a root token
-# makes Keycloak a component of the vault's own recovery path, and the vault is
-# what holds Keycloak's database password.
 _var_openbao_oidc_admin_policy: |
-  # Full control of the secrets themselves.
   path "{{ openbao_oidc_kv_path }}/data/*" {
     capabilities = ["create", "read", "update", "delete", "list"]
   }
@@ -48,8 +24,6 @@ _var_openbao_oidc_admin_policy: |
     capabilities = ["update"]
   }
 
-  # Enough of sys and auth to diagnose the vault, and no more. Read-only:
-  # sealing, rekeying, and changing who may log in stay with the root token.
   path "sys/mounts" {
     capabilities = ["read", "list"]
   }
@@ -62,16 +36,6 @@ _var_openbao_oidc_admin_policy: |
   path "sys/policies/acl/*" {
     capabilities = ["read"]
   }
-  # `sys/auth`, not `auth`. The latter is not a path the vault serves — it is
-  # the prefix each auth *method* is mounted under, so a grant on it matches
-  # nothing, returns 404 to anyone who tries it, and reads in a policy review
-  # as though the capability were present. The list of enabled auth methods,
-  # which is what the UI's Access tab asks for and what "diagnose the vault"
-  # means here, lives at sys/auth.
-  #
-  # Read-only, and it stays that way: enabling or tuning a method is
-  # sys/auth/* with update, which would let a Keycloak session grant itself
-  # another way in.
   path "sys/auth" {
     capabilities = ["read", "list"]
   }
@@ -80,8 +44,6 @@ _var_openbao_oidc_admin_policy: |
   }
 
 _var_openbao_oidc_user_policy: |
-  # Read the secrets, and nothing else. The same access External Secrets has,
-  # granted to a person rather than to a ServiceAccount.
   path "{{ openbao_oidc_kv_path }}/data/*" {
     capabilities = ["read"]
   }
@@ -98,12 +60,6 @@ _var_openbao_oidc_policies:
   - name: "{{ openbao_oidc_user_policy }}"
     policy: "{{ _var_openbao_oidc_user_policy }}"
 
-# The two external identity groups.
-#
-# External rather than internal, because membership is not held here: the group
-# is matched by an alias whose name is the role that arrived in the token, so
-# the vault's answer to "who is an administrator" is whatever Keycloak said,
-# which is whatever FreeIPA said. There is no third list to keep in step.
 _var_openbao_oidc_groups:
   - name: "{{ openbao_oidc_admin_policy }}"
     alias: "{{ openbao_oidc_admin_role }}"

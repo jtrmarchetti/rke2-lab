@@ -27,12 +27,13 @@ written afterwards. Two obligations, and neither is optional:
 - **`plan/`** — correct every claim the change invalidated, including "Status"
   and "Still open" sections in *earlier* phase documents. Mark items closed
   rather than deleting them, and say which change closed them.
-- **`docs/`** — the sysadmin guide. If the change alters how the environment is
-  operated — a service, a credential, a URL, an address, a version, a storage
-  decision, or a fault worth recording — update the guide in the same change.
-  `docs/source/reference/maintaining-this-guide.rst` holds the trigger table
-  mapping a kind of change to the page it obliges. Verify the build with
-  `make -C docs html`, which runs with `-W`.
+- **`docs/`** — the documentation site, with two sections. If the change alters
+  how the environment is operated or extended — a service, a credential, a URL,
+  an address, a version, a storage decision, a design decision, or a fault
+  worth recording — update the sysadmin section, the developer section, or both,
+  in the same change. `docs/source/reference/maintaining-this-guide.rst` holds
+  the trigger table mapping a kind of change to the page it obliges. Verify the
+  build with `make -C docs html`, which runs with `-W`.
 
 A change that touches a running component and leaves `docs/` untouched is
 incomplete, not merely undocumented.
@@ -94,4 +95,4 @@ Return results in this exact structure:
 - No host-group hardcoding inside roles unless parameterized.
 - No command/shell without idempotency controls and rationale.
 - No output that omits validation status.
-- No operational change that leaves the sysadmin guide stale.
+- No operational change that leaves the documentation site in `docs/` stale.

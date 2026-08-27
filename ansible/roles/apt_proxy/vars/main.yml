@@ -3,11 +3,7 @@ _var_apt_proxy_package: apt-cacher-ng
 _var_apt_proxy_service: apt-cacher-ng
 _var_apt_proxy_user: apt-cacher-ng
 _var_apt_proxy_group: apt-cacher-ng
-# apt-cacher-ng reads every *.conf in this directory. Overrides go in their
-# own file so the packaged acng.conf and its mirror lists stay as shipped.
+
 _var_apt_proxy_override_config_path: /etc/apt-cacher-ng/zzz-rke2lab.conf
 
-# Templates for this role live in ansible/files/apt_proxy/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_apt_proxy_files_dir: "{{ role_path | dirname | dirname }}/files/apt_proxy"

@@ -3,9 +3,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # The chart source every HelmRelease below points at, and the two secrets it
-  # needs: a sealed pull credential and the CA that signs the registry's
-  # certificate.
   - helmrepository.yaml
   - registry-credentials.yaml
   - ca-secret.yaml

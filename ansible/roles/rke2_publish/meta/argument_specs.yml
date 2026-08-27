@@ -7,9 +7,10 @@ argument_specs:
         it into GitLab, which is Tier 2 of the artifact model.
       - Container images are pushed to the container registry under one project
         path, so the containerd rewrite rule on a consuming node is a prefix.
-      - The installer, the binary tarball, and the release checksum file are
-        uploaded to the generic package registry, because a node needs those
-        before it has anything that can pull an image.
+      - The installer, the binary tarball, and the release's own checksum
+        file are uploaded to the generic package registry, because the node's
+        install.sh requires the checksum file next to the binary and nothing
+        else on the node can verify it.
       - Mints a group-scoped read-only deploy token and records its value, since
         GitLab returns it exactly once.
     options:
@@ -75,6 +76,13 @@ argument_specs:
         type: str
         default: ""
         description: The matching deploy token value.
+      rke2_publish_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the gitlab_admin_token role records the shared admin
+            credential on the GitLab host. Every role that needs an admin
+            call reuses it; a token is minted at most once a day.
       rke2_publish_artifact_dir:
         type: str
         default: /data1/artifacts/rke2
@@ -96,6 +104,19 @@ argument_specs:
         required: false
         default: 10
         description: Seconds between those attempts.
+      rke2_publish_mirror_task_retries:
+        type: int
+        required: false
+        default: 3
+        description: >-
+          Task-level retries on a whole failed skopeo copy, on top of the
+          in-invocation --retry-times. A re-invocation is safe: skopeo reuses
+          the blobs a previous attempt already pushed.
+      rke2_publish_mirror_task_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between those copy attempts.
       rke2_publish_no_log:
         type: bool
         required: false
@@ -197,7 +218,7 @@ argument_specs:
         description: Generic package name.
       rke2_publish_package_version:
         type: str
-        default: 1.35.7+rke2r1
+        default: 1.36.3+rke2r1
         description:
           - Generic package version. GitLab validates this as semver, so the
             RKE2 tag's leading v is dropped and +rke2r1 is build metadata.

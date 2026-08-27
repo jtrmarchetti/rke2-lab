@@ -1,28 +1,4 @@
 ---
-# Configures the vault for the one consumer it has: External Secrets Operator.
-#
-# Three things, and the third is the interesting one:
-#
-#   - A KV v2 secrets engine at a known path, which is where runtime secrets
-#     live.
-#   - A policy granting read access to it, and nothing else.
-#   - The Kubernetes auth method, so ESO authenticates with the ServiceAccount
-#     token the API server already issues it. That is the reason to prefer it
-#     over a token or an AppRole: there is no static credential to store
-#     anywhere, nothing to rotate, and nothing for the bootstrap problem to be
-#     about. Sealed Secrets covers material that genuinely predates the vault,
-#     and with Kubernetes auth that turns out to be almost nothing.
-#
-# Driven over the vault's own HTTPS API through its ingress, rather than by
-# exec'ing into the pod. Three reasons, and the first is the one that decided
-# it: `kubectl exec` does not carry the caller's environment into the
-# container, so a token passed that way arrives nowhere and the vault answers
-# 403 — which reads as a policy problem rather than a plumbing one. The API is
-# also what every other client uses, so this exercises the ingress, the
-# certificate the cluster issued for it, and the DNS delegation that resolves
-# it, rather than bypassing all three.
-#
-# Everything is read before it is written, so a second run reports no change.
 
 - name: main | Assert the required inputs are present
   ansible.builtin.assert:
@@ -82,10 +58,6 @@
       type: kubernetes
     status_code: [200, 204]
 
-# The cluster's own CA, read from the ConfigMap the API server publishes into
-# every namespace for exactly this purpose. Taken from the cluster rather than
-# named in inventory: it rotates when the cluster's CA rotates, and a stale
-# copy here would fail authentication long after anyone remembered why.
 - name: main | Read the cluster's API server certificate authority
   changed_when: false
   register: _reg_openbao_config_cluster_ca
@@ -94,13 +66,9 @@
       {{ openbao_config_kubectl }} get configmap kube-root-ca.crt
       -n {{ openbao_config_namespace }} -o jsonpath={.data.ca\.crt}
 
-# Read before write, so a run that changes nothing reports nothing. These are
-# all PUT/POST endpoints that succeed whether or not the value differs, so
-# `changed_when: true` was the only honest answer without a comparison — at the
-# cost of a role that could never report a clean second run.
 - name: main | Read the current Kubernetes auth configuration
   changed_when: false
-  # Absent until the first write, which is not an error.
+
   failed_when: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_auth
@@ -133,7 +101,7 @@
 
 - name: main | Read the policy currently stored
   changed_when: false
-  # Absent before the first write.
+
   failed_when: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_policy
@@ -164,12 +132,9 @@
       policy: "{{ _var_openbao_config_policy }}"
     status_code: [200, 204]
 
-# Bound to one ServiceAccount in one namespace. A role bound to '*' would let
-# any pod in the cluster read every secret this policy covers, which is the
-# failure this auth method is otherwise good at avoiding.
 - name: main | Read the role binding currently stored
   changed_when: false
-  # Absent before the first write.
+
   failed_when: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_binding

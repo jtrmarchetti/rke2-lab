@@ -1,18 +1,21 @@
 ---
-# One commit per run that changed something, and none at all otherwise.
-#
-# "Otherwise" is the case worth protecting. A role that commits unconditionally
-# fills the reconcile source with empty commits, and Flux notices every one of
-# them: a new revision on the GitRepository restarts the reconcile of every
-# Kustomization that depends on it. On storage already at etcd's fsync floor
-# that is not free, and it makes the repository's history useless for the one
-# question it should answer — when did the cluster's declared state last
-# actually change.
 
-- name: commit | Stage the rendered tree # noqa: command-instead-of-module
-  changed_when: true
+- name: commit | Note whether the ansible-owned tree carries work
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_tree_dirty
   ansible.builtin.command:
-    cmd: "git -C {{ gitops_source_work_dir }} add --all"
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} status --porcelain
+      . ':(exclude){{ _var_gitops_source_flux_dir }}'
+
+- name: commit | Stage the ansible-owned tree # noqa: command-instead-of-module
+  changed_when: >-
+    {{ _reg_gitops_source_tree_dirty['stdout'] | length > 0 }}
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} add -A
+      . ':(exclude){{ _var_gitops_source_flux_dir }}'
 
 - name: commit | Look for a difference # noqa: command-instead-of-module
   changed_when: false
@@ -60,10 +63,6 @@
           git -C {{ gitops_source_work_dir }} commit
           -m "{{ gitops_source_commit_message }}"
 
-    # The branch is named on both sides rather than relying on a push default,
-    # because the working clone of an empty project has no upstream to infer
-    # one from and `git push` would fail on the very first run — the run where
-    # failing is least useful.
     - name: commit | Push it # noqa: command-instead-of-module
       changed_when: true
       no_log: "{{ gitops_source_no_log | bool }}"

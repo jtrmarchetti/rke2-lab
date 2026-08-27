@@ -4,31 +4,19 @@ inventory_base_host_target_hostname: repo01.dev.lo
 
 inventory_base_host_apt_proxy_enabled: false
 
-# Split DNS is handled by the split_dns role (dnsmasq), not by a netplan
-# drop-in. The drop-in put both resolvers on one link, which systemd-resolved
-# treats as a flat list: a resolver answering NXDOMAIN is authoritative, so
-# whichever answered first won and dev.lo resolution depended on ordering.
-# dnsmasq forwards per zone, which is what this host actually needs.
 inventory_base_host_split_dns_enabled: false
 
-# repo01 is the only host with internet access. Upstream names go to the lab
-# gateway; dev.lo and the internal reverse zone go to FreeIPA on core01.
 inventory_split_dns_enabled: true
 inventory_split_dns_upstream_servers:
   - 192.168.1.1
 inventory_split_dns_forward_zones:
   - domain: dev.lo
     server: 192.168.2.4
-  # PTR lookups for the internal subnet belong to the same authority. Without
-  # this they would go upstream, which knows nothing about 192.168.2.0/24.
+
   - domain: 2.168.192.in-addr.arpa
     server: 192.168.2.4
 inventory_split_dns_search_domain: dev.lo
 
-# Time for the internal network starts here: repo01 is the only host that can
-# reach a public pool, so it synchronizes upstream and serves the internal
-# subnet. core01 takes its time from here and passes it on; see
-# group_vars/core/main.yml.
 inventory_time_sync_enabled: true
 inventory_time_sync_source_directive: pool
 inventory_time_sync_sources:
@@ -40,17 +28,9 @@ inventory_wireguard_gateway_enabled: true
 inventory_wireguard_gateway_interface: wg0
 inventory_wireguard_gateway_address: 10.66.66.1/30
 inventory_wireguard_gateway_listen_port: 51820
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+
 inventory_wireguard_gateway_private_key: "{{ lookup('env', 'WIREGUARD_REPO_PRIVATE_KEY') }}"
-# The controller's public key is no longer here. It was a pasted literal, and
-# so was this host's public key in the controller's group_vars — two derived
-# values maintained by hand against the secrets they came from. The controller
-# derives both with `wg pubkey` and the tunnel playbook passes this one in;
-# see roles/controller_tunnel.
-#
-# Which host that is, named rather than taken from the group, because a role
-# input must not depend on inventory group membership. Same pattern as
-# inventory_kubewk_control_host.
+
 inventory_wireguard_gateway_controller_host: controller01
 inventory_wireguard_gateway_peer_endpoint: 192.168.1.15:51821
 inventory_wireguard_gateway_peer_allowed_ips:
@@ -65,21 +45,13 @@ inventory_wireguard_gateway_internal_subnet: 192.168.2.0/24
 inventory_socks5_proxy_enabled: true
 inventory_socks5_proxy_listen_address: 0.0.0.0
 inventory_socks5_proxy_listen_port: 1080
-# Both NICs, because this is the dual-homed host: eth0 is 192.168.1.20 on the
-# external network, eth1 is 192.168.2.99 on the internal one. The proxy exists
-# to reach internal services from outside, so those connections must leave via
-# eth1 and carry an internal source address; naming eth0 alone sourced them
-# from 192.168.1.20 and the artifact host refused them.
+
 inventory_socks5_proxy_external_interfaces:
   - eth0
   - eth1
 inventory_socks5_proxy_allowed_client_networks:
   - 192.168.1.0/24
 
-# apt-cacher-ng runs as a caching proxy only: it stores what internal hosts
-# actually request and expires it again. It never mirrors or pre-fetches whole
-# Ubuntu repositories, which would consume far more disk than /data1 should
-# give up.
 inventory_apt_proxy_enabled: true
 inventory_apt_proxy_bind_addresses:
   - 192.168.2.99
@@ -89,18 +61,12 @@ inventory_apt_proxy_cache_dir: /data1/apt-cacher-ng
 inventory_apt_proxy_expire_days: 7
 inventory_apt_proxy_keep_extra_versions: 1
 
-# The 100 GB second disk. Everything that grows lives here — the apt cache, the
-# artifact tree, and the GitLab data directory in phase 3 — so that none of it
-# can fill the 32 GB OS disk.
 inventory_data_volume_enabled: true
 inventory_data_volume_device: /dev/sdb
 inventory_data_volume_filesystem: ext4
 inventory_data_volume_label: data1
 inventory_data_volume_mount_path: /data1
 
-# Apache artifact host. Reads are allowed from the internal network and the
-# controller tunnel only; a request arriving on the external address is
-# refused. One directory per consuming phase.
 inventory_artifact_host_enabled: true
 inventory_artifact_host_document_root: /data1/artifacts
 inventory_artifact_host_server_name: repo01.dev.lo
@@ -109,66 +75,36 @@ inventory_artifact_host_allowed_networks:
   - 10.66.66.0/30
   - 127.0.0.1
 inventory_artifact_host_directories:
-  # The trust anchors an operator or a node needs before it can validate
-  # anything under dev.lo: the domain root CA and the cluster's intermediate.
-  # Their own directory rather than a corner of gitlab/, because they are not
-  # a GitLab artifact and every phase from 3 onward fetches them.
+
   - certs
   - freeipa
   - gitlab
   - runtime
   - rke2
   - charts
-  # Phase 6a. Holds the Flux controller image tarballs on their way to the
-  # GitLab registry, and the Flux CLI the automation controller fetches.
-  - flux
-  # Phase 6a. The Sealed Secrets controller image on its way to the registry,
-  # and the kubeseal client the automation controller fetches.
-  - sealed-secrets
-  # Phase 6b adds no image directories. Its images are mirror entries, copied
-  # registry to registry and never written here; only the charts land on disk.
 
-# Artifact staging. The manifest itself lives in artifacts.yml alongside this
-# file, because it is long and changes on a different cadence.
+  - flux
+
+  - sealed-secrets
+
 inventory_artifact_stage_enabled: true
 inventory_artifact_stage_root: /data1/artifacts
 
-# repo01 is the controlled package/artifact source for the internal network.
-# Internal hosts must not have a default route to the internet through the repo.
-# Ubuntu packages are served by the apt proxy above; every other artifact is
-# downloaded here first and served by Apache, or published into GitLab.
 inventory_repo_artifact_source: repo01
 inventory_repo_internal_download_policy: repo01_only
 
-# TLS for the phase 3 services, issued by the FreeIPA CA on core01.
-#
-# repo01 is deliberately not enrolled in the domain. ipa-client-install has no
-# option to leave /etc/resolv.conf alone, and it would replace the split-DNS
-# resolver this host needs to reach upstream at all; it also puts SSSD in the
-# auth path of the only gateway into the internal network. Signing a CSR
-# remotely needs neither, so the key never leaves this host and the domain
-# never touches its resolver or its logins.
 inventory_ipa_service_cert_enabled: true
 inventory_ipa_service_cert_ipa_host: core01
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+
 inventory_ipa_service_cert_admin_password: "{{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}"
 inventory_ipa_service_cert_dir: /etc/ssl/dev.lo
 inventory_ipa_service_cert_ca_file: /etc/ssl/dev.lo/dev.lo-ca.crt
-# Published into the artifact document root so nodes in phases 4-6 can fetch
-# the CA over Tier 1 before they are asked to trust anything it signed. It
-# sits under certs/ alongside the cluster intermediate ipa_sub_ca publishes,
-# so a browser being taught the whole chain has one place to fetch both from.
+
 inventory_ipa_service_cert_ca_publish_path: /data1/artifacts/certs/dev.lo-ca.crt
 inventory_ipa_service_cert_names:
   - name: gitlab.dev.lo
   - name: registry.gitlab.dev.lo
 
-# GitLab, phase 3. Tier 2 of the artifact model: the container registry and
-# package registry the cluster pulls from.
-#
-# Ports: 443 and 2222 only. Apache owns port 80 on this host serving the Tier 1
-# artifact root, and every phase 1-2 consumer has that URL baked in; host sshd
-# owns 22. Both GitLab vhosts share 443 and are selected on SNI.
 inventory_gitlab_enabled: true
 inventory_gitlab_external_hostname: gitlab.dev.lo
 inventory_gitlab_registry_hostname: registry.gitlab.dev.lo
@@ -176,78 +112,46 @@ inventory_gitlab_external_url: https://gitlab.dev.lo
 inventory_gitlab_registry_external_url: https://registry.gitlab.dev.lo
 inventory_gitlab_https_port: 443
 inventory_gitlab_ssh_port: 2222
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+
 inventory_gitlab_root_password: "{{ lookup('env', 'GITLAB_ROOT_PASSWORD') }}"
 inventory_gitlab_letsencrypt_enabled: false
 inventory_gitlab_ssl_source_dir: /etc/ssl/dev.lo
-# Must equal the tag in the artifact manifest above, or the compose file would
-# try to pull an image the tarball did not provide.
-inventory_gitlab_container_image: gitlab/gitlab-ce:19.2.2-ce.0
+
+inventory_gitlab_container_image: gitlab/gitlab-ce:19.3.0-ce.0
 inventory_gitlab_data_root: /data1/gitlab
 inventory_gitlab_registry_enabled: true
 inventory_gitlab_package_registry_enabled: true
 
-# Single sign-on against the Keycloak in the cluster.
-#
-# Additive: root keeps its password and the local sign-in form stays on the
-# page, because GitLab is upstream of the cluster that runs Keycloak. See
-# roles/gitlab/defaults for why every flag below is set the way it is.
-#
-# The client secret is authored rather than generated, so this configuration
-# can be applied on GitLab's very first run — long before the cluster exists.
-# Until Keycloak answers, the sign-in button simply fails, which is correct
-# behaviour and not a broken deployment.
 inventory_gitlab_oidc_enabled: true
 inventory_gitlab_oidc_issuer: https://sso.k8s.dev.lo/realms/dev-lo
 inventory_gitlab_oidc_client_id: gitlab
 inventory_gitlab_oidc_client_secret: >-
   {{ lookup('env', 'OIDC_CLIENT_SECRET_GITLAB') }}
 inventory_gitlab_oidc_label: dev.lo single sign-on
-# The domain CA already on this host, put there by ipa_service_cert. Copied
-# into GitLab's trusted certificates so the token exchange with sso.k8s.dev.lo
-# verifies rather than failing on a certificate the cluster issued itself.
+
 inventory_gitlab_oidc_ca_source_file: /etc/ssl/dev.lo/dev.lo-ca.crt
 
-# RKE2 artifact publishing, phase 4. Moves the staged RKE2 set from Tier 1
-# (Apache, on this host) into Tier 2 (GitLab), which is what the cluster nodes
-# actually consume. This closes the step Phase 3 carried forward.
-#
-# The image tarballs staged under /data1/artifacts/rke2 are raw material for
-# this role and are deliberately never served to a node: a node that finds its
-# images already on local disk never contacts the registry, so a broken mirror
-# would pass phase 4 and fail in phase 5 with nothing pointing at the cause.
 inventory_rke2_publish_enabled: true
 inventory_rke2_publish_gitlab_url: "{{ inventory_gitlab_external_url }}"
 inventory_rke2_publish_registry_host: "{{ inventory_gitlab_registry_hostname }}"
 inventory_rke2_publish_group: rke2
 inventory_rke2_publish_images_project: images
 inventory_rke2_publish_packages_project: packages
-# Secret sourced from ~/.config/rke2lab/env.sh (see plan/SECRETS.md).
+
 inventory_rke2_publish_root_password: "{{ inventory_gitlab_root_password }}"
 inventory_rke2_publish_artifact_dir: "{{ inventory_artifact_stage_root }}/rke2"
-# Optional. Set both in env.sh to use a deploy token issued by hand instead of
-# letting the role mint and record one.
+
 inventory_rke2_publish_deploy_token_username: >-
   {{ lookup('env', 'GITLAB_REGISTRY_USER') }}
 inventory_rke2_publish_deploy_token_value: >-
   {{ lookup('env', 'GITLAB_REGISTRY_TOKEN') }}
-# Must equal the RKE2 release the manifest stages, and the version the nodes
-# fetch from the package registry.
-inventory_rke2_publish_package_version: 1.35.7+rke2r1
 
-# Phase 6a. Flux's four controllers, mirrored into the same GitLab project the
-# RKE2 images use. They are pushed as extra images because they are single
-# images with no release list file, exactly like kube-vip.
-#
-# The project is called rke2/images and now holds more than RKE2. Kept rather
-# than renamed: the deploy token is scoped to the rke2 group, every node's
-# registries.yaml points at this path, and renaming it to gain accuracy would
-# cost a token rotation and a config change on six nodes. It is the cluster's
-# image mirror; the name is narrower than the contents.
+inventory_rke2_publish_package_version: 1.36.3+rke2r1
+
 inventory_rke2_publish_extra_images:
   - name: kube-vip
-    tarball: kube-vip-v1.2.2.tar
-    image: ghcr.io/kube-vip/kube-vip:v1.2.2
+    tarball: kube-vip-v1.2.3.tar
+    image: ghcr.io/kube-vip/kube-vip:v1.2.3
   - name: flux-source-controller
     tarball: source-controller-v1.9.4.tar
     artifact_dir: "{{ inventory_artifact_stage_root }}/flux"
@@ -264,37 +168,29 @@ inventory_rke2_publish_extra_images:
     tarball: notification-controller-v1.9.3.tar
     artifact_dir: "{{ inventory_artifact_stage_root }}/flux"
     image: ghcr.io/fluxcd/notification-controller:v1.9.3
-  # Phase 6a. Sealed Secrets, the first component Flux itself deploys. One
-  # image, no release list file, so it publishes as an extra image like the
-  # four above. Unlike them it is a docker.io name, which is why the nodes
-  # needed a second docker.io rewrite rule rather than a second ghcr.io one.
-  - name: sealed-secrets-controller
-    tarball: sealed-secrets-controller-0.38.4.tar
-    artifact_dir: "{{ inventory_artifact_stage_root }}/sealed-secrets"
-    image: docker.io/bitnami/sealed-secrets-controller:0.38.4
 
-# Phase 6b. Helm charts, pushed into the registry as OCI artifacts and consumed
-# from there by the cluster's helm-controller. `name` and `version` must equal
-# what each chart's own Chart.yaml declares: helm derives the push target from
-# the tarball, so a mismatch here would push correctly and then be looked for
-# under a name nothing holds.
+  - name: sealed-secrets-controller
+    tarball: sealed-secrets-controller-0.39.1.tar
+    artifact_dir: "{{ inventory_artifact_stage_root }}/sealed-secrets"
+    image: docker.io/bitnami/sealed-secrets-controller:0.39.1
+
 inventory_rke2_publish_chart_sets:
   - name: cert-manager
     version: v1.21.1
     dest: charts/cert-manager-v1.21.1.tgz
   - name: longhorn
-    version: 1.11.3
-    dest: charts/longhorn-1.11.3.tgz
+    version: 1.12.1
+    dest: charts/longhorn-1.12.1.tgz
   - name: external-secrets
     version: 2.9.0
     dest: charts/external-secrets-2.9.0.tgz
   - name: openbao
-    version: 0.29.1
-    dest: charts/openbao-0.29.1.tgz
-  # Phase 6c. The observability charts.
+    version: 0.29.2
+    dest: charts/openbao-0.29.2.tgz
+
   - name: kube-prometheus-stack
-    version: 88.3.0
-    dest: charts/kube-prometheus-stack-88.3.0.tgz
+    version: 88.5.4
+    dest: charts/kube-prometheus-stack-88.5.4.tgz
   - name: loki
     version: 7.3.0
     dest: charts/loki-7.3.0.tgz
@@ -302,51 +198,27 @@ inventory_rke2_publish_chart_sets:
     version: 1.24.4
     dest: charts/tempo-1.24.4.tgz
   - name: alloy
-    version: 1.11.1
-    dest: charts/alloy-1.11.1.tgz
+    version: 1.12.0
+    dest: charts/alloy-1.12.0.tgz
 
-# Phase 6b. Helm on the artifact host, so charts can be pushed at all.
 inventory_helm_cli_enabled: true
 
-# Declared in inventory rather than left to the role default because two roles
-# need the same value: gitlab creates the compose project here, and
-# container_storage has to stop it gracefully before relocating the container
-# daemons. GitLab's stop_grace_period is 5m and daemon shutdown does not honour
-# it, so an ungraceful stop is a corrupt PostgreSQL.
 inventory_gitlab_compose_dir: /opt/rke2lab/gitlab
 
-# base_host
 inventory_base_host_apt_proxy_url: "http://192.168.2.99:3142"
 inventory_base_host_split_dns_domains:
   - dev.lo
 
-# gitlab
-# Air-gapped image delivery, matching the pattern the FreeIPA role uses: the
-# tarball comes from the Apache artifact host and is verified against the
-# .sha256 published beside it at staging time, because a `docker save` tarball
-# has no reproducible checksum of its own.
 inventory_gitlab_image_tarball_url: >-
-  http://192.168.2.99/gitlab/gitlab-ce-19.2.2-ce.0.tar
-inventory_gitlab_image_tarball_checksum: >-
-  sha256:http://192.168.2.99/gitlab/gitlab-ce-19.2.2-ce.0.tar.sha256
-# Who may read the health endpoints. GitLab restricts /-/readiness, /-/liveness
-# and /-/health to 127.0.0.0/8 by default and answers 404 — not 403 — to
-# everyone else, which reads exactly like a missing endpoint.
-#
-# Published ports mean the container never sees a loopback source address: the
-# request arrives from the compose network's gateway, so the default allowlist
-# rejects even a request made on the host itself. The Docker range is listed
-# for that reason, and the internal subnet and tunnel so the readiness gate can
-# run from where Ansible runs.
+  http://192.168.2.99/gitlab/gitlab-ce-19.3.0-ce.0.tar
+
 inventory_gitlab_monitoring_allowed_networks:
   - 127.0.0.0/8
   - 172.16.0.0/12
   - 192.168.2.0/24
   - 10.66.66.0/30
 
-# helm_cli
 inventory_helm_cli_url: >-
-  http://192.168.2.99/charts/helm-v3.21.4-linux-amd64.tar.gz
+  http://192.168.2.99/charts/helm-v4.2.4-linux-amd64.tar.gz
 
-# ipa_service_cert
 inventory_ipa_service_cert_trust_ca_path: /usr/local/share/ca-certificates/dev.lo.crt

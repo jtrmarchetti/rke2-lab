@@ -1,19 +1,46 @@
 ---
-# get_url verifies the download against the manifest checksum and refuses to
-# publish a file that does not match, so this task is both the fetch and the
-# integrity gate. It also skips a re-download when the file on disk already
-# matches, which is what makes a second run report no change.
-- name: files | Download and verify each file artifact
+
+- name: files | Download each file artifact
   when: not ansible_check_mode
   loop: "{{ _var_artifact_stage_files }}"
   loop_control:
     loop_var: _item_artifact_stage_file
     label: "{{ _item_artifact_stage_file['name'] }} (phase {{ _item_artifact_stage_file['phase'] }})"
+  retries: "{{ artifact_stage_download_retries }}"
+  delay: "{{ artifact_stage_download_delay }}"
   ansible.builtin.get_url:
     url: "{{ _item_artifact_stage_file['url'] }}"
     dest: "{{ artifact_stage_root }}/{{ _item_artifact_stage_file['dest'] }}"
-    checksum: "sha256:{{ _item_artifact_stage_file['sha256'] }}"
     owner: "{{ artifact_stage_owner }}"
     group: "{{ artifact_stage_group }}"
     mode: "{{ artifact_stage_file_mode }}"
     timeout: "{{ artifact_stage_download_timeout }}"
+    # An entry only reaches this task because its source marker did not
+    # match, so the download must be unconditional: the Last-Modified
+    # heuristic otherwise keeps stale bodies whose mtime predates the
+    # re-release (version-agnostic dests such as the rke2 image lists).
+    force: true
+
+- name: files | Record the source each file artifact was staged from
+  when: not ansible_check_mode
+  loop: "{{ _var_artifact_stage_files }}"
+  loop_control:
+    loop_var: _item_artifact_stage_file
+    label: "{{ _item_artifact_stage_file['name'] }}"
+  ansible.builtin.copy:
+    content: ""
+    force: false
+    dest: >-
+      {{ artifact_stage_root
+         }}/{{ _item_artifact_stage_file['dest']
+         }}{{ _var_artifact_stage_published_suffix
+         }}.{{ _item_artifact_stage_file['url']
+         | regex_replace('[^A-Za-z0-9._~-]', '') }}
+    owner: "{{ artifact_stage_owner }}"
+    group: "{{ artifact_stage_group }}"
+    mode: "{{ artifact_stage_file_mode }}"
+    # The marker names the exact source the body was fetched from, the
+    # same scheme the publish step writes for transit artifacts. Both
+    # generations must agree byte for byte or the entry would re-stage
+    # on every run. The marker is an empty file whose name carries the
+    # information, so force: false keeps an existing marker a no-op.

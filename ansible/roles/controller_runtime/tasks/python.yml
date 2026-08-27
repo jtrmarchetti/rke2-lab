@@ -1,13 +1,5 @@
 ---
-# The virtual environment this repository's Ansible runs on, and the collections
-# it loads. Both were previously installed by hand, and both were installed
-# twice — once where Ansible looked and once where it did not.
 
-# First, because everything below it is only meaningful if it is true. A role
-# that reconciles a virtual environment it is not itself running in produces a
-# perfectly pinned environment that nothing uses, while the Ansible actually
-# driving the lab is some other copy on some other interpreter. That is the
-# exact state plan/CONTROLLER.md found this host in.
 - name: python | Confirm this run is using the managed virtual environment
   when: (controller_runtime_require_managed_venv | bool)
   ansible.builtin.assert:
@@ -33,15 +25,6 @@
     virtualenv: "{{ controller_runtime_venv | trim }}"
     virtualenv_command: "{{ controller_runtime_venv_command }}"
 
-# Proves the pin took rather than that pip reported success. The two differ
-# whenever an existing environment already satisfies the requirement by way of
-# something else — which is how a controller ends up running a version nobody
-# chose.
-#
-# Read from pip rather than from `ansible --version`, which reports the version
-# of ansible-core. What is pinned here is the `ansible` community package, and
-# the two numbering schemes are unrelated: ansible 13.4.0 ships ansible-core
-# 2.20.8, so asserting the pin against `ansible --version` never matches.
 - name: python | Read the Ansible version in the virtual environment
   changed_when: false
   failed_when: false
@@ -69,10 +52,6 @@
       Ansible {{ controller_runtime_ansible_version }} is installed.
     quiet: true
 
-# Into the one declared path, with the managed environment's own galaxy client.
-# ansible_galaxy_install is idempotent for a pinned requirement: it reports
-# changed only when it installs or upgrades something, which is what makes the
-# collection set safe to reconcile on every run.
 - name: python | Install the pinned collections
   when: not ansible_check_mode
   environment:

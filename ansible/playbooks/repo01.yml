@@ -3,18 +3,14 @@
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
+      - WIREGUARD_CONTROLLER_PRIVATE_KEY
       - WIREGUARD_REPO_PRIVATE_KEY
 
 - name: Configure phase1 repo01 services
   hosts: repo
   gather_facts: true
   become: true
-  # Without this, a task that fails late in the play discards the handlers
-  # queued by earlier roles. The config file is then correct on disk while the
-  # running service still holds the old one, and the next run sees no change
-  # and never restarts it — so the fix looks applied but is not. That exact
-  # failure left apt-cacher-ng listening on the external address after a run
-  # that aborted in a later role.
+
   force_handlers: true
   tasks:
     - name: repo01 | Include base host role
@@ -33,9 +29,6 @@
           tags:
             - base_host
 
-    # Runs before every service role. The apt cache, the artifact document
-    # root, and the GitLab data directory all live on /data1; if it is not
-    # mounted first, those roles quietly fill the 32 GB OS disk instead.
     - name: repo01 | Include data volume role
       tags:
         - data_volume
@@ -51,15 +44,6 @@
           tags:
             - data_volume
 
-    # Immediately after the data volume and before anything that runs a
-    # container. Docker and containerd default to /var/lib, which is the 32 GB
-    # OS disk, and GitLab's image traffic filled it to 79% by Phase 5 while
-    # /data1 sat at 8%. When that disk fills, GitLab, the apt proxy, Apache and
-    # the tunnel gateway all stop together.
-    #
-    # On a fresh build this writes two config files before either daemon is
-    # installed and moves nothing, which is the whole point of it being here
-    # rather than in the phase that discovered the problem.
     - name: repo01 | Include container storage role
       tags:
         - container_storage
@@ -72,15 +56,6 @@
           tags:
             - container_storage
 
-    # Split DNS is deliberately not here. repo01 forwards dev.lo to FreeIPA on
-    # core01, which does not exist during Phase 1, so configuring it here would
-    # point this host at an authority that cannot answer. It is applied in
-    # Phase 2 instead — playbooks/core01.yml, matching "Point resolvers at
-    # core01" in PHASE2_IMPLEMENTATION.md — once the domain is serving.
-    #
-    # Time does belong here: repo01 synchronizes from the internet and depends
-    # on nothing internal. A wrong clock breaks TLS to the upstreams this host
-    # downloads from, as surely as it breaks Kerberos later.
     - name: repo01 | Include time synchronization role
       tags:
         - time_sync
@@ -94,6 +69,19 @@
         apply:
           tags:
             - time_sync
+
+    - name: repo01 | Derive the controller's WireGuard public key
+      tags:
+        - wireguard_gateway
+      check_mode: false
+      no_log: true
+      register: _reg_repo01_controller_wg_public_key
+      delegate_to: "{{ inventory_wireguard_gateway_controller_host }}"
+      ansible.builtin.command:
+        cmd: wg pubkey
+        stdin: >-
+          {{ hostvars[inventory_wireguard_gateway_controller_host]
+             ['inventory_controller_wireguard_private_key'] | trim }}
 
     - name: repo01 | Include WireGuard gateway role
       tags:
@@ -120,8 +108,9 @@
           {{ inventory_wireguard_gateway_peer_endpoint }}
         wireguard_gateway_peer_persistent_keepalive: >-
           {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
+
         wireguard_gateway_peer_public_key: >-
-          {{ inventory_wireguard_gateway_peer_public_key }}
+          {{ _reg_repo01_controller_wg_public_key['stdout'] | trim }}
         wireguard_gateway_private_key: >-
           {{ inventory_wireguard_gateway_private_key }}
       ansible.builtin.include_role:
@@ -180,14 +169,6 @@
           tags:
             - artifact_host
 
-    # Last, because it writes into the document root the artifact host role
-    # creates, and because it is the only step that reaches upstream.
-    #
-    # The role finds the .published markers itself and skips those entries, so
-    # a transit artifact that GitLab already holds is not re-downloaded even
-    # though its local copy is gone. That discovery used to live here, in this
-    # playbook alone — which meant every other playbook that staged artifacts
-    # re-downloaded the entire transit set.
     - name: repo01 | Include artifact staging role
       tags:
         - artifact_stage
@@ -200,8 +181,3 @@
         apply:
           tags:
             - artifact_stage
-
-    # GitLab is deliberately not here. It is Phase 3 and it depends on Phase 2:
-    # its certificates are issued by the FreeIPA CA and its service names are
-    # published in dev.lo, neither of which exists while this playbook runs.
-    # See playbooks/gitlab.yml.

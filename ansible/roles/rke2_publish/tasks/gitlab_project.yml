@@ -1,7 +1,5 @@
 ---
-# Read before create, rather than creating and treating the resulting 400 as
-# success. A create-then-ignore-the-error shape reports `changed` on every run
-# and cannot tell "already exists" apart from "the request was malformed".
+
 - name: gitlab_project | Look for the group
   no_log: "{{ rke2_publish_no_log | bool }}"
   register: _reg_rke2_publish_group_get
@@ -74,9 +72,7 @@
       path: "{{ _item_rke2_publish_lookup['_item_rke2_publish_project'] }}"
       namespace_id: "{{ _reg_rke2_publish_group_final['json']['id'] }}"
       visibility: private
-      # Nothing is developed in these projects; they are distribution points.
-      # Leaving the features on would advertise issue trackers and merge
-      # requests that no one will ever read.
+
       issues_enabled: false
       merge_requests_enabled: false
       wiki_enabled: false

@@ -1,7 +1,4 @@
 ---
-# The generic package registry holds what a node needs before it has a container
-# runtime that can talk to the image registry: the installer, the binary
-# tarball, and the checksum file install.sh verifies the binary against.
 
 - name: packages | Read the published package files
   no_log: "{{ rke2_publish_no_log | bool }}"
@@ -40,10 +37,6 @@
       {{ _var_rke2_publish_published_files | length }} files
     verbosity: 0
 
-# GitLab keeps every upload as a new package file rather than replacing the
-# previous one, so re-uploading a file that is already there does not overwrite
-# it — it accumulates duplicates that the download endpoint then has to
-# disambiguate. Skipping what is present is correctness here, not just speed.
 - name: packages | Upload the missing package files
   when: _item_rke2_publish_package_file not in _var_rke2_publish_published_files
   no_log: "{{ rke2_publish_no_log | bool }}"

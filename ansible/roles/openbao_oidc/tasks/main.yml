@@ -1,33 +1,4 @@
 ---
-# Signing in to the vault with a domain account, without making the identity
-# provider part of the vault's recovery path.
-#
-# This is the service where "tie it into SSO" needs the most care, because
-# OpenBao is upstream of Keycloak rather than downstream of it: the vault holds
-# Keycloak's database password and its bootstrap administrator, and External
-# Secrets is what delivers them. A vault that could only be opened by Keycloak
-# could not be opened at all on the day Keycloak will not start — which is the
-# day someone needs to read Keycloak's database password.
-#
-# So OIDC here is strictly additive, and three things keep it that way:
-#
-#   - The root token is never replaced, revoked or rotated by this role. It
-#     stays in the controller's env.sh as the offline way in, exactly as
-#     openbao_init left it.
-#   - Neither policy this role writes can seal, unseal, rekey, or change an
-#     auth method or a policy. An administrator who signs in through Keycloak
-#     can read and rewrite secrets; they cannot lock the vault, and they cannot
-#     grant themselves a way back in. Those stay with the root token.
-#   - The unsealer loop reads a SealedSecret and does not authenticate at all,
-#     so restart recovery is untouched.
-#
-# The result is two independent paths in: a domain account through Keycloak for
-# ordinary work, and the root token for the case where the first one is what is
-# broken. That is the same shape as Grafana's local administrator and GitLab's
-# root account, and it is the answer to the question the whole change raises —
-# what happens when the identity provider is down.
-#
-# Everything is read before it is written, so a second run reports no change.
 
 - name: main | Assert the required inputs are present
   when: (openbao_oidc_enabled | bool)
@@ -52,8 +23,7 @@
 - name: main | Add an OIDC path into the vault beside the root token
   when:
     - (openbao_oidc_enabled | bool)
-    # uri has no dry run and every read needs the root token anyway. Same gate
-    # the other write-side vault roles use.
+
     - not ansible_check_mode
   block:
     - name: main | Read the enabled authentication methods
@@ -83,7 +53,7 @@
 
     - name: main | Read the current OIDC configuration
       changed_when: false
-      # Absent until the first write, which is not an error.
+
       failed_when: false
       no_log: "{{ openbao_oidc_no_log | bool }}"
       register: _reg_openbao_oidc_config
@@ -94,10 +64,6 @@
         ca_path: "{{ openbao_oidc_ca_file }}"
         status_code: [200, 404]
 
-    # The client secret is never disclosed on read, so it cannot take part in
-    # the comparison. Everything else can, the CA included — a reissued domain
-    # CA has to be rewritten here or the vault goes on verifying against an
-    # authority that no longer signs anything.
     - name: main | Point the OIDC method at the Keycloak realm
       when: >-
         (_reg_openbao_oidc_config['status'] | default(404)) != 200
@@ -141,9 +107,6 @@
         headers: "{{ _var_openbao_oidc_headers }}"
         ca_path: "{{ openbao_oidc_ca_file }}"
 
-    # The one assertion this role genuinely needs to make. Everything above is
-    # additive by construction, and this proves it: the offline way in is still
-    # a way in after the identity provider has been wired up.
     - name: main | Assert the offline way in survived
       vars:
         _openbao_oidc_root_policies: >-

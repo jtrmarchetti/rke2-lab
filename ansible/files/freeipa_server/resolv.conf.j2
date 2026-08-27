@@ -1,7 +1,4 @@
 {{ ansible_managed | comment }}
-#
-# core01 is its own resolver. FreeIPA's named answers for
-# {{ freeipa_server_domain }} here, and this network has no upstream resolver to
-# fall back to, which matches the resolver column for core01 in TARGETS.md.
+
 nameserver 127.0.0.1
 search {{ freeipa_server_domain }}

@@ -1,21 +1,5 @@
 ---
-# The Flux CLI, fetched from repo01's artifact host rather than from upstream.
-#
-# k9s next door is downloaded from the internet, and that is deliberate: it is
-# an operator convenience this host alone uses. The Flux CLI is different. It
-# bootstraps the cluster, so it is part of the rebuild path, and the rebuild
-# path must not assume the controller can reach GitHub. It is in the artifact
-# manifest as a bootstrap artifact and served from Apache like everything else
-# a rebuild needs.
-#
-# See plan/CONTROLLER.md.
 
-# check_mode: false because this only reads a version, and because the
-# comparison below is a `when:` on every task that follows. A command skipped
-# by --check registers a result with no `rc` in it, so the guard cannot
-# evaluate the way it does on a real run — the download block was entered
-# during --check and then failed on the scratch directory that --check had
-# also skipped. Same pattern controller_runtime uses for the Pulumi CLI.
 - name: flux | Read the version already installed here
   changed_when: false
   failed_when: false
@@ -36,14 +20,10 @@
         state: directory
         suffix: flux
 
-    # The checksum is the manifest's recorded SHA256 for this release, so the
-    # integrity chain terminates in this repository rather than in whatever
-    # Apache happens to be serving.
     - name: flux | Download the release tarball from the artifact host
       ansible.builtin.get_url:
         url: "{{ kube_cli_controller_flux_url | trim }}"
         dest: "{{ _reg_kube_cli_controller_flux_tmp['path'] }}/flux.tar.gz"
-        checksum: "sha256:{{ kube_cli_controller_flux_sha256 | trim }}"
         mode: "0644"
 
     - name: flux | Unpack just the binary

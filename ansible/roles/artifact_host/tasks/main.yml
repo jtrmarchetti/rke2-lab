@@ -5,9 +5,6 @@
     name: "{{ _var_artifact_host_packages }}"
     state: present
 
-# The document root is on the data volume. Serving from an unmounted mount
-# point would quietly fill the OS disk and publish an empty tree, so the check
-# is explicit rather than implied by task ordering.
 - name: main | Assert the document root parent is a mounted filesystem
   when:
     - (artifact_host_enabled | bool)
@@ -101,9 +98,6 @@
     group: root
     mode: "0644"
 
-# force is required so these stay check-mode safe. In check mode the templates
-# above are not written, so the link source does not exist yet and the module
-# would refuse to plan the link at all.
 - name: main | Ensure the artifact host hardening configuration is enabled
   when: (artifact_host_enabled | bool)
   notify:
@@ -124,9 +118,6 @@
     state: link
     force: true
 
-# The packaged default site serves /var/www/html on the same port with no
-# source address restriction, so it would answer requests this role is meant to
-# refuse.
 - name: main | Ensure the packaged default site is disabled
   when: (artifact_host_enabled | bool)
   notify:
@@ -135,10 +126,6 @@
     path: "{{ _var_artifact_host_default_site_enabled }}"
     state: absent
 
-# Apache validates only the whole configuration tree, not an individual
-# fragment, so this runs once after every file is in place rather than as a
-# `validate:` on each template. It also runs before the reload handlers, so a
-# bad fragment fails the play while the running server still has good config.
 - name: main | Verify the Apache configuration parses
   when:
     - (artifact_host_enabled | bool)

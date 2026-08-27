@@ -1,23 +1,4 @@
 ---
-# Phase 5 — the RKE2 workers.
-#
-# Three plays, and the order between them is the point.
-#
-# Nothing on a worker can be installed until GitLab holds the artifact set,
-# because a worker has no other source: no internet route and no image tarball
-# on local disk. Publishing runs first. It is a no-op for the core and cilium
-# sets the control plane already uses, and it is where the Traefik set added in
-# Phase 5 arrives.
-#
-# The third play changes the cluster rather than a host, and it runs only after
-# every worker is Ready. Its taint is NoExecute: applied while a worker is still
-# joining it would evict CoreDNS with nowhere to schedule, and cluster DNS would
-# stop. That is Risk Gate 4.
-#
-# Enabling Traefik is deliberately NOT here. It is a control plane
-# configuration change, so it belongs to playbooks/kubecp.yml, and it is run
-# after this playbook so the chart deploys onto workers that already exist and
-# a control plane that is already tainted. See plan/PHASE5_IMPLEMENTATION.md.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
@@ -32,9 +13,7 @@
   become: true
   force_handlers: true
   tasks:
-    # Re-runs the manifest so the Phase 5 entries are staged before anything
-    # tries to publish them. A run where the artifacts are already present is a
-    # no-op; a run on a rebuilt repo01 downloads them first.
+
     - name: kubewk | Include artifact staging role
       tags:
         - artifact_stage
@@ -54,7 +33,8 @@
       vars:
         rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
         rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-        rke2_publish_chart_sets: "{{ inventory_rke2_publish_chart_sets }}"
+
+        rke2_publish_chart_sets: []
         rke2_publish_deploy_token_username: >-
           {{ inventory_rke2_publish_deploy_token_username }}
         rke2_publish_deploy_token_value: >-
@@ -81,12 +61,8 @@
   hosts: kubewk
   gather_facts: true
   become: true
-  # One at a time. Agents joining have none of etcd's quorum problem, so this is
-  # not strictly required the way it is for the servers. It is kept because
-  # three nodes pulling the full image set through one GitLab simultaneously is
-  # the other reliable way to make this lab's storage unhappy, and because a
-  # failed join is much easier to read when only one node was moving.
-  serial: "{{ kubewk_serial | default(1) }}"
+
+  serial: "{{ kubewk_serial | default(2) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role
@@ -105,9 +81,6 @@
           tags:
             - base_host
 
-    # Before rke2_node, always. RKE2's data directory is on this volume, and a
-    # role that runs before the mount exists writes to the mount point on the
-    # OS disk instead — silently, and only visibly once the disk fills.
     - name: kubewk | Include data volume role for the RKE2 data directory
       tags:
         - data_volume
@@ -123,15 +96,6 @@
           tags:
             - data_volume
 
-    # The same role a second time, for the third disk. A worker has two data
-    # volumes and they are prepared identically; the only thing that differs is
-    # which device, which filesystem label, and where it lands. Passing those
-    # explicitly here rather than adding list handling to the role keeps the
-    # role's contract as "one disk, prepared safely" and keeps the second disk
-    # visible in the playbook rather than buried in a loop.
-    #
-    # Longhorn's default data path. Prepared in Phase 5 so that Phase 6 declares
-    # a Helm release instead of doing host-level disk work from a GitOps phase.
     - name: kubewk | Include data volume role for the CSI disk
       tags:
         - data_volume
@@ -168,10 +132,6 @@
           tags:
             - time_sync
 
-    # The same deploy token the servers use, read from the one place it exists:
-    # the file rke2_publish wrote on the repo host. Keeping it there means it is
-    # out of inventory, out of this repository, and rotating it is one file on
-    # one host.
     - name: kubewk | Read the registry deploy token from the repository host
       delegate_to: "{{ groups['repo'] | first }}"
       no_log: true
@@ -227,9 +187,6 @@
           tags:
             - rke2_agent
 
-    # crictl only. An agent has no kubeconfig, so kubectl here would have
-    # nothing to point at — but crictl is exactly the tool the runbook sends
-    # people to a worker for, and it should not need a socket path every time.
     - name: kubewk | Include the node CLI role
       tags:
         - kube_cli
@@ -242,16 +199,12 @@
           tags:
             - kube_cli
 
-# Cluster-level, not host-level, which is why it is its own play against a
-# single control plane host rather than more tasks on the workers. Both actions
-# here are things a kubelet is not permitted to do to itself.
 - name: Label the workers and taint the control plane
   hosts: kubecp
   gather_facts: false
   become: true
   vars:
-    # Must stay equal to inventory_rke2_server_data_dir. kubectl ships inside the RKE2
-    # data directory, so it moves when that moves.
+
     _kubewk_kubectl: >-
       /data1/rancher/rke2/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
@@ -259,19 +212,10 @@
     _kubewk_control_plane_taint: CriticalAddonsOnly=true:NoExecute
   tasks:
     - name: kubewk | Apply the cluster-level changes from one server
-      # run_once rather than a templated host pattern. Any server can answer
-      # these — they are kubectl calls, not a property of a particular node —
-      # and a pattern like {{ some_var }} cannot be used here at all, because
-      # Ansible resolves a play's host pattern before any group's variables
-      # are in scope.
+
       run_once: true
       block:
-        # The obvious mechanism — node-label in the agent's config.yaml — does not
-        # work. The NodeRestriction admission plugin forbids a kubelet from
-        # setting
-        # any label under node-role.kubernetes.io/, so the kubelet is refused and
-        # the node registers without it. It has to come from a client with more
-        # rights over the node than the node has over itself.
+
         - name: kubewk | Label each worker with its node role
           changed_when: "'not labeled' not in _reg_kubewk_label['stdout']"
           register: _reg_kubewk_label
@@ -285,24 +229,6 @@
               {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.dev.lo
               {{ _kubewk_worker_label }} --overwrite
 
-        # Read before writing, so this play refuses to proceed rather than taking
-        # cluster DNS down. Risk Gate 4: the taint below is NoExecute, and
-        # applying
-        # it while a worker is still joining evicts CoreDNS with nowhere to go.
-        # Every symptom after that points somewhere other than here.
-        #
-        # Two checks, because either alone passes in a state that is not safe. The
-        # count catches a worker that never registered — `wait` on a label
-        # selector
-        # matching two nodes succeeds perfectly well when there should be three.
-        # The wait catches one that registered and stayed NotReady.
-        #
-        # Neither uses -o jsonpath. The obvious expression for a node's Ready
-        # condition carries inner double quotes, and the command module's
-        # shell-like quoting eats them, so kubectl receives a malformed filter and
-        # fails every time regardless of the cluster's actual state. Phase 4 lost
-        # a
-        # retry budget to exactly that.
         - name: kubewk | Count the workers that have registered
           changed_when: false
           register: _reg_kubewk_registered
@@ -340,21 +266,6 @@
               plan/PHASE5_IMPLEMENTATION.md.
             quiet: true
 
-        # Phase 4 left the servers untainted because tainting them would have left
-        # nothing schedulable. Workers now exist, so that reason has expired.
-        #
-        # Applied here with kubectl as well as declared in the servers'
-        # config.yaml,
-        # and that is not redundancy: node-taint reaches the kubelet as
-        # --register-with-taints, which applies only at first registration and
-        # does
-        # nothing to nodes that registered hours ago. The config entry is for a
-        # rebuilt node; this is for the ones already running.
-        #
-        # Run without --overwrite so that an already-tainted node is reported by
-        # kubectl rather than silently reapplied, which is what makes the second
-        # run
-        # of this playbook honest about having changed nothing.
         - name: kubewk | Taint the control plane CriticalAddonsOnly
           changed_when: _reg_kubewk_taint['rc'] == 0
           failed_when:

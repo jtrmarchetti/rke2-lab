@@ -65,27 +65,27 @@ defaults are `null`, and both roles assert that a caller supplied all three.
 | Ubuntu | 24.04.4 LTS | OS install | Base |
 | Ubuntu cloud image | 24.04, `release-20260814` | `cloud-images.ubuntu.com`, checksummed, by Pulumi | The disk every VM in the lab is imported from. Not on this table until 2026-08-17, and not verified either: it was fetched from `noble/current/` — a moving target — with no checksum, which made it the one unpinned artifact in an environment whose whole premise is pinned artifacts |
 | Python | system `python3` | `apt python3-venv`, by `bootstrap/` | Runs Ansible and Pulumi |
-| Ansible | 13.4.0 | `bootstrap/requirements-controller.txt`, into `~/.venvs/rke2lab` | Configuration management |
-| ansible-core | 2.20.3 | dependency of the above | — |
-| ansible-lint | 26.3.0 | same requirements file | `ANSIBLE_STANDARDS.md` enforcement |
-| ansible-compat | 26.3.0 | dependency of ansible-lint | — |
+| Ansible | 14.3.1 | `bootstrap/requirements-controller.txt`, into `~/.venvs/rke2lab` | Configuration management |
+| ansible-core | 2.21.3 | dependency of the above | — |
+| ansible-lint | 26.8.0 | same requirements file | `ANSIBLE_STANDARDS.md` enforcement |
+| ansible-compat | 26.8.0 | dependency of ansible-lint | — |
 | `community.docker` | 5.0.6 | `ansible/requirements.yml` | Image staging, compose services |
 | `ansible.posix` | 2.1.0 | `ansible/requirements.yml` | `mount`, for `/data1` |
 | `community.general` | 12.4.0 | `ansible/requirements.yml` | `filesystem`, `apache2_module`, and `ansible_galaxy_install`, which reconciles this list |
 | dnsmasq | distribution | `apt`, by the `split_dns` role | Resolves `dev.lo` here and everything else upstream |
-| Pulumi CLI | 3.256.0 | `get.pulumi.com`, checksummed, by `controller_runtime` | Proxmox VM lifecycle |
-| `pulumi` (Python) | 3.256.0 | `infra/pulumi/.venv` | — |
-| `pulumi_proxmoxve` | 8.3.0 | `infra/pulumi/.venv` | The Proxmox provider |
-| `proxmoxve` plugin | 8.3.0 | Pulumi plugin cache, 115 MB | Downloaded by the CLI |
+| Pulumi CLI | 3.259.0 | `get.pulumi.com`, checksummed, by `controller_runtime` | Proxmox VM lifecycle |
+| `pulumi` (Python) | 3.259.0 | `infra/pulumi/.venv` | — |
+| `pulumi_proxmoxve` | 8.4.1 | `infra/pulumi/.venv` | The Proxmox provider |
+| `proxmoxve` plugin | 8.4.1 | Pulumi plugin cache, 115 MB | Downloaded by the CLI |
 | WireGuard tools | 1.0.20210914 | `apt`, by `controller_runtime` | The tunnel to `repo01` |
 | git | 2.43.0 | `apt`, by `controller_runtime` | This repository, and cluster-state |
-| kubectl | v1.35.7+rke2r1 | copied from `kubecp01` by `kube_cli_controller` | Exactly the cluster's version |
+| kubectl | v1.36.3+rke2r1 | copied from `kubecp01` by `kube_cli_controller` | Exactly the cluster's version |
 | k9s | v0.51.0 | GitHub release, checksummed | Operator convenience only |
 | Flux CLI | 2.9.4 | **`repo01` Apache**, checksummed | Operator convenience: `flux check`, `flux reconcile`. **No longer bootstraps anything** — see below |
-| kubeseal | 0.38.4 | **`repo01` Apache**, checksummed | Produces every SealedSecret |
+| kubeseal | 0.39.1 | **`repo01` Apache**, checksummed | Produces every SealedSecret |
 | `community.crypto` | 3.1.1 | `ansible/requirements.yml` | Phase 6b: the intermediate CA's key and CSR |
 | skopeo | 1.13.3 | `apt`, **on repo01** | Copies images registry to registry, replacing the broken `docker save` path |
-| helm | 3.21.4 | **`repo01` Apache**, checksummed | Pushes charts into the registry as OCI artifacts |
+| helm | 4.2.4 | **`repo01` Apache**, checksummed | Pushes charts into the registry as OCI artifacts |
 
 ### Why two of these come from `repo01` and one does not
 

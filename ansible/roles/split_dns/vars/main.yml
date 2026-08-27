@@ -1,7 +1,4 @@
 ---
 _var_split_dns_config_path: /etc/dnsmasq.d/split_dns.conf
 
-# Templates for this role live in ansible/files/split_dns/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_split_dns_files_dir: "{{ role_path | dirname | dirname }}/files/split_dns"

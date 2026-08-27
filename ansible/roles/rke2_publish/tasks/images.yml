@@ -1,8 +1,4 @@
 ---
-# Works out what the GitLab registry already holds, then hands each image set to
-# image_set.yml. The tarballs are hundreds of megabytes and loading one costs
-# minutes, so a set whose images are all present is never opened at all — which
-# is what makes a second run of this role fast as well as clean.
 
 - name: images | Read what the registry already holds
   no_log: "{{ rke2_publish_no_log | bool }}"

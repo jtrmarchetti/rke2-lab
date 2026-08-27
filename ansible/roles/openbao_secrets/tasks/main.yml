@@ -1,22 +1,4 @@
 ---
-# Fills the vault openbao_config mounted, which until now nothing did.
-#
-# This is the writing half of the secrets model. openbao_config builds the
-# store — the KV engine, the read-only policy, and the Kubernetes auth binding
-# ESO authenticates through — and every workload reads from it through an
-# ExternalSecret. Between those two there has to be something that puts the
-# values in, and without it the store is correct, empty, and every
-# ExternalSecret pointing at it never syncs.
-#
-# It runs on the controller, over the vault's HTTPS API, with the root token
-# openbao_init recorded in env.sh. Nothing here touches a cluster node and no
-# credential is left behind: the token is read from the environment for the
-# length of the run and travels in a header rather than in argv.
-#
-# Every entry is read before it is written. That is not only for the usual
-# idempotence: KV v2 keeps versions, so a role that wrote unconditionally would
-# add a version on every play run and push the previous values out of the
-# retained history for no reason.
 
 - name: main | Assert the required inputs are present
   when: (openbao_secrets_enabled | bool)
@@ -33,9 +15,7 @@
       - (openbao_secrets_garage_rpc_secret | length) > 0
       - (openbao_secrets_grafana_oidc_client_secret | length) > 0
       - (openbao_secrets_longhorn_oidc_client_secret | length) > 0
-      # oauth2-proxy refuses to start on any other length, reporting an AES key
-      # size error that says nothing about cookies. Caught here, where the
-      # variable has a name, rather than in a CrashLoopBackOff.
+
       - (openbao_secrets_longhorn_cookie_secret | length) in [16, 24, 32]
     fail_msg: >-
       openbao_secrets needs the root token and every runtime secret it writes
@@ -47,8 +27,7 @@
 - name: main | Write every runtime secret into the vault
   when:
     - (openbao_secrets_enabled | bool)
-    # uri has no dry run, and reading the vault to report a diff would still
-    # need the root token to exist. Same gate the other write-side roles use.
+
     - not ansible_check_mode
   block:
     - name: main | Read the value the vault already holds
@@ -64,14 +43,9 @@
           _item_openbao_secrets_entry['path'] }}
         headers: "{{ _var_openbao_secrets_headers }}"
         ca_path: "{{ openbao_secrets_ca_file }}"
-        # 404 is what an entry that has never been written answers, and it is
-        # the ordinary state of every entry on a cold rebuild.
+
         status_code: [200, 404]
 
-    # Booleans only. The comparison needs the plaintext on both sides, and a
-    # fact is the wrong place for that, so what is kept is the answer and not
-    # the working. Same shape, and the same reason, as gitops_source's
-    # re-sealing decision.
     - name: main | Decide which entries already hold the intended value
       no_log: "{{ openbao_secrets_no_log | bool }}"
       loop: >-
@@ -97,9 +71,6 @@
           {{ _openbao_secrets_reuse | reject | list | length }} written
         verbosity: 0
 
-    # A new version of the entry, not a replacement of the mount. KV v2 keeps
-    # the previous version, so a value written by mistake is recoverable with
-    # `bao kv rollback` rather than only from env.sh.
     - name: main | Write the entries that changed
       when: not (_openbao_secrets_reuse[loop_index] | bool)
       changed_when: true
@@ -121,8 +92,6 @@
           data: "{{ _item_openbao_secrets_entry['data'] }}"
         status_code: [200, 204]
 
-    # Reads back through the same path a workload uses, so a policy or engine
-    # fault shows up here rather than as an ExternalSecret that never syncs.
     - name: main | Confirm every entry reads back
       no_log: "{{ openbao_secrets_no_log | bool }}"
       register: _reg_openbao_secrets_final

@@ -1,58 +1,17 @@
 ---
 keycloak_break_glass_enabled: true
 
-# Keycloak's base URL and the CA its certificate is verified against. No
-# default for the URL: it names this environment.
 keycloak_break_glass_url: null
 keycloak_break_glass_ca_file: /etc/ssl/certs/ca-certificates.crt
 
-# The account this role authenticates as and the account it makes permanent.
-# They are the same account, and that is the whole design — see tasks/main.yml.
 keycloak_break_glass_admin_user: admin
-# Secret sourced from ~/.config/rke2lab/env.sh by the caller, and held in the
-# vault at kv/keycloak.
-# keycloak_break_glass_admin_password:
 
-# The realm the administrator lives in. `master` in every deployment of
-# Keycloak that exists, and a parameter rather than a literal only so that the
-# role reads the same way as the others.
 keycloak_break_glass_realm: master
 
-# The realm role that makes an account an administrator of every realm. Held
-# already by an account created through bootstrap; asserted here because an
-# account without it is a break-glass account that cannot break any glass.
 keycloak_break_glass_admin_role: admin
 
-# Whether to remove a user federation provider found in the administrative
-# realm, and the accounts it imported there.
-#
-# True, and it is not a tidying step. A directory federated into `master`
-# federates it into the realm that administers every other realm — the exact
-# arrangement keycloak_realm exists to undo. This repository's own history is
-# the argument: the federation was added to `master` first, moved to `dev-lo`
-# later, and the original provider stayed behind, still enabled, still binding
-# over plain LDAP, still importing accounts into the administrative realm. It
-# was carried in the documentation as "should be removed by hand" for as long
-# as removing it by hand did not happen.
-#
-# Nothing is removed from the directory. What is deleted is Keycloak's imported
-# copy of accounts whose originals live in FreeIPA and are untouched.
 keycloak_break_glass_remove_federation: true
 
-# The federation providers that are permitted to exist there anyway, by name.
-#
-# Empty means none, which is the stricter reading and the right default. A
-# deployment that deliberately federates a filtered set of administrators into
-# master names that provider here — otherwise this role would delete on every
-# run the thing keycloak_ldap creates on every run, and the two would take
-# turns until someone noticed.
-#
-# Accounts are matched to providers, not deleted wholesale: an account imported
-# by a permitted provider stays, and only accounts whose federation is gone or
-# was never allowed are removed. Without that pairing, allowing a provider and
-# then deleting everything it imported would be a slower way of allowing
-# nothing.
 keycloak_break_glass_allowed_federation: []
 
-# Set false only when debugging; it prints the admin password.
 keycloak_break_glass_no_log: true

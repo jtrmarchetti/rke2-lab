@@ -1,9 +1,6 @@
 ---
 longhorn_node_enabled: true
 
-# open-iscsi is the initiator Longhorn attaches volumes through; nfs-common is
-# what a ReadWriteMany volume is mounted with; cryptsetup is only needed for
-# encrypted volumes and costs nothing to have present.
 longhorn_node_packages:
   - open-iscsi
   - nfs-common
@@ -11,14 +8,9 @@ longhorn_node_packages:
 
 longhorn_node_iscsi_service: iscsid
 
-# Where Longhorn keeps replica data. Must be the mount point of the dedicated
-# disk, not a directory on the OS filesystem.
 longhorn_node_data_path: /var/lib/longhorn
 
-# The device the root filesystem is on, used only to prove the path above is
-# not on it.
 longhorn_node_root_device: /dev/sda
 
-# Whether multipathd is told to ignore Longhorn's devices.
 longhorn_node_multipath_blacklist: true
 longhorn_node_multipath_conf: /etc/multipath/conf.d/longhorn.conf

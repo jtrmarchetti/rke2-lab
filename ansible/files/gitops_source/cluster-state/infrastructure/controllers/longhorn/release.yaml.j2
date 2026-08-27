@@ -1,18 +1,4 @@
 {{ ansible_managed | comment }}
-# Longhorn v1.11.3, the cluster's CSI layer.
-#
-# Not v1.12.1, which was the newest stable when this was written and two days
-# old. Both test against Kubernetes 1.35; v1.12 is the line whose headline
-# change is the V2 data engine reaching GA. This layer holds OpenBao's Raft
-# store on storage already measured at 32-50 fsync/s, and a regression here is
-# not a failed reconcile, it is data.
-#
-# Two replicas, not the chart's three, and not as a compromise. On three nodes,
-# three replicas puts a copy on every node: when one fails there is nowhere
-# left to rebuild and the volume stays degraded until that node returns. Two
-# survives the same single node loss *and* keeps a spare to rebuild onto, so
-# Longhorn returns to full redundancy without an operator. It also yields
-# 147 GB usable rather than 98 GB, and costs one fewer fsync per write.
 ---
 apiVersion: v1
 kind: Namespace
@@ -26,14 +12,13 @@ metadata:
   namespace: longhorn-system
 spec:
   interval: 30m
-  # Longhorn's first install pulls fourteen images onto three nodes over one
-  # GitLab, on storage that is the slowest thing in this lab. The chart's
-  # default timeout is five minutes and is not enough.
   timeout: 30m
+  driftDetection:
+    mode: warn
   chart:
     spec:
       chart: longhorn
-      version: 1.11.3
+      version: 1.12.1
       sourceRef:
         kind: HelmRepository
         name: gitlab-charts
@@ -48,35 +33,17 @@ spec:
       retries: 2
   values:
     defaultSettings:
-      # Where replicas are written. A dedicated 100 GB disk on each worker,
-      # mounted in Phase 5 — Longhorn cannot tell a mount from a directory, so
-      # the longhorn_node role asserts it rather than trusting this value.
       defaultDataPath: /var/lib/longhorn
-      # Only the workers hold data. The control plane is tainted
-      # CriticalAddonsOnly and has no second disk.
       createDefaultDiskLabeledNodes: false
       defaultReplicaCount: 2
-      # Size PVCs against 147 GB usable, not the 294 GB the disks provision.
       storageOverProvisioningPercentage: 100
       storageMinimalAvailablePercentage: 15
-      # A rebuild is three nodes' worth of disk and network on a lab that has
-      # neither to spare. One at a time keeps a rebuild from competing with
-      # etcd for the same fsyncs.
       concurrentReplicaRebuildPerNodeLimit: 1
       concurrentAutomaticEngineUpgradePerNodeLimit: 1
-      # Deleting a node's replicas the moment it goes NotReady is wrong on a
-      # lab whose nodes reboot: it turns a five-minute restart into a full
-      # rebuild. 30 minutes is long enough to reboot and short enough to heal.
       nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
       replicaReplenishmentWaitInterval: 1800
-      # Snapshots and backups need somewhere to go, and Garage is not up yet.
-      # 6b's object store decides this; until then no backup target, which is
-      # honest rather than a target that silently fails.
       backupTarget: ""
     persistence:
-      # The chart's own default StorageClass. Declared here rather than in
-      # infrastructure/configs because the chart owns it; longhorn-single is
-      # declared there, next to it, because nothing else does.
       defaultClass: true
       defaultClassReplicaCount: 2
       defaultFsType: ext4
@@ -92,25 +59,5 @@ spec:
       replicas: 1
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
-    # The chart's Ingress is off, and the UI is published by apps/longhorn-auth
-    # instead.
-    #
-    # Longhorn has no authentication of its own — none, not a default password
-    # — so an Ingress straight to longhorn-frontend hands anyone who can
-    # resolve the name the ability to detach volumes and delete replicas. This
-    # was the largest single gap in the cluster before single sign-on, and it
-    # is the one service here that could not be fixed by configuring it,
-    # because there is nothing in Longhorn to configure.
-    #
-    # So the front door moved: an oauth2-proxy in the apps layer terminates the
-    # OIDC flow and proxies through to longhorn-frontend, and it carries the
-    # hostname, the certificate and the Ingress that used to be here. It lives
-    # in `apps` rather than beside this file because it reads its client secret
-    # through an ExternalSecret, and External Secrets is deployed by this same
-    # infrastructure layer — a workload cannot depend on a controller its own
-    # kustomization is still installing.
-    #
-    # Leaving both would publish two Ingresses for one hostname, and which one
-    # answered would be Traefik's choice rather than ours.
     ingress:
       enabled: false

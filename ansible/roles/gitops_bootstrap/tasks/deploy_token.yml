@@ -1,21 +1,4 @@
 ---
-# The credential Flux reads the cluster-state repository with.
-#
-# Previously a personal access token created by hand and pasted into env.sh as
-# GITLAB_FLUX_TOKEN. That token was the last hand-made secret in the reconcile
-# path, and it had the two properties such secrets always have: it belonged to
-# a user account rather than to the automation, and nothing in this repository
-# would recreate it on a rebuild.
-#
-# A project deploy token replaces it. Scoped to one project and to reading, so
-# a cluster that leaks it leaks the ability to read its own declared state and
-# nothing else — not the artifact mirror, which has its own token, and not the
-# ability to write to either.
-#
-# GitLab returns a deploy token's value exactly once, at creation, which is
-# what drives the shape of this file: the value has to be recorded, or the next
-# run cannot tell whether the token it can see in the API is the token the
-# cluster is configured with.
 
 - name: deploy_token | Check for a previously recorded token
   register: _reg_gitops_bootstrap_token_file
@@ -40,11 +23,6 @@
       _var_gitops_bootstrap_project_path }}/deploy_tokens?per_page=100
     headers: "{{ _var_gitops_bootstrap_headers }}"
 
-# Reusable only when the token exists in GitLab, its value was recorded here,
-# and it carries every scope Flux needs. Checking the scopes rather than only
-# the name is what makes widening the scope list take effect on the next run
-# instead of leaving a token that silently cannot read half of what it is asked
-# for — the same trap rke2_publish documents for the registry token.
 - name: deploy_token | Decide whether the existing token can be reused
   ansible.builtin.set_fact:
     _gitops_bootstrap_token_reusable: >-
@@ -93,10 +71,7 @@
           _var_gitops_bootstrap_project_path }}/deploy_tokens
         method: POST
         headers: "{{ _var_gitops_bootstrap_headers }}"
-        # JSON rather than form-urlencoded, because of the array parameter.
-        # Form encoding renders a list as repeated `scopes=` keys where
-        # GitLab wants `scopes[]=`; it accepts the request, keeps one scope,
-        # and returns 201.
+
         body_format: json
         body:
           name: "{{ gitops_bootstrap_deploy_token_name }}"
@@ -108,18 +83,11 @@
       no_log: "{{ gitops_bootstrap_no_log | bool }}"
       ansible.builtin.copy:
         content: |
-          # Written by the gitops_bootstrap role. The credential Flux reads the
-          # cluster-state repository with. Not a repository file: GitLab
-          # returns a deploy token's value once, so this is the only copy.
           username: {{ _reg_gitops_bootstrap_token_new['json']['username'] }}
           token: {{ _reg_gitops_bootstrap_token_new['json']['token'] }}
         dest: "{{ gitops_bootstrap_deploy_token_file }}"
         mode: "0600"
 
-# Proves the credential against the repository itself rather than trusting that
-# a 201 meant what it said. A token with the wrong scope authenticates and then
-# fails at clone time, inside the source controller, as a status on a
-# GitRepository nobody is watching yet.
 - name: deploy_token | Prove the token can read the repository
   changed_when: false
   no_log: "{{ gitops_bootstrap_no_log | bool }}"

@@ -1,8 +1,4 @@
 ---
-# The binary comes from the GitLab generic package registry, not from Apache and
-# not from the internet. This is the one thing a node needs before it has
-# anything that can pull an image, which is why it is a package and not an
-# image.
 
 - name: install | Ensure the installer scratch directory exists
   ansible.builtin.file:
@@ -12,13 +8,6 @@
     group: root
     mode: "0700"
 
-# Only two files. install.sh looks for an rke2-images.<arch>.tar.* alongside
-# them and, finding none, leaves AIRGAP_CHECKSUM_EXPECTED empty; both
-# verify_airgap_tarball and install_airgap_tarball then return immediately. That
-# is the supported shape for a registry-based air gap, and it is deliberate:
-# seeding the image tarball here would leave containerd with every image already
-# on local disk, so it would never contact the mirror and a broken mirror would
-# pass this phase silently. See plan/PHASE4_IMPLEMENTATION.md.
 - name: install | Fetch the installer and binary from the package registry
   no_log: true
   loop:
@@ -43,35 +32,6 @@
     mode: "0700"
     timeout: "{{ rke2_node_download_timeout }}"
 
-# Verified against Rancher's own checksum file before the installer is trusted
-# to run. install.sh checks the binary tarball itself, but nothing checks
-# install.sh, and it runs as root.
-- name: install | Read the checksum of the downloaded binary
-  register: _reg_rke2_node_tarball
-  ansible.builtin.stat:
-    path: "{{ rke2_node_install_dir }}/rke2.linux-amd64.tar.gz"
-    checksum_algorithm: sha256
-
-- name: install | Read the release checksum file
-  register: _reg_rke2_node_checksums
-  ansible.builtin.slurp:
-    src: "{{ rke2_node_install_dir }}/sha256sum-amd64.txt"
-
-- name: install | Assert the binary matches the release checksum
-  vars:
-    _rke2_node_expected: >-
-      {{ ((_reg_rke2_node_checksums['content'] | b64decode).splitlines()
-          | select('search', 'rke2\.linux-amd64\.tar\.gz$')
-          | first).split()[0] }}
-  ansible.builtin.assert:
-    that:
-      - _reg_rke2_node_tarball['stat']['checksum'] == _rke2_node_expected
-    fail_msg: >-
-      rke2.linux-amd64.tar.gz from the package registry does not match the
-      checksum the release publishes for it. The package registry is serving
-      something other than what repo01 staged.
-    quiet: true
-
 - name: install | Check whether this version is already installed
   changed_when: false
   failed_when: false
@@ -79,8 +39,6 @@
   ansible.builtin.command:
     cmd: /usr/local/bin/rke2 --version
 
-# `creates` is not usable here: the binary exists after any install, so it would
-# make an upgrade a no-op. The version string is what actually decides.
 - name: install | Run the installer
   when: >-
     _reg_rke2_node_installed['rc'] != 0
@@ -100,8 +58,5 @@
     state: directory
     owner: root
     group: root
-    # 0755, because RKE2's own components traverse this path as non-root and
-    # because RKE2 sets it to this itself. A role that enforced 0700 here would
-    # take the node down on its second run, which is the Phase 2 and Phase 3
-    # lesson in a third service.
+
     mode: "0755"

@@ -7,19 +7,12 @@ _var_keycloak_break_glass_headers:
 _var_keycloak_break_glass_admin_api: >-
   {{ keycloak_break_glass_url }}/admin/realms/{{ keycloak_break_glass_realm }}
 
-# The administrator as the realm currently holds it. Re-resolved every time it
-# is read, which is what lets the same expression serve both the read at the
-# top of main.yml and the read-back at the end.
 _var_keycloak_break_glass_current: >-
   {{ _reg_keycloak_break_glass_user['json'] | default([]) | first
      | default({}) }}
 _var_keycloak_break_glass_user_id: >-
   {{ _var_keycloak_break_glass_current['id'] | default('') }}
 
-# Keycloak's own marker, `UserModel.IS_TEMP_ADMIN_ATTR_NAME`, set on an account
-# created through bootstrap and read back by the admin console to decide
-# whether to warn about the session. A single-valued attribute that arrives as
-# a list, like every other user attribute.
 _var_keycloak_break_glass_temp_attribute: is_temporary_admin
 _var_keycloak_break_glass_temporary: >-
   {{ (_var_keycloak_break_glass_current['attributes'] | default({}))
@@ -27,54 +20,30 @@ _var_keycloak_break_glass_temporary: >-
      | selectattr('key', 'equalto', _var_keycloak_break_glass_temp_attribute)
      | length > 0 }}
 
-# The attributes the account should keep: everything it has except the marker.
-# Built by subtraction rather than written out, because an administrator may
-# legitimately carry attributes this role knows nothing about and a literal
-# would delete them.
 _var_keycloak_break_glass_kept_attributes: >-
   {{ (_var_keycloak_break_glass_current['attributes'] | default({}))
      | dict2items
      | rejectattr('key', 'equalto', _var_keycloak_break_glass_temp_attribute)
      | items2dict }}
 
-# The realm's user profile, and the same profile with unmanaged attributes
-# allowed. The second is scaffolding: it exists for the duration of one write
-# and promote.yml restores the first in an `always`.
 _var_keycloak_break_glass_profile: >-
   {{ _reg_keycloak_break_glass_profile['json'] | default({}) }}
 _var_keycloak_break_glass_profile_open: >-
   {{ _var_keycloak_break_glass_profile
      | combine({'unmanagedAttributePolicy': 'ENABLED'}) }}
 
-# The component type a user federation provider is registered under. The
-# components endpoint returns every kind of component in the realm — key
-# providers, mappers, policies — and filtering on this is what keeps a delete
-# loop from removing the realm's signing keys.
 _var_keycloak_break_glass_provider_type: >-
   org.keycloak.storage.UserStorageProvider
 
-# The federation providers found in the administrative realm, and the accounts
-# they imported. `federationLink` is the property that says an account is a
-# copy of a directory entry rather than an account in its own right; the local
-# administrator has none, which is what keeps it out of this list.
-# The providers that must go: everything in the administrative realm that this
-# deployment has not named as permitted.
 _var_keycloak_break_glass_providers: >-
   {{ _reg_keycloak_break_glass_components['json'] | default([])
      | rejectattr('name', 'in', keycloak_break_glass_allowed_federation)
      | list }}
 
-# The providers left afterwards, read back rather than inferred, and the
-# accounts they legitimately own.
 _var_keycloak_break_glass_kept_ids: >-
   {{ _reg_keycloak_break_glass_remaining['json'] | default([])
      | map(attribute='id') | list }}
 
-# Accounts imported by a federation that is no longer there — or was never
-# permitted. An account whose `federationLink` names a provider still standing
-# is left alone; a local account has no `federationLink` at all and is never in
-# this list, which is what keeps the task from being the reason a break-glass
-# administrator stops existing.
 _var_keycloak_break_glass_federated_users: >-
   {{ _reg_keycloak_break_glass_all_users['json'] | default([])
      | selectattr('federationLink', 'defined')

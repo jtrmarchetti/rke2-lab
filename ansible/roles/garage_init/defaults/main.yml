@@ -7,40 +7,26 @@ garage_init_kubectl: >-
   {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
   --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
 
-# How long to wait for Garage to be running before doing anything to it. The
-# retries matter as much as the timeout: `kubectl wait` fails immediately, not
-# after the timeout, when the pod does not exist at all — which is the state
-# it is in for as long as External Secrets takes to sync the credentials
-# Garage starts with.
 garage_init_ready_timeout: 180
-garage_init_ready_retries: 20
+garage_init_ready_retries: 30
+garage_init_ready_delay: 10
 
-# The zone this node is in. One zone, because there is one node; the field
-# exists for deployments spread across failure domains, which this is not.
 garage_init_zone: dev-lo
 
-# Advertised capacity, deliberately below the volume's 20 GB. Garage refusing
-# writes at its stated capacity is a better failure than a full filesystem
-# underneath it.
 garage_init_capacity: 16G
 
-# Garage versions its layout and applies a specific version, so the number is
-# part of the request rather than implied. 1 is the first.
 garage_init_layout_version: 1
 
-# What the store holds. Named for their consumers rather than generically, so
-# a bucket's purpose survives the person who created it.
 garage_init_buckets:
   - longhorn-backups
-  # Phase 6c. One bucket each rather than one shared: Loki and Tempo both
-  # write object names of their own choosing, and a shared bucket makes a
-  # retention policy for one of them a policy for both.
+
   - loki
   - tempo
 
 garage_init_key_name: cluster
 
-# Where the one-time secret key is recorded. See plan/SECRETS.md.
+garage_init_marker_name: garage-buckets-ready
+
 garage_init_env_file: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/env.sh
 

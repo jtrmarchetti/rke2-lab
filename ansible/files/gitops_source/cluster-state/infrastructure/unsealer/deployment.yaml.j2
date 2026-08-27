@@ -1,20 +1,4 @@
 {{ ansible_managed | comment }}
-# The unsealer, which is what makes the vault survive a restart unattended.
-#
-# OpenBao comes up sealed after every restart — a pod eviction, a node reboot,
-# a chart upgrade — and stays sealed until someone presents a threshold of key
-# shares. Without this loop the cluster self-heals from Git in every respect
-# except the one that holds its secrets.
-#
-# It is deliberately dull: the vault's own image, already mirrored, running a
-# shell loop that asks for status and applies keys when the answer is "sealed".
-# No new image to mirror, no operator to keep current, and nothing to
-# understand when it is the thing that has broken.
-#
-# It has its own Flux Kustomization rather than living with the OpenBao release
-# — see clusters/dev-lo/unsealer.yaml. That is not tidiness: a real auto-unseal
-# seal makes this loop redundant, and retiring it should be deleting one
-# declaration rather than unpicking it from the vault's own deployment.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -42,7 +26,7 @@ spec:
         node-role.kubernetes.io/worker: "true"
       containers:
         - name: unsealer
-          image: quay.io/openbao/openbao:2.6.1
+          image: quay.io/openbao/openbao:2.6.2
           imagePullPolicy: IfNotPresent
           env:
             - name: BAO_ADDR
@@ -53,10 +37,6 @@ spec:
             - /bin/sh
             - -c
             - |
-              # `bao status` exits 0 when open, 2 when sealed, 1 when it is not
-              # initialised or cannot be reached. Only 2 is this loop's
-              # business: unsealing an uninitialised vault is impossible, and
-              # an unreachable one is a problem no key will fix.
               while true; do
                 bao status >/dev/null 2>&1
                 rc=$?

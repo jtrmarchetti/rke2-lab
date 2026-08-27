@@ -1,9 +1,9 @@
 ---
 exclude_paths:
-  # Vendored upstream Flux component set, pinned and copied verbatim. Its
-  # formatting is upstream's business, and reformatting it would defeat the
-  # point of pinning it.
-  - files/gitops_source/cluster-state-static/
+  # Vendored Flux CLI `kustomization.yaml` that the bootstrap role copies into
+  # the GitOps repository. Its formatting is upstream's business, and
+  # reformatting it would defeat the point of pinning it.
+  - files/gitops_bootstrap/flux-system/
 
 skip_list:
   # This repository orders task keys name -> controls -> module -> vars, so the

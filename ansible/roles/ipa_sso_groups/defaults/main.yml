@@ -1,56 +1,15 @@
 ---
 ipa_sso_groups_enabled: true
 
-# --- Where the directory is ------------------------------------------------
-#
-# No defaults. The identity host and the container the directory tools run in
-# are facts about this environment, not values that are correct anywhere.
 ipa_sso_groups_ipa_host: null
 ipa_sso_groups_ipa_container: null
 ipa_sso_groups_admin_user: admin
-# Secret sourced from ~/.config/rke2lab/env.sh by the caller.
-# ipa_sso_groups_admin_password:
 
-# --- What gets created -----------------------------------------------------
-#
-# One entry per application federated to Keycloak. Each produces exactly two
-# groups, and the pair is the whole authorisation model: a person is an
-# administrator of a service, an ordinary user of it, or has no access to it at
-# all. There is no third tier, because a lab that invents one per application
-# ends up with an access model nobody can state.
-#
-# Each entry takes:
-#
-#   name         the application slug. The group names, the Keycloak client id
-#                and the client roles are all derived from it, so the same slug
-#                has to be passed to keycloak_clients.
-#   description  what the service is, written into the group description so
-#                `ipa group-find` explains itself.
-#
-# Empty by default: a role that invents groups for applications the caller did
-# not name would put entries in the domain that nothing ever removes.
 ipa_sso_groups_applications: []
 
-# The services whose access model has an administrator tier and nothing below
-# it. Each produces one group, `<name>-admins`, and no user group.
-#
-# Keycloak itself is the case this exists for, and it is not a special case so
-# much as the shape of the thing: every account in the domain can already sign
-# in to Keycloak and reach its own account console, because that is what being
-# federated *is*. There is nothing a `keycloak-users` group could grant. A
-# group that grants nothing is worse than no group at all — it reads as access
-# in `ipa group-find`, is asked for by name, and is then found to do nothing.
-#
-# Same two keys as above, and the same rule about membership: this role creates
-# the group and never puts anyone in it.
 ipa_sso_groups_admin_only_applications: []
 
-# The suffixes that turn a slug into a group name. Configurable because they
-# are a naming convention rather than a fact, and fixed in practice because
-# keycloak_clients derives the same names from the same slugs — change one and
-# the group mappings in Keycloak point at groups that do not exist.
 ipa_sso_groups_admin_suffix: admins
 ipa_sso_groups_user_suffix: users
 
-# Set false only when debugging; it prints the IPA admin password.
 ipa_sso_groups_no_log: true

@@ -64,10 +64,15 @@ argument_specs:
           password in output.
         type: bool
         required: false
-      freeipa_server_settle_timeout:
+      freeipa_server_settle_retries:
         description: >-
-          Seconds to let the container settle before checking whether it is
-          crash-looping.
+          How many times to poll the container for a stably-running state before
+          giving up; a crash-looper burns the whole budget and the restart-count
+          assert then fails the run.
+        type: int
+        required: false
+      freeipa_server_settle_delay:
+        description: Seconds between container-settle polls.
         type: int
         required: false
       freeipa_server_manage_resolver:
@@ -115,11 +120,10 @@ argument_specs:
         type: str
         required: false
       freeipa_server_image_tarball_url:
-        description: Apache artifact host URL for the saved image tarball.
-        type: str
-        required: false
-      freeipa_server_image_tarball_checksum:
-        description: Checksum in get_url form, for example "sha256:abc...".
+        description: >-
+          Apache artifact host URL for the saved image tarball. The pin and
+          the TLS transport are the integrity control; the download is not
+          verified against a recorded checksum.
         type: str
         required: false
       freeipa_server_image_tarball_path:
@@ -133,6 +137,16 @@ argument_specs:
         description: Seconds allowed for the first-run domain bootstrap.
         type: int
         required: false
+      freeipa_server_apt_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing package install before the task is fatal.
+      freeipa_server_apt_delay:
+        type: int
+        required: false
+        default: 15
+        description: Seconds between package install attempts.
       freeipa_server_dns_forward_zones:
         type: list
         elements: dict

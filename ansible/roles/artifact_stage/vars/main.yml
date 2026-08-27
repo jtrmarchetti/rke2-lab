@@ -1,35 +1,19 @@
 ---
-# Sidecar published next to every artifact. Consumers verify against this file,
-# so its format is the one sha256sum reads natively.
-_var_artifact_stage_checksum_suffix: .sha256
 
-# Records the registry digest a published image tarball was built from, so a
-# changed pin in the manifest triggers a re-export while an unchanged one does
-# not. Not published for consumers; it is this role's idempotency marker.
+_var_artifact_stage_tag_suffix: .tag
+
 _var_artifact_stage_digest_suffix: .digest
 
-# Written next to a transit artifact when the destination confirmed it holds
-# the content. Its presence is what lets staging skip a re-download of
-# something that has already been published and deleted locally — the local
-# file is gone by design, so the file's absence cannot be the signal.
+_var_artifact_stage_checksum_suffix: .sha256
+
 _var_artifact_stage_published_suffix: .published
 
-# A transit artifact that carries a .published marker is not restaged. Without
-# this, deleting the local copy after publishing would mean re-downloading
-# every image tarball on every run — the exact trap the manifest schema
-# describes.
-#
-# Two sources, and both are the same fact from different directions: the
-# markers this role discovers on disk, and any names the caller passes in.
 _var_artifact_stage_wanted: >-
   {{ _var_artifact_stage_local
      | rejectattr('name', 'in',
                   artifact_stage_published_names
                   + _artifact_stage_marked_names) | list }}
 
-# Everything with a local path, which is everything this role handles at all.
-# A mirror entry has no local path: it is copied from one registry to another
-# by rke2_publish and never touches this host's disk.
 _var_artifact_stage_local: >-
   {{ artifact_stage_manifest
      | rejectattr('type', 'equalto', 'mirror') | list }}

@@ -1,38 +1,24 @@
-#jinja2: trim_blocks: True, lstrip_blocks: True
 {{ ansible_managed | comment }}
-#
-# The jinja2 directive above must stay on line 1 to take effect.
-#
-# The whole file is rendered rather than a drop-in beside the distribution
-# default, because that default carries `pool ntp.ubuntu.com`. On a host with no
-# internet route that pool is unreachable, and every poll of it is a timeout
-# that delays the sources which do work. What this host synchronizes from is
-# stated here and nowhere else.
 
 {% for _item_time_sync_source in time_sync_sources %}
 {{ time_sync_source_directive }} {{ _item_time_sync_source }}
 {% endfor %}
 
-# Record the rate at which the clock gains or loses time, so it converges faster
-# after a restart.
 driftfile /var/lib/chrony/chrony.drift
 
-# Step rather than slew when the offset is large and the host has just started.
 makestep {{ time_sync_makestep }}
 
-# Keep the real-time clock in step, so a rebooted host starts close.
 rtcsync
 
 {% if time_sync_allow_networks | length > 0 %}
-# Networks served by this host.
+
 {% for _item_time_sync_network in time_sync_allow_networks %}
 allow {{ _item_time_sync_network }}
 {% endfor %}
 {% endif %}
 
 {% if (time_sync_local_stratum | int) > 0 %}
-# Serve time even with no reachable upstream. On an isolated network a common
-# clock that drifts together is worth more than no clock at all.
+
 local stratum {{ time_sync_local_stratum }}
 {% endif %}
 

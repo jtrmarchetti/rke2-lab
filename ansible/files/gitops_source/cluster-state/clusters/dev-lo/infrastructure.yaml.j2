@@ -1,12 +1,4 @@
 {{ ansible_managed | comment }}
-# Two Kustomizations, not one, and the split is load-bearing.
-#
-# A ClusterIssuer applied in the same kustomization as cert-manager fails on
-# the first reconcile, because its CRD does not exist yet. Flux retries the
-# whole set rather than the one object, so a single kustomization turns an
-# ordering problem into a reconcile loop that never converges. Separating the
-# controllers from the objects that need their CRDs makes the dependency
-# something dependsOn can express.
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -30,8 +22,6 @@ metadata:
   name: infra-configs
   namespace: flux-system
 spec:
-  # wait: true above means this does not start until every controller is
-  # actually ready, not merely applied.
   dependsOn:
     - name: infra-controllers
   interval: 30m

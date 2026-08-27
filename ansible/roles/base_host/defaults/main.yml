@@ -1,5 +1,5 @@
 ---
-# Core packages expected by phase1 bootstrap roles.
+
 base_host_packages:
   - ca-certificates
   - curl
@@ -8,17 +8,23 @@ base_host_packages:
   - apt-transport-https
   - software-properties-common
 
-# Internal hosts have no internet route, so every apt request goes through the
-# caching proxy on repo01. repo01 itself sets this to false: it has the external
-# NIC, and pointing it at its own proxy before the proxy exists breaks bootstrap.
 base_host_apt_proxy_enabled: true
 base_host_apt_proxy_url: null
+
+base_host_apt_acquire_retries: 5
+base_host_apt_acquire_timeout: 300
+base_host_apt_acquire_pipeline_depth: 0
+
+base_host_apt_update_retries: 3
+base_host_apt_update_delay: 30
+
+base_host_apt_update_timeout: 1800
 
 base_host_manage_hostname: false
 base_host_target_hostname: ""
 
-# Split DNS for hosts that must resolve both internal and upstream names.
-# Only repo01 needs this; internal hosts resolve everything from core01.
+base_host_apt_unattended_upgrade: false
+
 base_host_split_dns_enabled: false
 base_host_split_dns_interface: ""
 base_host_split_dns_servers: []

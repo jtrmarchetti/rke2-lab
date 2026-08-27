@@ -1,34 +1,5 @@
 ---
-# The automation controller's own tooling.
-#
-# plan/OVERVIEW.md requires that "every controller dependency must be documented
-# and scripted so the automation environment can be rebuilt from scratch without
-# tribal knowledge". Phase 4 found this unmet — kubectl had been placed here by
-# hand from kubecp01's own binary and nothing in this repository remembered it —
-# and recorded it as a debt rather than fixing it.
-#
-# This pays the kubectl half. Pulumi, Ansible and their virtual environments are
-# still installed by hand and are still owed.
-#
-# The role spans two phases on purpose. kubectl, k9s and the shell integration
-# are Phase 5. The Flux CLI and kubeseal are Phase 6a tools, kept here because
-# this is the controller's single tooling entry point and this is the only
-# window that works: the cluster must exist before kubectl can be taken from a
-# node, and Flux must exist on PATH before 6a bootstraps it. Both 6a binaries
-# come from Apache with published checksums, so neither waits on GitLab.
-#
-# Runs against localhost with no become: everything it installs is user-level,
-# under ~/.local/bin and ~/.config, so operating the cluster needs no root on
-# this machine and nothing here is inherited by another user by accident.
-#
-# Requires the cluster to be up, because it takes kubectl from a node and then
-# proves the result actually reaches the API. Run playbooks/kubecp.yml first.
 
-# The trust state first, and it is not housekeeping. Without the domain CA in
-# this host's store, every https://*.dev.lo call from here fails verification —
-# `git clone` against the cluster-state repository, and the vault's API in
-# Phase 6b — while Ansible and Flux carry on working, because neither verifies
-# what this store holds. That asymmetry is exactly why it went unnoticed.
 - name: Establish the controller's trust state
   hosts: controller
   gather_facts: true
@@ -41,9 +12,7 @@
         controller_trust_ca_path: "{{ inventory_controller_trust_ca_path }}"
         controller_trust_ca_url: "{{ inventory_controller_trust_ca_url }}"
         controller_trust_verify_url: "{{ inventory_controller_trust_verify_url }}"
-        # Every managed host, from inventory rather than from a list here, so
-        # a host added to the environment is added to known_hosts by the same
-        # change that creates it.
+
         controller_trust_hosts: >-
           {{ groups['all'] | difference(groups['controller'])
              | map('extract', hostvars, 'ansible_host') | list }}
@@ -62,17 +31,11 @@
       tags:
         - kube_cli
       vars:
-        # Version, URL and checksum for each binary, all three from
-        # inventory/group_vars/controller/artifacts.yml so that a bump is one
-        # edit and cannot leave a checksum pointing at the previous release.
-        kube_cli_controller_flux_sha256: >-
-          {{ inventory_kube_cli_controller_flux_sha256 }}
+
         kube_cli_controller_flux_url: >-
           {{ inventory_kube_cli_controller_flux_url }}
         kube_cli_controller_flux_version: >-
           {{ inventory_kube_cli_controller_flux_version }}
-        kube_cli_controller_k9s_sha256: >-
-          {{ inventory_kube_cli_controller_k9s_sha256 }}
         kube_cli_controller_k9s_url: "{{ inventory_kube_cli_controller_k9s_url }}"
         kube_cli_controller_k9s_version: >-
           {{ inventory_kube_cli_controller_k9s_version }}
@@ -80,8 +43,6 @@
           {{ inventory_kubewk_control_host }}
         kube_cli_controller_kubectl_source_path: >-
           {{ hostvars[inventory_kubewk_control_host]['inventory_rke2_node_data_dir'] }}/bin/kubectl
-        kube_cli_controller_kubeseal_sha256: >-
-          {{ inventory_kube_cli_controller_kubeseal_sha256 }}
         kube_cli_controller_kubeseal_url: >-
           {{ inventory_kube_cli_controller_kubeseal_url }}
         kube_cli_controller_kubeseal_version: >-

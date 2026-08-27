@@ -1,20 +1,59 @@
 ---
 inventory_phase1_environment_name: dev_lo
 
-# The control plane host that cluster-level questions are put to: readiness of a
-# joining worker, and the kubectl calls a kubelet is not permitted to make about
-# itself. It lives here rather than in group_vars/kubewk because
-# playbooks/kubewk.yml uses it as a play host pattern, and a pattern is resolved
-# before any group's variables are in scope.
-#
-# Deliberately a different variable from inventory_kubecp_bootstrap_host even though both
-# name kubecp01 today. One is "who started the cluster", which is a permanent
-# fact about the environment; this is "who do we ask", which any server could
-# answer. Phase 4 lost a run to two such ideas being treated as one.
 inventory_kubewk_control_host: kubecp01
 
-# The identity host cluster-level PKI requests are signed on. In group_vars/all
-# rather than in a role default for the same reason inventory_kubewk_control_host is: the
-# controller play that uses it is not in the core group and cannot see that
-# group's variables.
 inventory_cluster_services_ipa_host: core01
+
+inventory_rke2_node_registry_mirrors:
+
+  - upstream: docker.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+  - upstream: registry-1.docker.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: ghcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: gcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: quay.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: registry.k8s.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: mcr.microsoft.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: public.ecr.aws
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: icr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: cgr.dev
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: nvcr.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: registry.redhat.io
+    pattern: "^(.*)"
+    replacement: rke2/images/$1
+
+  - upstream: registry.access.redhat.com
+    pattern: "^(.*)"
+    replacement: rke2/images/$1

@@ -1,23 +1,4 @@
 ---
-# The tunnel the controller reaches 192.168.2.0/24 through, both ends in one
-# pass, as plan/SECRETS.md's rotation procedure assumes.
-#
-# Three plays, and the split is what makes validation possible at all: the
-# gateway does not exist when this end is written, so a handshake cannot be
-# proved in the same pass that writes the interface.
-#
-#   1. This end of the tunnel, configured but not yet proved.
-#   2. The gateway end, reached over 192.168.1.20 — deliberately not over the
-#      tunnel, so configuring the tunnel never depends on the tunnel.
-#   3. This end again, validation only, now that there is something to
-#      handshake with.
-#
-# Neither public key appears in inventory any more. Both are derived from the
-# private keys in ~/.config/rke2lab/env.sh by roles/controller_tunnel, and the
-# gateway play takes the controller's key from the fact that role set. Until
-# 2026-08-17 each was a literal pasted into the other host's group_vars, which
-# made rotating a private key a three-step manual procedure whose missed step
-# produces a tunnel that comes up and never carries a packet.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
@@ -54,7 +35,7 @@
           {{ inventory_controller_wireguard_private_key }}
         controller_tunnel_route_subnets: >-
           {{ inventory_controller_wireguard_route_subnets }}
-        # Nothing to handshake with yet. Play three does this.
+
         controller_tunnel_validate_enabled: false
       ansible.builtin.include_role:
         name: controller_tunnel
@@ -92,8 +73,7 @@
           {{ inventory_wireguard_gateway_peer_endpoint }}
         wireguard_gateway_peer_persistent_keepalive: >-
           {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
-        # Derived on the controller from the key in the environment, not
-        # pasted here. controller_tunnel set this fact in the play above.
+
         wireguard_gateway_peer_public_key: >-
           {{ hostvars[inventory_wireguard_gateway_controller_host]
              ['controller_tunnel_local_public_key'] }}
@@ -105,10 +85,6 @@
           tags:
             - wireguard_gateway
 
-# plan/PROXMOX.md asked for this in Phase 1 and nothing delivered it until now.
-# What it catches is a gateway that is up but not forwarding, which otherwise
-# surfaces as every later playbook timing out against an internal host with an
-# error that names the host and says nothing about the path to it.
 - name: Prove the tunnel reaches the internal network
   hosts: controller
   gather_facts: true

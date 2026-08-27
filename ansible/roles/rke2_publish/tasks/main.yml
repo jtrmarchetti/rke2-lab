@@ -17,23 +17,21 @@
     - (rke2_publish_enabled | bool)
     - not ansible_check_mode
   block:
-    # Every API call below needs an admin token, and the token is created and
-    # destroyed inside this run so nothing long-lived is left behind, and the
-    # `always` block revokes it even when a push fails halfway through.
-    #
-    # Reported as unchanged even though it plainly changes something, because
-    # the pair leaves no state behind. A role that could never report a clean
-    # second run would hide the one signal that says the set is fully
-    # published.
-    #
-    # shell, not command: the Rails snippet is fed to gitlab-rails on stdin
-    # through a heredoc, which is shell syntax with no command equivalent.
-    - name: main | Mint an admin API token # noqa: command-instead-of-shell
-      changed_when: false
+
+    - name: main | Ensure the GitLab admin token
+      ansible.builtin.include_role:
+        name: gitlab_admin_token
+        apply:
+          vars:
+            gitlab_admin_token_url: "{{ rke2_publish_gitlab_url }}"
+            gitlab_admin_token_file: "{{ rke2_publish_admin_token_file }}"
+            gitlab_admin_token_no_log: "{{ rke2_publish_no_log }}"
+
+    - name: main | Read the recorded admin token
       no_log: "{{ rke2_publish_no_log | bool }}"
-      register: _reg_rke2_publish_pat
-      ansible.builtin.shell:
-        cmd: "{{ _var_rke2_publish_pat_script }}"
+      register: _reg_rke2_publish_admin_token
+      ansible.builtin.slurp:
+        src: "{{ rke2_publish_admin_token_file }}"
 
     - name: main | Ensure the GitLab group and projects exist
       ansible.builtin.include_tasks: gitlab_project.yml
@@ -55,24 +53,6 @@
     - name: main | Publish the generic packages
       ansible.builtin.include_tasks: packages.yml
 
-    # Last, and only after both publishing steps have returned. Retiring a
-    # local copy before its destination is confirmed would delete the only
-    # copy that exists.
     - name: main | Retire the local copies of published transit artifacts
       when: (rke2_publish_apply_retention | bool)
       ansible.builtin.include_tasks: retention.yml
-
-  always:
-    - name: main | Revoke the short-lived admin API token
-      when: _reg_rke2_publish_pat is defined and _reg_rke2_publish_pat is succeeded
-      changed_when: false
-      no_log: "{{ rke2_publish_no_log | bool }}"
-      ansible.builtin.uri:
-        timeout: "{{ rke2_publish_api_timeout }}"
-        url: >-
-          {{ _var_rke2_publish_api }}/personal_access_tokens/{{
-          _reg_rke2_publish_pat['stdout'].split()[0] }}
-        method: DELETE
-        headers:
-          PRIVATE-TOKEN: "{{ _reg_rke2_publish_pat['stdout'].split()[1] }}"
-        status_code: [204, 404]

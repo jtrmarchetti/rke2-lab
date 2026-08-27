@@ -1,12 +1,14 @@
 import os
+import sys
 
 import pulumi
+import pulumi.runtime
 import pulumi_proxmoxve as proxmox
 
+from modules.pve_cleanup import CleanupSettings, clean_orphans
 from modules.provider import ProviderSettings, build_provider
 from modules.vm_definitions import build_vm_specs
 from modules.vm_factory import VmCommonSettings, create_vm
-
 
 def _get_required_value(config: pulumi.Config, key: str, env_name: str) -> str:
     config_value = config.get(key)
@@ -21,7 +23,6 @@ def _get_required_value(config: pulumi.Config, key: str, env_name: str) -> str:
         f"Missing required value for '{key}'. Set config or env var {env_name}."
     )
 
-
 def _get_bool_value(config: pulumi.Config, key: str, env_name: str, default: bool) -> bool:
     config_value = config.get_bool(key)
     if config_value is not None:
@@ -32,7 +33,6 @@ def _get_bool_value(config: pulumi.Config, key: str, env_name: str, default: boo
         return default
 
     return env_value.lower() in {"1", "true", "yes", "on"}
-
 
 proxmox_cfg = pulumi.Config("proxmox")
 deployment_cfg = pulumi.Config("deployment")
@@ -47,7 +47,7 @@ provider_settings = ProviderSettings(
         "PROXMOX_VE_INSECURE",
         True,
     ),
-    node_name=proxmox_cfg.get("nodeName") or "proxmox-kube",
+    node_name=proxmox_cfg.get("nodeName") or "proxmox-rke2",
 )
 
 phase_limit = deployment_cfg.get_int("phaseLimit") or 2
@@ -68,8 +68,8 @@ if external_bridge == internal_bridge and not allow_shared_bridge:
 common_settings = VmCommonSettings(
     template_node_name=deployment_cfg.get("templateNodeName") or provider_settings.node_name,
     template_vm_id=template_vm_id,
-    datastore_id=deployment_cfg.get("datastoreId") or "local-lvm",
-    cloud_init_datastore_id=deployment_cfg.get("cloudInitDatastoreId") or "local-lvm",
+    datastore_id=deployment_cfg.get("datastoreId") or "dev-lo-data",
+    cloud_init_datastore_id=deployment_cfg.get("cloudInitDatastoreId") or "dev-lo-data",
     vm_username=deployment_cfg.get("vmUsername") or "devops",
     vm_ssh_public_key=_get_required_value(
         deployment_cfg,
@@ -81,7 +81,7 @@ common_settings = VmCommonSettings(
     disk_file_format=deployment_cfg.get("diskFileFormat"),
     disk_cache=deployment_cfg.get("diskCache") or "writeback",
 )
-image_datastore_id = deployment_cfg.get("imageDatastoreId") or "local"
+image_datastore_id = deployment_cfg.get("imageDatastoreId") or "dev-lo-directory"
 
 provider = build_provider(provider_settings)
 vm_specs = build_vm_specs(external_bridge=external_bridge, internal_bridge=internal_bridge)
@@ -107,26 +107,11 @@ if manage_internal_bridge:
     depends_on_resources.append(internal_bridge_resource)
 
 if common_settings.template_vm_id is None:
-    # Pinned to a dated release directory, not to noble/current/. `current`
-    # is a moving target: two rebuilds a fortnight apart produce two different
-    # base images from identical source, which is the one thing every other
-    # artifact in this environment is pinned to prevent. The checksum below
-    # belongs to this directory and only to this one, so the two move together
-    # or the download fails.
-    #
-    # Upgrading is: pick a directory from
-    # https://cloud-images.ubuntu.com/releases/noble/, take the amd64 line out
-    # of its SHA256SUMS, and change both values here.
     image_url = deployment_cfg.get("baseImageUrl") or (
         "https://cloud-images.ubuntu.com/releases/noble/release-20260814/"
         "ubuntu-24.04-server-cloudimg-amd64.img"
     )
     image_name = deployment_cfg.get("baseImageFileName") or "noble-server-cloudimg-amd64.qcow2"
-    # The integrity control, not a note. Proxmox verifies the download against
-    # it and refuses the file on a mismatch, so a truncated or tampered image
-    # never becomes the disk every VM in the lab is imported from. Overridable
-    # alongside baseImageUrl, because a custom URL with this checksum could
-    # never succeed.
     image_checksum = deployment_cfg.get("baseImageChecksum") or (
         "6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733"
     )
@@ -161,6 +146,23 @@ else:
 
 if not deployment_set:
     raise ValueError("No VMs selected for deployment. Check deployment config values.")
+
+if not pulumi.runtime.is_dry_run():
+    cleanup_settings = CleanupSettings(
+        endpoint=provider_settings.endpoint,
+        username=provider_settings.username,
+        password=provider_settings.password,
+        node_name=provider_settings.node_name,
+        datastore_ids=(common_settings.datastore_id,),
+        insecure=provider_settings.insecure,
+        fallback_password_file=os.getenv("PROXMOX_HOST_PASSWORD_FILE")
+        or os.path.expanduser("~/.proxmoxpass"),
+    )
+    try:
+        for _line in clean_orphans(cleanup_settings, apply=True):
+            print(_line, file=sys.stderr)
+    except RuntimeError as exc:
+        print(f"[pve_cleanup] preflight skipped: {exc}", file=sys.stderr)
 
 created = {}
 for spec in deployment_set:

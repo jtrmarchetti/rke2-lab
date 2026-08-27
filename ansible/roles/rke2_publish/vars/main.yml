@@ -1,22 +1,15 @@
 ---
 _var_rke2_publish_api: "{{ rke2_publish_gitlab_url }}/api/v4"
 
-# Everything pushed by this role lives under one project path, so the containerd
-# rewrite rule in registries.yaml is a prefix and nothing more. Keep this equal
-# to rke2_node_registry_rewrites or a node will ask for a path nothing pushed.
 _var_rke2_publish_registry_prefix: >-
   {{ rke2_publish_registry_host }}/{{ rke2_publish_group }}/{{
   rke2_publish_images_project }}
 
-# Resolved lazily, so it is only valid after main.yml has minted the token.
-# Every task that uses it carries no_log, because it renders the token.
+_var_rke2_publish_admin_token: >-
+  {{ _reg_rke2_publish_admin_token['content'] | b64decode | from_yaml }}
 _var_rke2_publish_headers:
-  PRIVATE-TOKEN: "{{ _reg_rke2_publish_pat['stdout'].split()[1] }}"
+  PRIVATE-TOKEN: "{{ _var_rke2_publish_admin_token['token'] }}"
 
-# Charts live beside the images, in a project of their own, and are addressed
-# as an OCI repository rather than through a rewrite: nothing resolves a chart
-# by its upstream name the way containerd resolves an image, so a HelmRepository
-# in cluster-state points straight at this prefix.
 _var_rke2_publish_charts_prefix: >-
   {{ rke2_publish_registry_host }}/{{ rke2_publish_group }}/{{
   rke2_publish_charts_project }}
@@ -32,14 +25,10 @@ _var_rke2_publish_charts_path: >-
   {{ (rke2_publish_group ~ '/' ~ rke2_publish_charts_project)
      | replace('/', '%2F') }}
 
-# True when inventory supplied a credential, in which case this role mints
-# nothing and records nothing.
 _var_rke2_publish_token_override: >-
   {{ (rke2_publish_deploy_token_username | length) > 0
      and (rke2_publish_deploy_token_value | length) > 0 }}
 
-# The credential actually in force, whichever of the three sources produced it.
-# Resolved lazily, so it is only valid after deploy_token.yml has run.
 _var_rke2_publish_deploy_username: >-
   {{ rke2_publish_deploy_token_username
      if (_var_rke2_publish_token_override | bool)
@@ -59,109 +48,52 @@ _var_rke2_publish_deploy_token: >-
            else (_reg_rke2_publish_token_recorded['content']
                  | b64decode | from_yaml)['token']) }}
 
-# The existing group deploy tokens carrying the configured name. More than one
-# is possible if a previous run was interrupted between delete and create.
 _var_rke2_publish_token_match: >-
   {{ _reg_rke2_publish_token_list['json']
      | selectattr('name', 'equalto', rke2_publish_deploy_token_name) | list }}
 
-# The registry API paginates at 20 by default and this cluster publishes 27
-# repositories, so an unpaged read would report most of them missing and push
-# them again on every run.
 _var_rke2_publish_page_size: 100
 
-# Every tag already in the images project, as the fully qualified reference a
-# push would produce. `location` rather than `path` because location is exactly
-# the string docker_image_push is given, so the comparison needs no assembly.
 _var_rke2_publish_existing_refs: >-
   {{ _reg_rke2_publish_existing['json'] | map(attribute='tags') | flatten
      | map(attribute='location') | list }}
 
-# Every chart tag the registry already holds, as the reference a push would
-# produce. Same shape and same reasoning as _var_rke2_publish_existing_refs.
 _var_rke2_publish_chart_refs: >-
   {{ _reg_rke2_publish_charts_existing['json'] | map(attribute='tags') | flatten
      | map(attribute='location') | list }}
 
-# The images this role mirrors registry to registry, taken from the artifact
-# manifest rather than from a second list in inventory. The manifest is already
-# where an artifact's identity and pinned digest live, and a mirrored image has
-# nothing else to say about itself — no tarball, no staging directory, no local
-# path at all.
 _var_rke2_publish_manifest_mirrors: >-
   {{ rke2_publish_manifest
      | selectattr('type', 'defined')
      | selectattr('type', 'equalto', 'mirror') | list }}
 
-# Source and target of the copy currently in flight. Resolved lazily against
-# mirror_copy.yml's loop variable. The source drops the tag and addresses the
-# digest; the target keeps the tag and drops the upstream registry host, which
-# is the same transformation the containerd rewrite performs.
 _var_rke2_publish_mirror_source: >-
-  {{ (_item_rke2_publish_mirror['image'] | regex_replace(':[^:/]+$', ''))
-     ~ '@' ~ _item_rke2_publish_mirror['digest'] }}
+  {{ _item_rke2_publish_mirror['image'] }}
 _var_rke2_publish_mirror_target: >-
   {{ _item_rke2_publish_mirror['image']
      | regex_replace('^[^/]+/(.*)$', _var_rke2_publish_registry_prefix ~ '/\1') }}
 
-# Where the chart tarball currently being pushed was staged. Resolved lazily
-# against chart_push.yml's loop variable.
 _var_rke2_publish_chart_file: >-
   {{ rke2_publish_artifact_root }}/{{ _item_rke2_publish_chart['dest'] }}
 
-# File names already published under the target package version. Empty when the
-# version does not exist yet, which is the first run.
 _var_rke2_publish_published_files: >-
   {{ _reg_rke2_publish_package_files['results'] | default([])
      | rejectattr('skipped', 'defined')
      | map(attribute='json') | flatten
      | map(attribute='file_name') | list }}
 
-# The GitLab reference for the image currently being pushed. Resolved lazily
-# against image_push.yml's loop variable.
 _var_rke2_publish_image_target: >-
   {{ _item_rke2_publish_image
      | regex_replace('^[^/]+/(.*)$', _var_rke2_publish_registry_prefix ~ '/\1') }}
 
-# The same image under the name the local runtime knows it by. Docker drops the
-# `docker.io/` prefix and keeps every other registry host, so this is not the
-# same transformation as stripping the host to build the target path.
 _var_rke2_publish_image_local: >-
   {{ _item_rke2_publish_image | regex_replace('^docker\.io/', '') }}
 
-# Creating a personal access token is the one operation with no REST equivalent
-# — an API token is what the REST API needs in the first place. This is the
-# snippet GitLab documents for exactly this bootstrap. The token is scoped to
-# `api`, expires in a day, and is revoked in this role's `always` block, so it
-# does not outlive the run even when the run fails.
-_var_rke2_publish_pat_script: |
-  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
-  u = User.find_by_username("root")
-  t = u.personal_access_tokens.create!(
-    scopes: ["api"],
-    name: "rke2-publish-#{Time.now.to_i}",
-    expires_at: 1.day.from_now)
-  puts "#{t.id} #{t.token}"
-  RUBY
-
-# --- Retention (Phase 6) -------------------------------------------------
-#
-# Must match artifact_stage's suffixes: this role removes the sidecar that
-# role published, and writes the marker that role reads back.
-# Where the current set's tarball lives. Defaults to the role's artifact
-# directory, so every RKE2 entry is unchanged; an entry may override it with
-# its own artifact_dir, which is how the Flux tarballs are read from
-# artifacts/flux while the RKE2 ones stay in artifacts/rke2.
 _var_rke2_publish_set_dir: >-
   {{ _item_rke2_publish_set['artifact_dir'] | default(rke2_publish_artifact_dir) }}
 
-_var_rke2_publish_checksum_suffix: .sha256
 _var_rke2_publish_published_suffix: .published
 
-# Every local filename this role puts into GitLab, from its own inputs rather
-# than from a result variable. Reaching the end of images.yml and packages.yml
-# means each of these was found in, or uploaded to, the destination — both
-# files read GitLab back before deciding what to send.
 _var_rke2_publish_published_basenames: >-
   {{ (rke2_publish_image_sets | map(attribute='tarball') | list)
      + (rke2_publish_extra_images | map(attribute='tarball') | list)
@@ -169,9 +101,6 @@ _var_rke2_publish_published_basenames: >-
         | map('basename') | list)
      + rke2_publish_package_files }}
 
-# Transit manifest entries whose file this role has published. Matched on the
-# basename of dest, because the manifest addresses artifacts by path under the
-# document root and this role addresses them by filename.
 _var_rke2_publish_confirmed_names: >-
   {{ rke2_publish_manifest
      | rejectattr('type', 'equalto', 'mirror')

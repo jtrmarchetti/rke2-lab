@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: garage-ready
+  namespace: flux-system
+data:
+  purpose: gate for the observability Kustomization

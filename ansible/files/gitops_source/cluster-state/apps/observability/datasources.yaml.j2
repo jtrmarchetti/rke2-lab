@@ -1,16 +1,4 @@
 {{ ansible_managed | comment }}
-# The two datasources the chart does not already provide.
-#
-# Prometheus is deliberately absent: kube-prometheus-stack provisions it
-# itself, as the organisation's default, and it knows its own service address.
-# Adding a second one here marked `isDefault` does not merge or override — it
-# makes Grafana refuse to start, with "Only one datasource per organization can
-# be marked as default", and Grafana refusing to start fails the whole Helm
-# release. Declaring only what is missing is both smaller and correct.
-#
-# The sidecar watches for this label in every namespace and writes what it
-# finds into Grafana's provisioning directory, so these survive Grafana being
-# deleted and recreated, and arrive by commit rather than by clicking.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -25,17 +13,9 @@ data:
     datasources:
       - name: Loki
         type: loki
-        # Pinned rather than generated. A dashboard in Git has to name its
-        # datasource by uid, and an unpinned one is assigned at first
-        # provisioning — so every dashboard here would bind to a value that
-        # changes if Grafana is rebuilt from empty.
         uid: loki
         access: proxy
         url: http://loki.observability.svc.cluster.local:3100
-      # 3200, not 3100. Tempo's HTTP API does not share Loki's port, and a
-      # datasource pointed at the wrong one reports "no data" rather than a
-      # connection error, which sends you looking at the traces instead of at
-      # the URL.
       - name: Tempo
         type: tempo
         uid: tempo

@@ -1,13 +1,3 @@
-{#
-  The controller's end of the point-to-point tunnel to the internal network's
-  gateway.
-
-  Both keys below are derived by roles/controller_tunnel/tasks/keys.yml from
-  the private keys in the environment, rather than pasted into inventory. The
-  route in the PostUp lines is deliberate redundancy: wg-quick already routes
-  everything in AllowedIPs, and this is the one path the whole environment is
-  reached through.
-#}
 [Interface]
 Address = {{ controller_tunnel_address }}
 ListenPort = {{ controller_tunnel_listen_port }}

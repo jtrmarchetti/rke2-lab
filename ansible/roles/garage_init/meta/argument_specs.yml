@@ -32,10 +32,17 @@ argument_specs:
             credentials out of OpenBao.
       garage_init_ready_retries:
         type: int
-        default: 20
+        default: 30
         description:
           - Attempts at that wait. Needed because `kubectl wait` fails at once,
             rather than after the timeout, when the pod does not yet exist.
+          - Together with the delay this is the whole cold-build window, which
+            has to cover Flux creating the `apps` tree before the pod exists.
+      garage_init_ready_delay:
+        type: int
+        default: 10
+        description:
+          - Seconds between attempts at that wait.
       garage_init_zone:
         type: str
         default: dev-lo
@@ -57,6 +64,17 @@ argument_specs:
         type: str
         default: cluster
         description: Name of the S3 access key.
+      garage_init_marker_name:
+        type: str
+        default: garage-buckets-ready
+        description:
+          - ConfigMap the role publishes in the Garage namespace once the
+            layout, buckets, and grants are in place.
+          - Flux's `garage-ready` Kustomization health-checks for it and the
+            `observability` Kustomization depends on that gate, so the
+            observability stack holds until the store can actually accept
+            objects. The name is hardcoded in the garage-ready template;
+            keep the two in sync.
       garage_init_env_file:
         type: str
         description: File the one-time secret key is recorded in.

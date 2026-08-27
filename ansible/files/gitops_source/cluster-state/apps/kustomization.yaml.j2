@@ -3,17 +3,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  # Phase 6b. The object store. First workload in this layer, and deliberately
-  # here rather than in infrastructure: nothing in the infrastructure layer
-  # depends on it.
   - garage
-  # Phase 6b. The identity provider, in FIPS mode.
   - keycloak
-  # Phase 6b. The authenticating proxy in front of the Longhorn UI, which has
-  # no authentication of its own. In `apps` rather than beside Longhorn in the
-  # infrastructure layer because it reads its client secret through an
-  # ExternalSecret, and a workload cannot depend on a controller its own
-  # kustomization is still installing.
   - longhorn-auth
-  # Phase 6c. Metrics, logs and traces, sized before they were deployed.
-  - observability

@@ -1,10 +1,5 @@
 ---
-# Retags one upstream image into the GitLab registry and pushes it.
-#
-# The image keeps its upstream name locally as well, because that is the name
-# containerd asks for on the nodes: the mirror rewrite happens inside
-# containerd, and `crictl image ls` on a node shows docker.io/rancher/... even
-# though nothing was fetched from Docker Hub.
+
 - name: image_push | Tag the image into the GitLab registry
   community.docker.docker_image_tag:
     name: "{{ _var_rke2_publish_image_local }}"

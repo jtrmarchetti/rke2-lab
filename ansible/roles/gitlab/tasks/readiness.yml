@@ -1,10 +1,4 @@
 ---
-# Readiness is not liveness. A container in state Up and a green
-# `gitlab-ctl status` both report what the process manager last intended, not
-# that GitLab serves. The phases run back to back, so a false ready here
-# surfaces as an unexplained failure in Phase 4. Each check below is a
-# transaction a real consumer performs, ordered cheapest first so a failure
-# names the lowest broken layer.
 
 - name: readiness | Wait for the HTTPS listener to accept connections
   ansible.builtin.wait_for:
@@ -12,13 +6,6 @@
     port: "{{ gitlab_https_port | int }}"
     timeout: "{{ gitlab_install_timeout | int }}"
 
-# The first reconfigure builds the application from nothing and takes many
-# minutes, during which nginx answers 502. Polling the readiness endpoint is
-# what distinguishes "still building" from "built and broken".
-#
-# Validated against the FreeIPA CA rather than with validate_certs: false. The
-# certificate is the thing this phase set out to prove, and skipping validation
-# would hide exactly the failure worth catching.
 - name: readiness | Wait for GitLab to report ready
   changed_when: false
   register: _reg_gitlab_readiness
@@ -32,9 +19,6 @@
     status_code:
       - 200
 
-# 401 is the correct healthy answer: the v2 API exists and is demanding a
-# token. A 200 would mean an unauthenticated registry, and a connection error
-# means the registry vhost or its certificate is wrong.
 - name: readiness | Verify the container registry answers its API
   when: (gitlab_registry_enabled | bool)
   changed_when: false

@@ -1,10 +1,13 @@
 # Cluster Components
 
 This file records **which component was chosen and why**. How each one is
-operated — health checks, failure modes, URLs, rotation — is the sysadmin
-guide's, in `docs/source/components/`. Adding, removing or replacing anything
-in this file obliges a matching change there; a component chosen and never
-documented for whoever has to run it is half a decision.
+operated — health checks, failure modes, URLs, rotation — is the
+documentation site's, in `docs/source/components/` and the sysadmin section.
+Adding, removing or replacing anything in this file obliges a matching change
+there, and a matching entry in the developer section's
+`docs/source/developer/infrastructure-design` when the decision itself is the
+new fact; a component chosen and never documented for whoever has to run it is
+half a decision.
 
 ## Node Managed
 

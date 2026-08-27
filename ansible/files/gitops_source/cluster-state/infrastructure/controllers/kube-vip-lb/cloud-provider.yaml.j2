@@ -1,21 +1,4 @@
 {{ ansible_managed | comment }}
-# The controller that hands out LoadBalancer addresses, and the pool it hands
-# them out from.
-#
-# The range is 192.168.2.40-52, thirteen addresses carved out of the internal
-# subnet below the node addresses and above nothing else: .4 is FreeIPA, .20 is
-# the API VIP, .21-.23 and .31-.33 are the nodes, .99 is repo01. Nothing else
-# on this network hands out addresses — there is no DHCP here — so the pool is
-# safe by construction rather than by reservation.
-#
-# Two addresses are spoken for by name, and both are requested explicitly by the
-# services that use them, because both are things something outside the cluster
-# is configured to reach:
-#
-#   192.168.2.40  the cluster's DNS, which FreeIPA forwards k8s.dev.lo to
-#   192.168.2.41  Traefik, which every ingress hostname resolves to
-#
-# The rest are allocated in order to whatever asks.
 ---
 apiVersion: v1
 kind: ConfigMap

@@ -1,23 +1,4 @@
 {{ ansible_managed | comment }}
-# Loki, Tempo, and Alloy — logs, traces, and the one agent that ships both.
-#
-# There is no separate OpenTelemetry collector, and that is a decision rather
-# than an omission: Grafana Alloy *is* an OpenTelemetry collector distribution.
-# Running both would mean two collectors with overlapping receivers and no rule
-# about which owns a pipeline, which is the kind of ambiguity that only shows
-# up when telemetry goes missing.
-#
-# Loki and Tempo store objects in Garage rather than on PVCs. Object storage is
-# Loki's supported shape — filesystem mode is single-writer and steers every
-# non-trivial deployment back to S3 — and the durability is identical either
-# way, because Garage is itself one node on a two-replica Longhorn volume. The
-# extra hop risks log *ingestion* during a restart, which is not what the
-# redundancy is for.
-#
-# Their S3 credentials come out of OpenBao through External Secrets, which is
-# the first workload in this cluster to use the secrets model end to end: the
-# key was created by Garage, stored in the vault by Ansible, and arrives here
-# as a Secret neither Git nor a human ever held.
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -49,8 +30,8 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
-  # The credentials are a prerequisite, not a race: without them Loki starts,
-  # fails every write to Garage, and reports itself ready.
+  driftDetection:
+    mode: warn
   dependsOn:
     - name: kube-prometheus-stack
   chart:
@@ -68,18 +49,10 @@ spec:
     remediation:
       retries: 2
   values:
-    # Single binary. The scalable and distributed modes exist to spread read
-    # and write paths across nodes, and this cluster has three workers holding
-    # everything else as well.
     deploymentMode: SingleBinary
     loki:
-      # Pinned rather than left to the chart. Chart 7.3.0 declares appVersion
-      # 3.6.12 and defaults its image tag to 3.6.11, so the version the
-      # manifest mirrored and the version the chart asked for were different by
-      # one patch — which arrives as a 404 from a mirror that is working
-      # perfectly.
       image:
-        tag: 3.6.12
+        tag: 3.7.6
       auth_enabled: false
       commonConfig:
         replication_factor: 1
@@ -100,13 +73,10 @@ spec:
         s3:
           endpoint: http://garage.garage.svc.cluster.local:3900
           region: dev-lo
-          # Garage addresses buckets by path, not by a name in the host part.
           s3ForcePathStyle: true
           insecure: true
       limits_config:
         retention_period: 168h
-        # A lab that logs everything at once is a lab whose logging stack is
-        # the thing consuming it. These bound one tenant, which is all there is.
         ingestion_rate_mb: 8
         ingestion_burst_size_mb: 16
       compactor:
@@ -138,8 +108,6 @@ spec:
         enabled: true
         storageClass: longhorn
         size: 5Gi
-    # Everything the single-binary mode does not use. Left on, each of these is
-    # another pod holding memory this cluster does not have.
     read:
       replicas: 0
     write:
@@ -156,23 +124,11 @@ spec:
       enabled: false
     gateway:
       enabled: false
-    # The rules sidecar watches ConfigMaps for Loki alerting rules, which this
-    # cluster does not define — alerting lives in Prometheus. Off, because on
-    # it pulls docker.io/kiwigrid/k8s-sidecar, a namespace no rewrite covers,
-    # and adding one costs a rolling restart of six nodes for a component with
-    # nothing to do.
     sidecar:
       rules:
         enabled: false
 ---
-# Tempo, running. It did not start when first declared, and the fault was the
-# one Keycloak had already found: the binary requires the x86-64-v2
-# microarchitecture and the VMs presented Proxmox's default kvm64, which
-# predates it. Fixed in the Pulumi VM factory — `cpu_type: x86-64-v2-AES` on
-# VmSpec — and applied with a power cycle of the estate on 2026-08-17.
-#
-# Worth keeping in mind when a new component will not start at all and logs one
-# line about the processor: this cluster has hit that twice.
+
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -181,6 +137,8 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
+  driftDetection:
+    mode: warn
   dependsOn:
     - name: kube-prometheus-stack
   chart:
@@ -199,10 +157,9 @@ spec:
       retries: 2
   values:
     tempo:
-      # The credentials go here, under `tempo`, and not at the top level. The
-      # chart accepts a top-level extraEnv silently and renders a pod with no
-      # environment at all, so Tempo starts, cannot authenticate to the object
-      # store, and exits 2 having logged one line saying it started.
+      # The chart defaults its image tag to its own appVersion (2.9.0); name
+      # the image explicitly so the data plane and the mirror stay in step.
+      tag: "2.10.8"
       extraEnv:
         - name: AWS_ACCESS_KEY_ID
           valueFrom:
@@ -214,13 +171,7 @@ spec:
             secretKeyRef:
               name: garage-s3
               key: secret_key
-      # The chart defaults this to 1024 — a one-gigabyte ballast allocated
-      # inside a 512Mi limit, which is a pod that cannot start on arithmetic
-      # alone. A ballast is a garbage-collection tuning trick for a service
-      # under sustained load; this one traces a lab.
       memBallastSizeMbs: 64
-      # Nothing here can reach Grafana's analytics endpoint, and an air-gapped
-      # cluster should not be trying.
       reportingEnabled: false
       storage:
         trace:
@@ -262,12 +213,14 @@ metadata:
 spec:
   interval: 30m
   timeout: 15m
+  driftDetection:
+    mode: warn
   dependsOn:
     - name: loki
   chart:
     spec:
       chart: alloy
-      version: 1.11.1
+      version: 1.12.0
       sourceRef:
         kind: HelmRepository
         name: gitlab-charts
@@ -284,12 +237,6 @@ spec:
       tolerations:
         - operator: Exists
     alloy:
-      # `alloy.extraPorts`, not `controller.extraPorts` — the chart takes it
-      # here and ignores it there. Without it the OTLP receivers configured
-      # below listen on every pod and are reachable from nowhere: the Service
-      # carries Alloy's UI port alone, so traces could only be delivered by
-      # talking to Tempo directly, which is the arrangement one collector was
-      # meant to avoid.
       extraPorts:
         - name: otlp-grpc
           port: 4317
@@ -299,8 +246,6 @@ spec:
           port: 4318
           targetPort: 4318
           protocol: TCP
-      # Alloy reads every container's log file from the node, which is a root
-      # directory, and it needs to be able to.
       mounts:
         varlog: true
       resources:

@@ -1,0 +1,17 @@
+---
+flux_unstall_enabled: true
+
+flux_unstall_namespace: observability
+
+flux_unstall_kubectl: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+flux_unstall_flux: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+flux_unstall_settle: 8
+flux_unstall_resume_timeout: 10m
+flux_unstall_retries: 10
+flux_unstall_delay: 30

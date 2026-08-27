@@ -120,7 +120,7 @@ to do against a live cluster. Measure one guest, once.
     - ip: 192.168.1.16
     - cpu: 12
     - ram: 64 GB
-  
+
 ## Credentials
 ```
 username: root

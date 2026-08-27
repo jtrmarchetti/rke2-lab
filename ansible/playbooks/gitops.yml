@@ -1,43 +1,31 @@
 ---
-# The GitOps source of truth.
-#
-# Everything the cluster runs is declared in `ansible/files/gitops_source/
-# cluster-state` and rendered from there into GitLab. Before this playbook
-# existed, that tree lived only in GitLab — which meant the one claim the whole
-# lab is built on, that the internal environment can be rebuilt from this
-# repository alone, was false for the layer that describes what the cluster
-# actually does. `repo01` is one of the things a rebuild rebuilds, and GitLab
-# goes with it.
-#
-# Two plays, and both run on the controller, because that is where the source
-# tree, the secrets, the sealing key and kubeseal already are. Nothing here
-# touches a cluster node.
-#
-# Ordering against the rest of the lab: this runs after `gitlab.yml`, which
-# creates the GitLab it pushes into, and after `cluster_services.yml`'s publish
-# play, which creates the deploy token the rendered tree seals. It runs before
-# anything expects a workload to exist, because Flux is what creates them.
-#
-# See plan/PHASE6_IMPLEMENTATION.md.
-
-# No preflight secret list, and that is the change 2026-08-16 made.
-#
-# This playbook used to require six runtime secrets from env.sh, because it
-# sealed all six into the repository. They are in OpenBao now, written by
-# cluster_init.yml, and this playbook needs none of them: what it still seals
-# is the registry credential it reads off the GitLab host, the CA key pair
-# ipa_sub_ca wrote to disk, and the unseal keys.
-#
-# OPENBAO_UNSEAL_KEYS is deliberately not required either. It is written by
-# openbao_init, against a vault Flux deploys from the tree this playbook
-# pushes, so on a cold rebuild it does not exist yet and requiring it would
-# make the first pass impossible. See gitops_source/vars/main.yml.
 
 - name: Render the cluster state and push it into GitLab
   hosts: controller
   gather_facts: true
   become: false
   tasks:
+
+    - name: gitops | Re-read the OpenBao unseal keys from the recorded file
+      vars:
+        _gitops_env_sh_text: >-
+          {{ lookup('file', ansible_facts['env']['HOME'] + '/.config/rke2lab/env.sh')
+             | default('', true) }}
+
+        _gitops_unseal_keys_from_file: >-
+          {{ _gitops_env_sh_text
+             | regex_search('^export OPENBAO_UNSEAL_KEYS=.*$', multiline=True)
+             | default('', true)
+             | replace('export OPENBAO_UNSEAL_KEYS=', '')
+             | replace('"', '')
+             | replace("'", '')
+             | trim }}
+      ansible.builtin.set_fact:
+        gitops_openbao_unseal_keys: >-
+          {{ _gitops_unseal_keys_from_file
+             if _gitops_unseal_keys_from_file | length > 0
+             else lookup('env', 'OPENBAO_UNSEAL_KEYS') }}
+
     - name: gitops | Include the GitOps source role
       tags:
         - gitops_source
@@ -58,24 +46,16 @@
           {{ inventory_gitops_source_ingress_address }}
         gitops_source_lb_range: "{{ inventory_gitops_source_lb_range }}"
         gitops_source_registry_host: "{{ inventory_gitops_source_registry_host }}"
-        # The GitLab host, named from inventory here rather than derived inside
-        # the role: a role that reads `groups[...]` cannot be run against a
-        # second environment without editing the role.
+
         gitops_source_gitlab_host: "{{ groups['repo'] | first }}"
         gitops_source_openbao_unseal_keys: >-
-          {{ lookup('env', 'OPENBAO_UNSEAL_KEYS') }}
+          {{ gitops_openbao_unseal_keys }}
       ansible.builtin.include_role:
         name: gitops_source
         apply:
           tags:
             - gitops_source
 
-# Separate play rather than a second role in the one above, because it is a
-# separate question with a separate answer. The play above owns the repository;
-# this one owns the cluster's attachment to it. On a rebuild the first runs
-# before there is a cluster at all — the tree has to exist before Flux can be
-# pointed at it — and on every run after that, only the first has anything to
-# do.
 - name: Attach the cluster to the cluster-state repository
   hosts: controller
   gather_facts: true

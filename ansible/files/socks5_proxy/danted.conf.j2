@@ -2,22 +2,6 @@ logoutput: syslog
 
 internal: {{ socks5_proxy_listen_address }} port = {{ socks5_proxy_listen_port }}
 
-# One external address per interface the proxy may source connections from,
-# selected per destination by the routing table.
-#
-# A single external interface is what dante documents first and it is wrong for
-# this host. repo01 is dual-homed, and with `external: eth0` every proxied
-# connection left with source 192.168.1.20 — including connections to
-# 192.168.2.0/24, which route out eth1. The artifact host allows reads from the
-# internal subnet and the tunnel only, so a browser reaching
-# http://192.168.2.99/ through this proxy was answered 403 while the same URL
-# fetched over the tunnel returned 200. Any internal service that filters on
-# source address would have failed the same way.
-#
-# external.rotation route makes dante consult the routing table for each
-# destination and bind the address of the interface that carries it, so
-# internal destinations are sourced from 192.168.2.99 and everything else from
-# 192.168.1.20.
 {% for _item_socks5_proxy_interface in socks5_proxy_external_interfaces %}
 external: {{ _item_socks5_proxy_interface }}
 {% endfor %}

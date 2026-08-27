@@ -1,7 +1,4 @@
 ---
-# The application realm's shape: administration is a set of roles on the
-# `realm-management` client, which Keycloak creates with every realm but
-# master.
 
 - name: client_roles | Read the realm-management client
   changed_when: false
@@ -67,10 +64,6 @@
     headers: "{{ _var_keycloak_realm_admins_headers }}"
     ca_path: "{{ keycloak_realm_admins_ca_file }}"
 
-# Additive, and one call for whatever is missing. A group in this realm may
-# legitimately hold roles this repository does not manage, and a mapping
-# asserted as an exact set would silently revoke them — the same rule
-# keycloak_clients follows for the application groups.
 - name: client_roles | Grant the group the roles it is missing
   when: (_var_keycloak_realm_admins_missing | length) > 0
   changed_when: true
@@ -88,10 +81,6 @@
     body: "{{ _var_keycloak_realm_admins_missing }}"
     status_code: [204]
 
-# Read back rather than trusted, because the failure this catches presents
-# a long way from here: a member of the group signs in to the admin console
-# and is told they have no access to the realm, which reads as a broken
-# login rather than as an absent role mapping.
 - name: client_roles | Read the group's roles back
   changed_when: false
   no_log: "{{ keycloak_realm_admins_no_log | bool }}"

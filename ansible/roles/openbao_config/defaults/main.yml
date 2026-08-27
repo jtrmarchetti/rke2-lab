@@ -1,37 +1,22 @@
 ---
 openbao_config_enabled: true
 
-# The vault's own API, through the ingress the cluster issued a certificate
-# for. Using it rather than exec'ing into the pod means this role exercises the
-# same path every other client uses — DNS delegation, ingress address, and
-# certificate — instead of bypassing all three.
 openbao_config_url: null
-# The domain CA, so the certificate the cluster's own intermediate issued is
-# verified rather than trusted blindly.
+
 openbao_config_ca_file: /etc/ssl/certs/ca-certificates.crt
 
-# The API server address as the vault will reach it, from inside the cluster.
 openbao_config_kubernetes_host: https://kubernetes.default.svc:443
 
-# Used only to read the cluster's published CA ConfigMap.
 openbao_config_kubectl: >-
   {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
   --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
 
-# Secret sourced from ~/.config/rke2lab/env.sh, written there by openbao_init.
-# openbao_config_root_token:
-
-# Where runtime secrets live. KV version 2, so a secret has versions and a
-# rollback rather than just a value.
 openbao_config_kv_path: kv
 
-# The consumer. External Secrets Operator authenticates as this ServiceAccount
-# in this namespace, and the role is bound to exactly that pair.
 openbao_config_namespace: external-secrets
 openbao_config_service_account: external-secrets
 openbao_config_role_name: external-secrets
 openbao_config_policy_name: external-secrets-read
 openbao_config_token_ttl: 24h
 
-# Set false only when debugging. It prints the root token.
 openbao_config_no_log: true

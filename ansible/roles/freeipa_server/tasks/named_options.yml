@@ -1,25 +1,4 @@
 ---
-# BIND options this deployment sets for itself, written to the file IPA leaves
-# alone across upgrades.
-#
-# The setting that matters is DNSSEC validation, and turning it off is a real
-# decision rather than a shortcut. Phase 6b delegates k8s.dev.lo to the
-# cluster's own DNS, and that delegation cannot validate: dev.lo lives under a
-# TLD the public root says does not exist, so any answer this server obtains by
-# *resolution* rather than from its own zone data fails to build a chain of
-# trust. Its own authoritative data is unaffected, which is exactly why the
-# problem stayed invisible until a subdomain was delegated away.
-#
-# BIND 9.11 — what AlmaLinux 8, and therefore this FreeIPA image, ships — has no
-# narrow escape. `validate-except` arrived in 9.13, and 9.11's negative trust
-# anchors are `rndc nta` only: dynamic, and expiring after a week. So the choice
-# is between validating nothing and delegating nothing.
-#
-# What it costs: this resolver no longer validates the upstream names it
-# forwards. In a lab whose only route off the internal network is repo01's
-# proxy, and whose upstream is a lab gateway, that is close to theoretical —
-# but it is a real reduction and it is recorded here rather than left to be
-# discovered in the config.
 
 - name: named_options | Render the BIND options customization
   register: _reg_freeipa_server_named_options
@@ -30,9 +9,6 @@
     group: "{{ freeipa_server_named_config_group }}"
     mode: "0640"
 
-# Not a handler. FreeIPA's named runs inside the container this role manages,
-# so the restart is a docker exec rather than a service on this host, and the
-# DNS work that follows in this role depends on it having happened already.
 - name: named_options | Restart the domain name service
   when: _reg_freeipa_server_named_options is changed
   changed_when: true

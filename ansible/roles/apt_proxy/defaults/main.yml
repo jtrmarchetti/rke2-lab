@@ -1,22 +1,14 @@
 ---
 apt_proxy_enabled: true
 
-# Bind to the internal NIC and the controller tunnel only. Leaving this empty
-# falls back to the packaged default, which listens on every interface
-# including the external one.
 apt_proxy_bind_addresses: null
 apt_proxy_bind_port: 3142
 
-# The cache lives on /data1 rather than the 32 GB OS disk.
 apt_proxy_cache_dir: /data1/apt-cacher-ng
 apt_proxy_log_dir: /var/log/apt-cacher-ng
 
-# Caching-proxy behavior. These bound how much disk the on-demand cache can hold;
-# no mirroring or precaching is configured anywhere in this role.
 apt_proxy_expire_days: 7
 apt_proxy_keep_extra_versions: 1
 
-# CONNECT passthrough limited to the Ubuntu archives. Widening this pattern
-# would give internal hosts a general path to the internet through the proxy.
 apt_proxy_passthrough_pattern: >-
   ^(archive|security|ports|changelogs)\.ubuntu\.com:443$

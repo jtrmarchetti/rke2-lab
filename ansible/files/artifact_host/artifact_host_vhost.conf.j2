@@ -1,10 +1,4 @@
 {{ ansible_managed | comment }}
-#
-# Tier 1 artifact host. Serves every non-OS artifact to internal nodes, which
-# have no route to the internet and no container registry until Phase 3.
-#
-# This vhost is read-only by design: no CGI, no write methods, no rewriting.
-# The only thing it does is hand out files and list directories.
 
 <VirtualHost *:{{ artifact_host_listen_port }}>
     ServerName {{ artifact_host_server_name }}
@@ -16,31 +10,15 @@
 
     <Directory {{ artifact_host_document_root }}>
 {% if artifact_host_directory_index_enabled %}
-        # Indexes is what makes the tree browsable. SymLinksIfOwnerMatch rather
-        # than FollowSymLinks so a symlink planted under the document root
-        # cannot be used to read a file outside it.
+
         Options Indexes SymLinksIfOwnerMatch
         IndexOptions FancyIndexing HTMLTable NameWidth=* SuppressDescription
 {% else %}
         Options SymLinksIfOwnerMatch
 {% endif %}
 
-        # No .htaccess. Configuration for this tree lives here, in version
-        # control, not in files the staging process could drop into it.
         AllowOverride None
 
-        # Access control, split across two method scopes that do not overlap.
-        #
-        # Both rules must live in this <Directory> container: Apache merges
-        # authorization sections and a <Location> is merged after <Directory>,
-        # so the same rules in a <Location> would replace these rather than add
-        # to them.
-        #
-        # They are also scoped to disjoint method sets on purpose. Two Require
-        # sets that both apply to one method are merged as "satisfy any", so a
-        # bare `Require all denied` alongside the address rules below would be
-        # satisfied by any client that passed the address check, and every
-        # method would be allowed.
         <Limit GET HEAD OPTIONS>
             <RequireAny>
 {% for _item_artifact_host_network in artifact_host_allowed_networks %}
@@ -49,8 +27,6 @@
             </RequireAny>
         </Limit>
 
-        # Consumers only ever read. Every other method is refused outright,
-        # regardless of source address.
         <LimitExcept GET HEAD OPTIONS>
             Require all denied
         </LimitExcept>

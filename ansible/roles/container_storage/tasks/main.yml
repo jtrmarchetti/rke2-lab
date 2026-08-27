@@ -1,13 +1,4 @@
 ---
-# Keeps the container daemons' state off the OS disk.
-#
-# On a fresh host this role writes two configuration files before either daemon
-# is installed, and no data is ever moved: the daemons start with their roots
-# already on the data volume. On a host that has been running with the package
-# defaults it also relocates what is already there, which is why the migration
-# path exists at all.
-#
-# See plan/PHASE1_IMPLEMENTATION.md for what this cost when it was missing.
 
 - name: main | Assert the container storage base is on the data volume
   when: (container_storage_enabled | bool)
@@ -24,13 +15,6 @@
       different directory on the same OS disk.
     quiet: true
 
-# Which daemons exist decides whether there is anything to stop or migrate. On
-# a fresh host neither is installed yet and this role is pure configuration.
-#
-# list-unit-files rather than service_facts, because service_facts does not
-# report socket units at all. docker.socket was therefore never stopped, and a
-# socket-activated daemon restarting partway through a multi-minute copy would
-# write into the new root while rsync was still filling it.
 - name: main | List the systemd unit files # noqa: command-instead-of-module
   when: (container_storage_enabled | bool)
   changed_when: false
@@ -61,8 +45,6 @@
     group: root
     mode: "0755"
 
-# Both templates are written before any migration, so that a host where the
-# daemons are not installed yet is fully configured by this role alone.
 - name: main | Ensure the Docker daemon stores its state on the data volume
   when: (container_storage_enabled | bool)
   register: _reg_container_storage_docker_config_result
@@ -90,8 +72,6 @@
     - not ansible_check_mode
   ansible.builtin.include_tasks: migrate.yml
 
-# Handled outside the migration block: on a host that needed no migration the
-# configuration may still have changed, and the daemons have to be told.
 - name: main | Restart the container daemons when only the configuration changed
   when:
     - (container_storage_enabled | bool)
@@ -108,8 +88,6 @@
     name: "{{ _item_container_storage_unit }}"
     state: restarted
 
-# Separate from the migration, and off by default. A rollback that is deleted
-# in the same run that created it is not a rollback.
 - name: main | Remove the rollback copies of the previous container roots
   when:
     - (container_storage_enabled | bool)

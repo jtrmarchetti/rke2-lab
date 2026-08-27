@@ -3,25 +3,15 @@ _var_keycloak_realm_headers:
   Authorization: >-
     Bearer {{ _reg_keycloak_realm_token['json']['access_token'] | default('') }}
 
-# The realm definition, as the admin API takes it.
-#
-# Only the fields this role is opinionated about. Everything omitted keeps
-# Keycloak's default, which is the point: a role that wrote out a whole realm
-# representation would silently revert anything an administrator had changed in
-# the console, and would have to be updated for every Keycloak release that
-# adds a field.
 _var_keycloak_realm_definition:
   realm: "{{ keycloak_realm_name }}"
   displayName: "{{ keycloak_realm_display_name }}"
   enabled: true
-  # Registration and password reset are off because there is nowhere for them
-  # to go: the federation is READ_ONLY, so Keycloak cannot create an account or
-  # change a password in FreeIPA. Left on, both present the user with a form
-  # that fails after they have filled it in.
+
   registrationAllowed: false
   resetPasswordAllowed: false
   rememberMe: false
-  # No mail transport on this network, so anything that would send one is off.
+
   verifyEmail: false
   loginWithEmailAllowed: true
   duplicateEmailsAllowed: false
@@ -31,9 +21,5 @@ _var_keycloak_realm_definition:
   bruteForceProtected: "{{ keycloak_realm_brute_force_protected | bool }}"
   failureFactor: "{{ keycloak_realm_failure_factor | int }}"
 
-# The fields the update comparison reads. A realm representation comes back
-# from Keycloak with well over a hundred keys, most of them defaults this role
-# has no opinion on, so comparing the whole thing would report a change on
-# every run for reasons that have nothing to do with this file.
 _var_keycloak_realm_compared: >-
   {{ _var_keycloak_realm_definition.keys() | list }}

@@ -23,7 +23,7 @@ The pieces
      - Signal
      - What it does
    * - Prometheus
-     - kube-prometheus-stack 88.3.0
+     - kube-prometheus-stack 88.5.4
      - Metrics
      - Scrapes every target in the cluster every 60s, stores the samples, and
        evaluates the alert rules. The datasource behind almost every dashboard
@@ -68,7 +68,7 @@ The pieces
      - The trace database. Receives spans over OTLP, stores them by trace ID,
        and answers "show me trace X". Retains 48h; blocks go to Garage
    * - Alloy
-     - Alloy 1.11.1
+     - Alloy 1.12.0
      - Logs + traces
      - The collector, a DaemonSet on all six nodes. Reads every container's log
        file and pushes to Loki, and accepts OTLP spans from anything in the
@@ -228,7 +228,7 @@ logs, and an OTLP span pushed through Alloy readable in Tempo.
    ``rke2_agent_expose_metrics``, which add ``etcd-expose-metrics`` and the
    ``bind-address`` arguments to ``/etc/rancher/rke2/config.yaml``. Applying it
    restarts RKE2, so it is a rolling control plane operation
-   (:doc:`../tasks/node-maintenance`).
+   (:doc:`../sysadmin/maintenance`).
 
    kube-proxy needs one thing more, in the chart: its Service selector is
    ``component: kube-proxy``, not the chart's default ``k8s-app``, which is
@@ -253,7 +253,7 @@ Grafana
    permission that silently discards edits is worse than not having one.
 
    Add a dashboard the same way you add anything else: through
-   :doc:`../tasks/adding-a-service`.
+   :doc:`../developer/adding-a-service`.
 
 A sidecar container in the Grafana pod is what makes that work: it watches
 every namespace for ConfigMaps labelled ``grafana_dashboard`` or
@@ -383,7 +383,7 @@ Ansible, and reaches the pod as a Secret that neither Git nor a human ever
 held.
 
 These are small volumes on a small cluster — if a component starts evicting
-data sooner than you want, grow the claim (:doc:`../tasks/storage-pvc`) rather
+data sooner than you want, grow the claim (:doc:`../sysadmin/storage-pvc`) rather
 than reducing what is collected, and check worker memory before doing either.
 
 .. note::

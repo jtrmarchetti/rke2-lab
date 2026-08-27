@@ -1,23 +1,4 @@
 ---
-# The automation controller's own runtime, which nothing owned until now.
-#
-# plan/OVERVIEW.md requires that every controller dependency be documented and
-# scripted, and plan/CONTROLLER.md pays the documentation half while listing
-# what was still prose: the language runtimes, the Pulumi CLI, and the split
-# DNS the old controller_setup.sh configured by hand. This role is the other
-# half.
-#
-# The gap it closes is worth naming plainly, because it is the only one in this
-# repository that is fatal rather than inconvenient: every other host in the
-# lab is described by Pulumi and Ansible, and the host that runs Pulumi and
-# Ansible was described by a shell script that did not do what its name said.
-# Lose the controller and the ability to rebuild everything else goes with it.
-#
-# What this role deliberately does NOT do is install Ansible. It cannot: it is
-# Ansible. bootstrap/controller-bootstrap.sh creates the virtual environment on
-# a bare host, and from that point this role owns it — same requirements file,
-# same path, reconciled on every run. The script is the entry point; this is
-# the authority.
 
 - name: main | Assert the caller supplied the repository path
   when: (controller_runtime_enabled | bool)

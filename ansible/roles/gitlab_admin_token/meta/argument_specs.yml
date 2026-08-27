@@ -1,0 +1,59 @@
+---
+argument_specs:
+  main:
+    short_description: Ensure one valid GitLab admin personal access token
+    description:
+      - A personal access token is the one GitLab credential that cannot be
+        created through the REST API, so this role mints one through the
+        instance's web UI as the root user, a sign-in followed by a POST of
+        the token form whose response carries the token value. Two or three
+        HTTP requests against the gitlab-rails runner's minute-plus of
+        startup.
+      - The token is recorded on the GitLab host and proven to still
+        authenticate with a single GET /user before reuse. A replacement is
+        minted only when no file exists or the proof fails, and the token
+        is left to expire after a day rather than revoked.
+      - The including role reads the value back with a slurp of the record
+        file, the same shape it already uses for the deploy token, so the
+        handoff works whether the role ran locally or delegated.
+      - The gitlab-rails runner remains the fallback for a controller that
+        has no root password, so a pre-web install of the instance keeps
+        working.
+    options:
+      gitlab_admin_token_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      gitlab_admin_token_url:
+        type: str
+        description:
+          - Base URL of the GitLab instance. The caller passes its own
+            gitlab_url, so the token is minted for the instance the caller
+            talks to rather than one this role guessed.
+      gitlab_admin_token_host:
+        type: str
+        description:
+          - Inventory name of the host GitLab runs on, where the mint and the
+            record file live. Absent means the caller already runs on it;
+            roles running on the controller pass their gitlab_host here and
+            delegate the file work and the mint to it.
+      gitlab_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the token value is recorded. GitLab returns a token's value
+            once, so this is the only copy, and the reuse decision turns on
+            whether it exists.
+      gitlab_admin_token_root_password:
+        type: str
+        default: ""
+        description:
+          - Password of the GitLab root account, for the web mint. Empty
+            falls back to GITLAB_ROOT_PASSWORD in the controller
+            environment, and to the gitlab-rails runner when neither is
+            set.
+      gitlab_admin_token_no_log:
+        type: bool
+        default: true
+        description:
+          - Set false only when debugging; it exposes the admin token.

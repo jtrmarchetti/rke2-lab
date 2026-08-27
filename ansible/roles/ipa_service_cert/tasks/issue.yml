@@ -12,9 +12,6 @@
     valid_at:
       renewal: "+{{ ipa_service_cert_renew_before_days }}d"
 
-# Reissue when there is no certificate, when the key that goes with it is gone,
-# or when it will expire inside the renewal window. Presence alone is not
-# enough: a certificate that only gets checked for existence expires silently.
 - name: issue | Determine whether the certificate must be issued
   ansible.builtin.set_fact:
     _ipa_service_cert_needed: >-
@@ -42,9 +39,6 @@
         group: root
         mode: "0640"
 
-    # The SAN carries the same single name as the CN. FreeIPA validates every
-    # SAN against a principal the requester may manage, so one name per
-    # certificate keeps the request to one principal.
     - name: issue | Ensure the signing request is present
       community.crypto.openssl_csr:
         path: "{{ _var_ipa_service_cert_csr }}"
@@ -61,22 +55,6 @@
       ansible.builtin.slurp:
         src: "{{ _var_ipa_service_cert_csr }}"
 
-    # One shell step because the whole exchange is a single Kerberos session:
-    # the ticket kinit obtains lives in the credential cache of that process
-    # tree, and splitting the steps across tasks would discard it. There is no
-    # module for `ipa cert-request`, and this host is deliberately not enrolled,
-    # so the ipa_* modules are not an option either.
-    #
-    # The request arrives on stdin and is written to the container's /tmp,
-    # rather than being placed with `docker cp`. The FreeIPA container runs
-    # read_only, which is the shape upstream documents and a Phase 2 decision;
-    # `docker cp` into it fails with "container rootfs is marked read-only"
-    # however writable the target path is. /tmp is a tmpfs the container itself
-    # can write, so the copy has to happen from inside.
-    #
-    # A literal block, not a folded one: folding joins the lines with spaces and
-    # collapses the script into a single unparseable command. The password
-    # crosses as base64 so no character in it can terminate a quote.
     - name: issue | Sign the request against the domain certificate authority
       changed_when: true
       delegate_to: "{{ ipa_service_cert_ipa_host }}"
@@ -109,8 +87,7 @@
         mode: "0644"
 
   always:
-    # Public material, but it is scratch space inside a container that outlives
-    # the request. Left behind it accumulates one file per issuance.
+
     - name: issue | Remove the request material from the signing container
       changed_when: false
       delegate_to: "{{ ipa_service_cert_ipa_host }}"

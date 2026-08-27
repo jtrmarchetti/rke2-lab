@@ -6,16 +6,6 @@ _var_keycloak_clients_headers:
 _var_keycloak_clients_admin_api: >-
   {{ keycloak_clients_url }}/admin/realms/{{ keycloak_clients_realm }}
 
-# --- Per application ------------------------------------------------------
-#
-# Everything below resolves against `_item_keycloak_clients_application`, the
-# loop variable main.yml sets, so these are only meaningful inside
-# application.yml. They live here rather than in a set_fact because the
-# definition carries the client secret, and ANSIBLE_STANDARDS.md forbids
-# putting sensitive data in a fact — a lazily evaluated var is the same
-# expression without the copy in the play's fact cache. Same shape as
-# keycloak_ldap's provider definition.
-
 _var_keycloak_clients_slug: >-
   {{ _item_keycloak_clients_application['name'] }}
 _var_keycloak_clients_admin_group: >-
@@ -36,29 +26,12 @@ _var_keycloak_clients_current: >-
 _var_keycloak_clients_existing_id: >-
   {{ (_var_keycloak_clients_matching | first)['id'] | default('') }}
 
-# The client's identifier after it has been created or updated, read back from
-# the realm rather than remembered from whichever branch ran.
 _var_keycloak_clients_uuid: >-
   {{ (_reg_keycloak_clients_final['json'] | default([])
       | selectattr('clientId', 'equalto',
                    _item_keycloak_clients_application['name'])
       | list | first)['id'] | default('') }}
 
-# The client definition.
-#
-# Confidential, standard flow only.
-#
-# directAccessGrants is off because none of these services logs in with a
-# username and password against Keycloak's token endpoint — every one uses the
-# browser redirect — and leaving it on is a password endpoint that runs up
-# against the realm's brute force counters far more cheaply than the login page
-# does.
-#
-# implicitFlow is off because it returns tokens to the browser in a URL
-# fragment; it exists in Keycloak for clients that predate PKCE.
-#
-# redirectUris are exact. A wildcard here is the classic OIDC open redirect,
-# and every service in this lab has one fixed callback path.
 _var_keycloak_clients_definition:
   clientId: "{{ _item_keycloak_clients_application['name'] }}"
   name: "{{ _item_keycloak_clients_application['description'] }}"
@@ -80,14 +53,6 @@ _var_keycloak_clients_definition:
     {{ _item_keycloak_clients_application['base_url'] | default('') }}
   secret: "{{ _item_keycloak_clients_application['client_secret'] }}"
 
-# The fields the client comparison reads.
-#
-# `secret` is deliberately absent: it never comes back in a client
-# representation, so it is compared separately against the dedicated
-# client-secret endpoint. Every field Keycloak defaults is absent too, for the
-# reason keycloak_realm documents — writing back a whole representation reverts
-# whatever was set in the console and has to be revised for every release that
-# adds a key.
 _var_keycloak_clients_compared:
   - clientId
   - name
@@ -102,13 +67,6 @@ _var_keycloak_clients_compared:
   - redirectUris
   - webOrigins
 
-# The two client roles every application gets, and nothing else.
-#
-# Two tiers rather than a per-service role model, because the model has to be
-# statable: a person administers a service, uses it, or has neither. Each
-# service decides what the two mean in its own terms — Grafana turns them into
-# Admin and Viewer, OpenBao into two policies, oauth2-proxy into permission to
-# reach Longhorn at all.
 _var_keycloak_clients_roles:
   - name: "{{ keycloak_clients_admin_role }}"
     description: >-
@@ -119,14 +77,6 @@ _var_keycloak_clients_roles:
       Ordinary use of this service. Granted through the FreeIPA group
       {{ _var_keycloak_clients_user_group | trim }}.
 
-# The mapper that puts the client's own roles into the token as a top-level
-# claim.
-#
-# Without it the roles are still issued, buried in `resource_access.<client>`,
-# which oauth2-proxy reads natively and Grafana and OpenBao do not. A flat
-# claim means all three consumers read the same shape, and it is why the claim
-# name is a role parameter rather than a literal — it appears again in
-# Grafana's role_attribute_path and in OpenBao's groups_claim.
 _var_keycloak_clients_role_mapper:
   name: client roles
   protocol: openid-connect
@@ -141,8 +91,6 @@ _var_keycloak_clients_role_mapper:
     access.token.claim: "true"
     userinfo.token.claim: "true"
 
-# The two group-to-role grants, as pairs of names. The group is looked up in
-# what the LDAP mapper imported; the role in what the tasks above created.
 _var_keycloak_clients_grants:
   - group: "{{ _var_keycloak_clients_admin_group | trim }}"
     role: "{{ keycloak_clients_admin_role }}"

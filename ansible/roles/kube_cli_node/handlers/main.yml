@@ -1,4 +1,1 @@
 ---
-# No handlers. Nothing this role writes is read by a running service — the
-# symlinks, /etc/crictl.yaml and the profile script are all read at the moment
-# someone runs a command, so there is nothing to restart or reload.

@@ -1,0 +1,8 @@
+---
+gitlab_admin_token_enabled: true
+
+gitlab_admin_token_file: /data1/gitlab/admin-token.yml
+
+gitlab_admin_token_root_password: ""
+
+gitlab_admin_token_no_log: true

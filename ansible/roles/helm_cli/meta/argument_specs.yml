@@ -23,11 +23,9 @@ argument_specs:
             decide whether the installed copy is stale.
       helm_cli_url:
         type: str
-        description: Release tarball URL, served by the artifact host.
-      helm_cli_sha256:
-        type: str
-        description:
-          - Expected SHA256 of the tarball. The integrity control, not a note.
+        description: >-
+          Release tarball URL, served by the artifact host. The pinned URL and
+          the TLS transport are the integrity control.
       helm_cli_archive_member:
         type: str
         default: linux-amd64/helm

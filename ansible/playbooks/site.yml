@@ -1,24 +1,5 @@
 ---
-# Builds the whole environment in phase order, which is how it is meant to be
-# created from nothing. Each phase is also runnable on its own; this file only
-# fixes the order and the dependency direction between them.
-#
-# Running end to end is the reason the roles gate on readiness rather than on
-# "the service started". Phase 2 does not report success until FreeIPA actually
-# answers LDAP, issues Kerberos tickets, and accepts an API login, so Phase 3
-# cannot begin against a domain that is still coming up. Any phase added below
-# is expected to hold to the same rule.
-#
-# Phases are added here as they are built; see plan/PHASES.md for the full set.
 
-# First, because it is the host that builds all the others, and because a
-# rebuild reaches this file from a fresh clone rather than from the controller
-# that happened to run it last. Split DNS, the pinned Ansible and Pulumi
-# environments, and the tunnel into 192.168.2.0/24 — none of which any other
-# play here can proceed without.
-#
-# Its own prerequisite is bootstrap/controller-bootstrap.sh, which is what
-# makes an `ansible-playbook` command possible in the first place.
 - name: Phase 0 - the automation controller itself
   ansible.builtin.import_playbook: controller_bootstrap.yml
 
@@ -37,64 +18,20 @@
 - name: Phase 5 - RKE2 workers, and the control plane taint that follows them
   ansible.builtin.import_playbook: kubewk.yml
 
-# Deliberately kubecp.yml a second time, and not a mistake.
-#
-# Phase 5 turns on the packaged ingress controller, which is a control plane
-# configuration change, and it has to happen after the workers exist and after
-# the control plane is tainted — otherwise Traefik deploys onto the servers and
-# then has to be evicted off them again. So the ordering is: form the control
-# plane, join the workers, taint the servers, and only then re-run the control
-# plane play to deploy ingress onto the workers that are now there to hold it.
-#
-# The re-run is a no-op for everything else, which is what makes it safe.
 - name: Phase 5 - deploy ingress now that there are workers to run it on
   ansible.builtin.import_playbook: kubecp.yml
 
-# Last, because it takes kubectl from a cluster node and then proves it reaches
-# the API. Both require a cluster that already exists.
-#
-# Spans two phases deliberately. kubectl, k9s and the shell integration are
-# Phase 5 — the cluster was finished and could not be looked at. The Flux CLI
-# and kubeseal are Phase 6a tools, and this is the only correct window for
-# them: after the cluster exists, before 6a bootstraps Flux against GitLab.
-# Both come from Apache and are checksummed, so nothing here waits on GitLab.
 - name: Phases 5-6a - controller tooling for operating the cluster
   ansible.builtin.import_playbook: controller.yml
 
-# Everything a component is *made of*: its images and charts staged on repo01,
-# published into GitLab, and each node's containerd rewrite map refreshed so
-# the names the cluster-state manifests use actually resolve. Before the GitOps
-# push, because declaring a component whose image the registry does not hold
-# produces an ImagePullBackOff that reads as a cluster fault.
 - name: Phase 6 - cluster service artifacts, and the node rewrites for them
   ansible.builtin.import_playbook: cluster_services.yml
 
-# Everything a component *is*. Renders the cluster-state tree from this
-# repository into GitLab and points Flux at it; from here the cluster builds
-# itself.
 - name: Phase 6 - the GitOps source, and the cluster attached to it
   ansible.builtin.import_playbook: gitops.yml
 
-# The services Flux has now deployed, initialised once each. Split out of
-# cluster_services.yml precisely so it could sit on this side of the push: the
-# vault cannot be initialised before Flux has created it.
-#
-# It is also where every runtime secret is written into the vault, which is
-# what lets Keycloak, Garage and Grafana start at all — their credentials are
-# no longer sealed into the repository the play above pushed.
 - name: Phase 6 - initialise the vault, the object store, and the federation
   ansible.builtin.import_playbook: cluster_init.yml
 
-# Deliberately gitops.yml a second time, and not a mistake — the same shape as
-# the kubecp.yml re-run above, and for a similar reason.
-#
-# The vault's unseal keys are the one secret that cannot predate the thing it
-# unseals. OpenBao is deployed by Flux from the repository the first push
-# creates, so on a cold rebuild there are no keys to seal on the first pass;
-# the play above initialises the vault and records them, and this pass seals
-# them into Git for the unsealer loop to read.
-#
-# On an environment that already exists, every secret is already set and this
-# run finds nothing to do — which is what makes it safe to leave here.
 - name: Phase 6 - seal the vault keys now that the vault exists
   ansible.builtin.import_playbook: gitops.yml

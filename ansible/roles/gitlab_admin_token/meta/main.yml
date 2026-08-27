@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: gitlab_admin_token
+  author: rke2lab
+  description: >-
+    Ensures one valid GitLab admin personal access token exists, recorded on
+    the GitLab host, and hands it to the including role. The token is minted
+    with gitlab-rails only when none is recorded or the recorded one no
+    longer authenticates, and left to expire after a day.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - gitlab
+    - credentials
+
+collections: []
+
+dependencies: []

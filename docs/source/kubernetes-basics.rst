@@ -72,7 +72,7 @@ Reading a pod's state
    * - ``ImagePullBackOff``
      - The registry said no. In this air-gapped cluster that is nearly always a
        missing mirror rule or a stale deploy token — see
-       :doc:`tasks/common-issues`
+       :doc:`sysadmin/troubleshooting`
    * - ``CrashLoopBackOff``
      - It starts and dies. ``logs --previous`` is the one that shows why
    * - ``Running`` but not ``Ready``
@@ -84,7 +84,7 @@ What is different about this cluster
 **You do not ``kubectl apply``.** Flux reconciles every workload from Git. A
 resource you create by hand is not deleted, but a resource you *edit* is
 reverted the next time Flux reconciles — typically within minutes. Changes go
-through :doc:`tasks/adding-a-service`.
+through :doc:`developer/adding-a-service`.
 
 **Nothing pulls from the internet.** Every image comes from
 ``registry.gitlab.dev.lo``, rewritten by a mirror rule in each node's
@@ -97,4 +97,4 @@ matching toleration; almost nothing should.
 
 **Storage is finite and local.** Three workers, one 100 GB disk each, two
 replicas per volume: roughly 147 GB usable. See
-:doc:`tasks/storage-longhorn`.
+:doc:`sysadmin/storage-longhorn`.

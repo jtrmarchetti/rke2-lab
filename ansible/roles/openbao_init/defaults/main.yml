@@ -1,27 +1,17 @@
 ---
 openbao_init_enabled: true
 
-# Where the vault runs. A single pod, because the vault is single-node: see the
-# HelmRelease in the cluster-state repository for why HA is out of scope.
 openbao_init_namespace: openbao
 openbao_init_pod: openbao-0
 
-# Five shares, three needed. The threshold is what makes the keys a quorum
-# rather than a password; five and three is Vault's own default and there is no
-# reason here to be cleverer than it.
 openbao_init_key_shares: 5
 openbao_init_key_threshold: 3
 
-# The controller's secret environment, where the break-glass copy is recorded.
-# See plan/SECRETS.md.
 openbao_init_env_file: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/env.sh
 
-# The client this role drives the cluster with. The controller's kubectl, with
-# the kubeconfig the rke2_server role published.
 openbao_init_kubectl: >-
   {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
   --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
 
-# Set false only when debugging. It prints unseal keys.
 openbao_init_no_log: true

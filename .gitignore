@@ -18,6 +18,10 @@ __pycache__/
 
 # Ansible
 *.retry
+**/ansible.log
+.ansible
 
 # Docs — the built site is generated from docs/source, never committed.
 docs/_build/
+
+agent_plans/

@@ -1,14 +1,4 @@
 ---
-# The bind account, created directly in the directory.
-#
-# cn=sysaccounts,cn=etc is where FreeIPA expects service bind accounts to live.
-# An entry there is a simpleSecurityObject: it can bind and read, and it has no
-# Kerberos principal, no POSIX attributes, and no way to become a user.
-#
-# ldapmodify with `add` is not idempotent — a second run returns "Already
-# exists" — so the entry is read first and the result of the read is what
-# decides. Treating the error as success would hide a genuine failure to
-# create it.
 
 - name: sysaccount | Look for the existing bind account
   changed_when: false
@@ -23,9 +13,6 @@
           -s base dn 2>&1 | grep -c "^dn: " || true'
     stdin: "{{ keycloak_ldap_dir_manager_password }}"
 
-# A literal block, for the reason ipa_service_cert documents: folding joins the
-# lines with spaces and the LDIF becomes unparseable. The passwords cross on
-# stdin rather than in argv, so no process list ever holds them.
 - name: sysaccount | Create the bind account
   when: "'1' not in _reg_keycloak_ldap_existing['stdout']"
   changed_when: true
@@ -50,9 +37,6 @@
       {{ keycloak_ldap_dir_manager_password }}
       {{ keycloak_ldap_bind_password }}
 
-# Proves the account can actually bind and read users, rather than proving an
-# entry exists. A bind account that exists and cannot search is the failure
-# Keycloak would report as "connection successful, no users found".
 - name: sysaccount | Prove the account can bind and read users
   changed_when: false
   delegate_to: "{{ keycloak_ldap_ipa_host }}"

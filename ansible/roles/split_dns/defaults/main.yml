@@ -1,47 +1,22 @@
 ---
 split_dns_enabled: true
 
-# Upstream resolvers for everything outside the forwarded zones. Only a host
-# with internet access has anything useful to put here.
 split_dns_upstream_servers: []
 
-# Zones answered by a specific nameserver instead of the upstream resolvers.
-# Each entry is a mapping of domain and server:
-#   - domain: dev.lo
-#     server: 192.168.2.4
-#
-# This is a forwarding rule, not an address override. dnsmasq's `address=`
-# directive would synthesize one answer for every name under the domain, so
-# gitlab.dev.lo and core.dev.lo would resolve to the same address and the real
-# authority would never be consulted. `server=` asks the authority, which is the
-# whole point of pointing at FreeIPA.
 split_dns_forward_zones: []
 
-# Addresses dnsmasq answers on. Loopback only by default: these hosts resolve
-# for themselves, and the internal nameserver is core01, not this host. Widen it
-# only for a host that is meant to serve other machines.
 split_dns_listen_addresses:
   - 127.0.0.1
 
-# Ubuntu runs systemd-resolved, which holds 127.0.0.53:53 and points
-# /etc/resolv.conf at its own stub. dnsmasq cannot bind port 53 beside it, so it
-# is stopped and masked and /etc/resolv.conf becomes a static file pointing at
-# dnsmasq. The same reasoning as core01, for the same reason: one resolver per
-# host, and it is the one this role manages.
 split_dns_manage_resolver: true
 
-# Search domain written into /etc/resolv.conf. Empty writes no search line.
 split_dns_search_domain: ""
 
 split_dns_cache_size: 1000
 
-# Query each forwarded zone through the local resolver once configured. A
-# dnsmasq that is active but answering nothing is the failure this catches, and
-# it is the same class of problem as a service that reports running while its
-# backend is dead.
 split_dns_verify_zones: true
 
 split_dns_packages:
   - dnsmasq
-  # Provides dig, used by the zone verification below.
+
   - bind9-dnsutils

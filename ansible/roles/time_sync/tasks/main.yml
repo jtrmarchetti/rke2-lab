@@ -5,12 +5,6 @@
     name: "{{ time_sync_packages }}"
     state: present
 
-# Installing chrony displaces systemd-timesyncd on Ubuntu — the two conflict, and
-# chrony's packaging removes the unit and masks the name. Acting on it by name
-# then fails, because a masked name with no unit file cannot be loaded.
-#
-# The unit file on disk is the honest test. service_facts is not: it lists the
-# masked name, so a check against it passes and the next task still fails.
 - name: main | Check whether systemd-timesyncd is installed
   when:
     - (time_sync_enabled | bool)
@@ -19,8 +13,6 @@
   ansible.builtin.stat:
     path: "{{ _var_time_sync_timesyncd_unit }}"
 
-# One time daemon per host. timesyncd is a client only, so leaving it running
-# beside chrony means two things adjusting the same clock.
 - name: main | Ensure systemd-timesyncd is not running
   when:
     - (time_sync_enabled | bool)
@@ -55,10 +47,6 @@
 - name: main | Flush handlers so the check below tests the current configuration
   ansible.builtin.meta: flush_handlers
 
-# A running chronyd that reaches none of its sources keeps the host's clock
-# wrong, and clock skew breaks Kerberos before it breaks anything else. Poll
-# until a source is actually selected rather than trusting that the unit
-# started.
 - name: main | Wait for a time source to be reachable
   when:
     - (time_sync_enabled | bool)

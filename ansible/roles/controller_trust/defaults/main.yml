@@ -1,24 +1,14 @@
 ---
 controller_trust_enabled: true
 
-# Fetched over plain HTTP from the artifact host, which is the only path that
-# does not already require the trust it is delivering. Same bootstrap as the
-# cluster nodes make in rke2_node.
 controller_trust_ca_url: null
 controller_trust_ca_path: null
 controller_trust_update_command: update-ca-certificates
 
-# A name signed by that CA, used to prove the install worked rather than
-# assuming it did.
 controller_trust_verify_url: null
 
-# The system bundle update-ca-certificates writes. Named explicitly because
-# Ansible runs on Homebrew's Python here, which verifies against Homebrew's
-# bundle rather than this one — see the verification task.
 controller_trust_system_bundle: /etc/ssl/certs/ca-certificates.crt
 
-# Host keys to record. Empty by default: which hosts exist is inventory's
-# business, and the playbook passes the list in.
 controller_trust_hosts: []
 controller_trust_known_hosts: >-
   {{ ansible_facts['env']['HOME'] }}/.ssh/known_hosts

@@ -13,7 +13,7 @@ the cluster.
 OpenBao
 =======
 
-OpenBao 2.6.1, single-node with a Raft backend, in the ``openbao`` namespace.
+OpenBao 2.6.2, single-node with a Raft backend, in the ``openbao`` namespace.
 Single-node deliberately: Raft fsyncs per commit — etcd's write pattern, on
 storage already at etcd's floor — so a three-node HA cluster would cost more
 than it buys here. It runs on the two-replica ``longhorn`` class, never on

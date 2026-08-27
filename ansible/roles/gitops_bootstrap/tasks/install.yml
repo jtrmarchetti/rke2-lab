@@ -1,36 +1,8 @@
 ---
-# Flux itself, then the credential, then the objects that point it at the
-# repository. The order is the one thing here that is not interchangeable.
-#
-# The components carry the CRDs. The sync objects are a GitRepository and a
-# Kustomization, which are instances of those CRDs, so applying them first
-# fails on a type the API server has never heard of. And the Secret has to
-# exist before the GitRepository that names it, or the source controller's
-# first reconcile fails on a missing Secret and waits out its retry interval
-# before trying again — a bootstrap that eventually works but appears not to.
-#
-# The namespace is not created here. It is the first object in the component
-# set, and creating it separately means two managers own one object: Flux
-# server-side-applies it and strips the client-side annotation `kubectl apply`
-# leaves, so the two take it in turns and the role reports a change on every
-# run forever.
-#
-# That last point generalises, and it is why the install below is gated on Flux
-# being absent rather than applied every time. Everything in these two files is
-# also declared in the repository, so from the moment the first reconcile
-# succeeds Flux owns it and keeps it current — including its own upgrades, which
-# is the whole point of committing the component set. A role that re-applied
-# them would be a second manager arguing with the first, and `--server-side`
-# reports `serverside-applied` unconditionally, so it could not even tell
-# whether it had changed anything.
-#
-# gitops_bootstrap_force_install exists for the case that gate gets wrong: a
-# Flux that is present but wedged, where reinstalling the components by hand is
-# the repair.
 
 - name: install | Look for a sealing key in the cluster
   changed_when: false
-  # Absent on a rebuild, where the namespace exists but nothing has run in it.
+
   failed_when: false
   register: _reg_gitops_bootstrap_sealing_present
   ansible.builtin.command:
@@ -38,22 +10,6 @@
       {{ gitops_bootstrap_kubectl }} get secret -n kube-system
       -l {{ gitops_bootstrap_sealing_key_label }} -o name
 
-# Before Flux, because Flux is what deploys the Sealed Secrets controller and
-# that controller generates a key pair of its own the first time it starts
-# without one. On a rebuild that is the difference between a cluster that
-# decrypts its own repository and one that cannot: everything gitops_source
-# sealed was sealed against the backed-up key, so the backup has to be in place
-# before the controller has a chance to invent a replacement.
-#
-# Restored only when the cluster has none, and this is a restore rather than a
-# reconcile on purpose. Re-applying a key backup over a live controller's keys
-# is not a thing to do on every run — the controller rotates every 30 days and
-# keeps the old keys, so the cluster is legitimately ahead of the backup, and
-# overwriting would be pushing it backwards.
-#
-# The other half of that: a controller that started before this ran has already
-# made its own key and will seal *new* secrets with whichever is newest, so
-# re-take the backup after any restore. See plan/SECRETS.md.
 - name: install | Restore the sealing key when the cluster has none
   when: (_reg_gitops_bootstrap_sealing_present['stdout'] | trim | length) == 0
   changed_when: true
@@ -62,9 +18,6 @@
     cmd: "{{ gitops_bootstrap_kubectl }} create -f -"
     stdin: "{{ lookup('template', _var_gitops_bootstrap_files_dir ~ '/sealing-keys.yaml.j2') }}"
 
-# The source controller rather than the namespace or the CRDs, because it is
-# the object whose presence means "Flux is installed and running here". The
-# namespace survives an uninstall and the CRDs survive almost anything.
 - name: install | Look for an existing Flux installation
   changed_when: false
   failed_when: false
@@ -84,11 +37,7 @@
 - name: install | Install Flux and point it at the repository
   when: (_var_gitops_bootstrap_install | bool)
   block:
-    # Server-side, because this is the same file Flux's own kustomize
-    # controller applies once reconciliation starts. Client-side apply writes a
-    # last-applied annotation that then fights the controller's field
-    # ownership, and the argument shows up as objects flapping between two
-    # managers.
+
     - name: install | Apply the Flux components
       changed_when: true
       ansible.builtin.command:
@@ -115,10 +64,6 @@
           {{ gitops_bootstrap_kubectl }} apply
           -f {{ _var_gitops_bootstrap_sync_file }}
 
-# Outside the gate, because this one is genuinely this role's to keep current.
-# It is deliberately not in the repository — it holds the token Flux reads the
-# repository with — so nothing else reconciles it, and rotating the deploy
-# token has to reach the cluster somehow.
 - name: install | Apply the repository credential
   changed_when: "'unchanged' not in _reg_gitops_bootstrap_cred['stdout']"
   no_log: "{{ gitops_bootstrap_no_log | bool }}"
@@ -127,11 +72,6 @@
     cmd: "{{ gitops_bootstrap_kubectl }} apply -f -"
     stdin: "{{ _var_gitops_bootstrap_secret | to_nice_yaml }}"
 
-# The transaction, rather than a status. A GitRepository that reports Ready has
-# fetched and verified this exact repository over TLS with this exact
-# credential, which is every part of the attachment at once — and it is the
-# check that catches a caFile omitted from the Secret, which otherwise surfaces
-# much later as a TLS error that reads like a network fault.
 - name: install | Wait for the repository to be fetched
   changed_when: false
   ansible.builtin.command:

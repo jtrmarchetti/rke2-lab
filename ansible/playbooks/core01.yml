@@ -27,8 +27,6 @@
           tags:
             - base_host
 
-    # Before FreeIPA: Kerberos rejects tickets across a clock skew, so the
-    # domain must be installed on a host whose time is already correct.
     - name: core01 | Include time synchronization role
       tags:
         - time_sync
@@ -44,9 +42,6 @@
           tags:
             - time_sync
 
-    # Runs before FreeIPA for the same reason it does on repo01: the FreeIPA
-    # data directory lives on /data1, and if the data disk is not mounted
-    # first, the domain quietly installs onto the 32 GB OS disk instead.
     - name: core01 | Include data volume role
       tags:
         - data_volume
@@ -56,10 +51,6 @@
           tags:
             - data_volume
 
-    # Between the data volume and FreeIPA, for the same reason it sits there on
-    # repo01: the container daemons default to /var/lib on the OS disk. core01
-    # carries the same fault at a tenth the scale, and fixing it here means a
-    # rebuilt core01 never acquires it.
     - name: core01 | Include container storage role
       tags:
         - container_storage
@@ -97,8 +88,6 @@
         freeipa_server_forwarders_enabled: >-
           {{ inventory_freeipa_server_forwarders_enabled }}
         freeipa_server_hostname: "{{ inventory_freeipa_server_hostname }}"
-        freeipa_server_image_tarball_checksum: >-
-          {{ inventory_freeipa_server_image_tarball_checksum }}
         freeipa_server_image_tarball_url: >-
           {{ inventory_freeipa_server_image_tarball_url }}
         freeipa_server_ip_address: "{{ inventory_freeipa_server_ip_address }}"
@@ -110,11 +99,6 @@
           tags:
             - freeipa_server
 
-# Phase 2, step 8: point resolvers at core01. This runs after the play above has
-# proved the domain is serving, so repo01 is only pointed at an authority that
-# answers. It lives here rather than in repo01.yml because the dependency runs
-# that way: repo01 needs core01 for dev.lo, and core01 needs repo01 only for
-# time, which Phase 1 already established.
 - name: Point repository host resolvers at the identity domain
   hosts: repo
   gather_facts: true

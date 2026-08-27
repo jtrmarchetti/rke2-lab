@@ -16,8 +16,14 @@
 
 # Configuration management. The whole repository is Ansible; this is the thing
 # that runs it.
-ansible==13.4.0
+ansible==14.3.1
 
 # ANSIBLE_STANDARDS.md enforcement. Not optional tooling: the standards are
 # mandatory, so the linter that checks them is a dependency of the work.
-ansible-lint==26.3.0
+ansible-lint==26.8.0
+
+# The verify/ end-state test suite (see docs/source/tasks/testing-cluster.rst).
+# pytest runs it; requests is how the suite talks to the cluster's services
+# over TLS pinned to the domain CA.
+pytest==9.1.1
+requests==2.32.5

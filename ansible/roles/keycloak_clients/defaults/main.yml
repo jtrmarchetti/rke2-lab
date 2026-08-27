@@ -1,59 +1,20 @@
 ---
 keycloak_clients_enabled: true
 
-# Keycloak's base URL and the CA its certificate is verified against.
 keycloak_clients_url: null
 keycloak_clients_ca_file: /etc/ssl/certs/ca-certificates.crt
 
-# The administrator this role authenticates as. Always in master — that is
-# where Keycloak's local break-glass account lives — even though every object
-# it creates is in the application realm below.
 keycloak_clients_admin_user: admin
-# keycloak_clients_admin_password:
 
-# The realm the clients are created in, which keycloak_realm created. Not
-# master; see that role for why.
 keycloak_clients_realm: null
 
-# --- The applications ------------------------------------------------------
-#
-# One entry per service that authenticates against Keycloak. Each produces a
-# confidential OIDC client, two client roles, a protocol mapper that puts those
-# roles in the token, and two group mappings tying the FreeIPA groups
-# ipa_sso_groups created to those roles.
-#
-# Each entry takes:
-#
-#   name           the application slug. The client id, the client roles' owner
-#                  and the group names are all derived from it, so it has to be
-#                  the same slug ipa_sso_groups was given.
-#   description    what the service is, shown in the Keycloak console.
-#   redirect_uris  every URI Keycloak will return an authorization code to.
-#                  Exact, not wildcarded: a wildcard here is the classic OIDC
-#                  open-redirect, and every one of these services has a fixed
-#                  callback path.
-#   base_url       optional, the link the Keycloak account console offers.
-#   client_secret  the shared secret, authored rather than generated. See
-#                  vars/main.yml for why that is the whole answer to the
-#                  ordering problem.
-#
-# Empty by default: a role that invented clients would put credentials in the
-# realm that nothing ever removes.
 keycloak_clients_applications: []
 
-# The suffixes that turn a slug into a FreeIPA group name, and the client roles
-# they map to. Must match ipa_sso_groups, which creates the groups these names
-# refer to.
 keycloak_clients_admin_suffix: admins
 keycloak_clients_user_suffix: users
 keycloak_clients_admin_role: admin
 keycloak_clients_user_role: user
 
-# The claim the client roles are written into. Grafana reads it with a JMESPath
-# expression and OpenBao binds its external groups to it, so changing it here
-# means changing it in both of those places; it is one fact written three
-# times and there is no way to make it fewer.
 keycloak_clients_roles_claim: roles
 
-# Set false only when debugging; it prints every client secret.
 keycloak_clients_no_log: true

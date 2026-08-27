@@ -7,9 +7,6 @@
       - "!min"
       - hardware
 
-# Failing here is much cheaper than letting the filesystem module operate on a
-# device name that does not exist, or that points at the OS disk because the
-# VM definition changed underneath the inventory.
 - name: main | Assert the data volume device is present
   when: (data_volume_enabled | bool)
   ansible.builtin.assert:
@@ -22,8 +19,6 @@
       attaches the second disk before running this role.
     quiet: true
 
-# force is false so an already-formatted disk is left alone. Re-running this
-# role must never be a way to destroy the artifact store.
 - name: main | Ensure the data volume carries a filesystem
   when: (data_volume_enabled | bool)
   community.general.filesystem:
@@ -55,10 +50,6 @@
     opts: "{{ data_volume_mount_options }}"
     state: mounted
 
-# The play gathered facts before this role mounted anything, so
-# ansible_facts['mounts'] still describes the host without the data volume.
-# Later roles check that their data directory is on a real filesystem, and they
-# would read the stale table and refuse to run on a host this role just fixed.
 - name: main | Refresh the mount facts after mounting the data volume
   when:
     - (data_volume_enabled | bool)
@@ -69,8 +60,6 @@
       - "!min"
       - hardware
 
-# Ownership is applied again after the mount because the pre-mount permissions
-# belong to the underlying directory, not to the mounted filesystem's root.
 - name: main | Ensure the mounted volume has the expected ownership
   when:
     - (data_volume_enabled | bool)

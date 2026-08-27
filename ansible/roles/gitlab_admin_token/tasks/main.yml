@@ -1,0 +1,102 @@
+---
+
+- name: main | Check for a previously recorded token
+  register: _reg_gitlab_admin_token_file
+  delegate_to: >-
+    {{ gitlab_admin_token_host
+       if (gitlab_admin_token_host | default('') | length) > 0
+       else omit }}
+  ansible.builtin.stat:
+    path: "{{ gitlab_admin_token_file }}"
+    get_checksum: false
+
+- name: main | Read the previously recorded token
+  when: _reg_gitlab_admin_token_file['stat']['exists']
+  no_log: "{{ gitlab_admin_token_no_log | bool }}"
+  register: _reg_gitlab_admin_token_recorded
+  delegate_to: >-
+    {{ gitlab_admin_token_host
+       if (gitlab_admin_token_host | default('') | length) > 0
+       else omit }}
+  ansible.builtin.slurp:
+    src: "{{ gitlab_admin_token_file }}"
+
+- name: main | Prove the recorded token still authenticates
+  when: _reg_gitlab_admin_token_file['stat']['exists']
+  no_log: "{{ gitlab_admin_token_no_log | bool }}"
+  register: _reg_gitlab_admin_token_check
+  failed_when: false
+  delegate_to: >-
+    {{ gitlab_admin_token_host
+       if (gitlab_admin_token_host | default('') | length) > 0
+       else omit }}
+
+  ansible.builtin.uri:
+    url: "{{ _var_gitlab_admin_token_api }}/user"
+    headers:
+      PRIVATE-TOKEN: "{{ _var_gitlab_admin_token_recorded['token'] }}"
+    status_code: [200, 401, 403]
+
+- name: main | Decide whether the recorded token can be reused
+  ansible.builtin.set_fact:
+    _gitlab_admin_token_reusable: >-
+      {{ (_reg_gitlab_admin_token_file['stat']['exists'] | bool)
+         and ((ansible_check_mode | bool)
+              or (_reg_gitlab_admin_token_check.get('status') == 200)) }}
+
+- name: main | Report the admin token decision
+  ansible.builtin.debug:
+    msg: >-
+      gitlab admin token:
+      {{ 'reusing the recorded credential'
+         if (_gitlab_admin_token_reusable | bool)
+         else 'minting a replacement and recording it' }}
+    verbosity: 0
+
+- name: main | Refuse to mint in check mode
+  when:
+    - ansible_check_mode
+    - not (_gitlab_admin_token_reusable | bool)
+  ansible.builtin.fail:
+    msg: >-
+      The recorded GitLab admin token is missing or no longer authenticates,
+      and a fresh mint-and-record is required. Check mode refuses to do it,
+      because the mint runs for real while the record write would not
+      persist, leaving a live token nobody tracks. Run this playbook once
+      without --check; the mint is then recorded and every later run reuses
+      it.
+
+- name: main | Mint a replacement admin token # noqa: command-instead-of-shell
+  when: not (_gitlab_admin_token_reusable | bool)
+  changed_when: true
+  no_log: "{{ gitlab_admin_token_no_log | bool }}"
+  register: _reg_gitlab_admin_token_new
+  delegate_to: >-
+    {{ gitlab_admin_token_host
+       if (gitlab_admin_token_host | default('') | length) > 0
+       else omit }}
+  environment:
+    GITLAB_ADMIN_TOKEN_BASE_URL: "{{ gitlab_admin_token_url }}"
+    GITLAB_ADMIN_TOKEN_ROOT_PASSWORD: >-
+      {{ _var_gitlab_admin_token_root_password }}
+  ansible.builtin.shell:
+    cmd: >-
+      {{ _var_gitlab_admin_token_web_script
+         if (_var_gitlab_admin_token_root_password | length) > 0
+         else _var_gitlab_admin_token_pat_script }}
+
+- name: main | Record the token for later runs
+  when: not (_gitlab_admin_token_reusable | bool)
+  no_log: "{{ gitlab_admin_token_no_log | bool }}"
+  delegate_to: >-
+    {{ gitlab_admin_token_host
+       if (gitlab_admin_token_host | default('') | length) > 0
+       else omit }}
+  ansible.builtin.copy:
+    content: |
+      id: {{ _reg_gitlab_admin_token_new['stdout'].split()[0] }}
+      token: {{ _reg_gitlab_admin_token_new['stdout'].split()[1] }}
+    dest: "{{ gitlab_admin_token_file }}"
+    owner: root
+    group: root
+    mode: "0600"

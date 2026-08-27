@@ -14,8 +14,9 @@ everything inside the cluster is reconciled by it:
    $ flux get helmreleases -A
    $ kubectl get pods -A | grep -Ev 'Running|Completed'
 
-A healthy cluster answers those with five ready Kustomizations, eight ready
-HelmReleases, and no pods in the third.
+A healthy cluster answers those with seven ready Kustomizations, eight ready
+HelmReleases, and no pods in the third — the set the
+:doc:`../sysadmin/health-checks` page runs first.
 
 .. toctree::
    :maxdepth: 1

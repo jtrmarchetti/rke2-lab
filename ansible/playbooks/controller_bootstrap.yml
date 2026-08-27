@@ -1,31 +1,4 @@
 ---
-# The controller's own bring-up, and the first thing that runs on a rebuild.
-#
-# plan/OVERVIEW.md requires the whole environment to be rebuildable from
-# Pulumi, Ansible, and this inventory. It was not, and the gap was on the one
-# host that makes every other gap survivable: the controller's split DNS came
-# from a hand-run shell script whose name promised the rest of a setup it never
-# performed, and its language runtimes, Pulumi CLI and tunnel were prose in
-# plan/CONTROLLER.md. Every other host in the lab was code.
-#
-# Runs before playbooks/site.yml, which imports it first for exactly this
-# reason. Ordering inside is not arbitrary:
-#
-#   1. Split DNS, because nothing that resolves a dev.lo name works before it
-#      — which is most of what follows, and all of Phase 3 onward.
-#   2. The runtime, because Pulumi creates the VMs the tunnel then reaches.
-#   3. The tunnel, last, because it is the path to 192.168.2.0/24 and its own
-#      repo01 play deliberately connects over 192.168.1.20 instead, so that
-#      configuring the tunnel never depends on the tunnel.
-#
-# Assumes only that bootstrap/controller-bootstrap.sh has run, since that is
-# what makes an `ansible-playbook` command possible at all. It is the single
-# hand-run step in the cold start and its scope is one chicken-and-egg problem:
-# Ansible cannot install Ansible.
-#
-# Not part of playbooks/controller.yml, which takes kubectl from a cluster node
-# and therefore cannot run until a cluster exists. This one runs when nothing
-# exists, which is the entire point.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
@@ -34,8 +7,6 @@
       - WIREGUARD_CONTROLLER_PRIVATE_KEY
       - WIREGUARD_REPO_PRIVATE_KEY
 
-# dnsmasq holds port 53 and replaces systemd-resolved, so this play needs root
-# where the rest of the controller's setup does not.
 - name: Configure the controller's split DNS
   hosts: controller
   gather_facts: true
@@ -56,9 +27,6 @@
           tags:
             - split_dns
 
-# become: false at the play level, with root taken only by the package tasks
-# inside the role. Everything else lands under ~/.venvs, ~/.pulumi and
-# ~/.config: operating and rebuilding the lab needs no privilege here.
 - name: Install the controller's automation runtime
   hosts: controller
   gather_facts: true
@@ -68,17 +36,12 @@
       tags:
         - controller_runtime
       vars:
-        # All three from inventory/group_vars/controller/artifacts.yml, which
-        # is the controller's own artifact manifest: the version, the URL and
-        # the checksum are one entry, so a bump cannot leave one of them behind.
-        controller_runtime_pulumi_sha256: >-
-          {{ inventory_controller_runtime_pulumi_sha256 }}
+
         controller_runtime_pulumi_url: >-
           {{ inventory_controller_runtime_pulumi_url }}
         controller_runtime_pulumi_version: >-
           {{ inventory_controller_runtime_pulumi_version }}
-        # The repository root, derived from where this playbook lives rather
-        # than configured, so a clone in any directory works with no edit.
+
         controller_runtime_repo_dir: "{{ playbook_dir | dirname | dirname }}"
       ansible.builtin.include_role:
         name: controller_runtime
@@ -86,6 +49,5 @@
           tags:
             - controller_runtime
 
-# Both ends in one pass, as the rotation procedure in plan/SECRETS.md assumes.
 - name: Establish the tunnel into the internal network
   ansible.builtin.import_playbook: tunnel_controller_access.yml

@@ -17,7 +17,8 @@ configuration as code.
 | `CLUSTER_COMPONENTS.md` | Cluster software stack selections |
 | `ANSIBLE_STANDARDS.md` | Role/playbook conventions all automation must follow |
 | `PHASE<N>_IMPLEMENTATION.md` | Detailed execution plan for a single phase |
-| `../docs/` | The sysadmin guide — how the built environment is operated |
+| `../docs/` | The environment guide (sysadmin + developer sections) — how the built
+  environment is operated and extended |
 
 `PROXMOX.md` also records the hypervisor's storage characteristics, which
 constrain etcd and are the reason the Phase 4 control plane needs tuning.
@@ -352,13 +353,16 @@ No secret value is stored in this repository. Everything sensitive lives in
 environment. See `SECRETS.md` for the full inventory, the rotation procedure, and the
 preflight check every playbook runs before it starts.
 
-## The Sysadmin Guide
+## The Documentation Site
 
-`docs/` is a Sphinx site written for whoever operates this environment rather
-than for whoever built it: service URLs, credential rotation, adding a
-GitOps-managed service, Longhorn and PVC capacity, and a symptom-ordered
-troubleshooting page. It is the operator's view of what the documents in this
-directory decide.
+`docs/` is a Sphinx site written for two readers, with a shared assumption of
+zero Kubernetes background: the **sysadmin** section (health checks,
+day-to-day, maintenance, credential rotation, storage, a symptom-ordered
+troubleshooting page, versions, URLs) and the **developer** section
+(infrastructure design, automation design, the Ansible automation in detail —
+how it works and the patterns its design decisions concentrate in, adding a
+service, upgrading pieces). It is the operating and extending view of what the
+documents in this directory decide.
 
 **It is maintained with the same rule the plan documents are: a change to the
 environment is not finished until the guide reflects it.** The two go stale in
@@ -398,8 +402,9 @@ all five steps are done.
 4. **Test** — Run the phase's validation checklist, confirm idempotency on a second
    run, and confirm the exit criteria. Capture evidence.
 5. **Document** — Correct every plan document the phase invalidated, including
-   earlier phases' "Status" and "Still open" sections, and update the sysadmin
-   guide in `docs/` for anything the phase changed about operating the
-   environment: a new service, a new credential, a new URL, a new version, or a
-   fault worth adding to the troubleshooting page. A phase that changed how the
-   environment is run and did not touch `docs/` has skipped a step.
+   earlier phases' "Status" and "Still open" sections, and update the
+   documentation site in `docs/` for anything the phase changed about
+   operating or extending the environment: a new service, a new credential, a
+   new URL, a new version, a design decision, or a fault worth adding to the
+   troubleshooting page. A phase that changed how the environment is run and
+   did not touch `docs/` has skipped a step.

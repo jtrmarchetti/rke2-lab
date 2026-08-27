@@ -17,8 +17,6 @@
     name: "{{ _var_ipa_service_cert_packages }}"
     state: present
 
-# World-readable: it holds public certificates and the CA. The private keys
-# written into it below carry their own 0640 mode.
 - name: main | Ensure the certificate directory exists
   when: (ipa_service_cert_enabled | bool)
   ansible.builtin.file:
@@ -28,9 +26,6 @@
     group: root
     mode: "0755"
 
-# Read from the IPA server rather than fetched over HTTP from ipa-ca.dev.lo:
-# this host has no reason to trust that endpoint yet, and the file on the
-# server is the same material without the bootstrapping problem.
 - name: main | Read the domain CA certificate from the identity server
   when: (ipa_service_cert_enabled | bool)
   changed_when: false
@@ -62,9 +57,6 @@
     group: root
     mode: "0644"
 
-# No module wraps update-ca-certificates, and it must run for the copied file to
-# reach the bundle everything actually reads. Guarded on the copy reporting
-# changed, so a steady-state run does not report change forever.
 - name: main | Rebuild the host trust store
   when:
     - (ipa_service_cert_enabled | bool)

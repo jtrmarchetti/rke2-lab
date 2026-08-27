@@ -1,22 +1,4 @@
 {{ ansible_managed | comment }}
-# kube-prometheus-stack, sized before it was deployed.
-#
-# The sizing is the point of 6c, not an afterthought. Three workers hold 30 GiB
-# between them for every workload in the cluster, and the control plane is
-# tainted, so this stack competes with Longhorn, OpenBao, Garage and Keycloak
-# for the same memory. Chart defaults assume a cluster with room to spare and
-# this one has none, so every component below states a request and a limit, and
-# the retention windows are chosen against the ~147 GB Longhorn budget rather
-# than left at defaults measured in weeks.
-#
-# What the numbers add up to: about 800 MiB of requests for this release, and
-# roughly 2 GiB across all of 6c. That is the floor the scheduler enforces; the
-# limits are what stop one component's bad day from becoming the cluster's.
-#
-# Two things are off. thanosRuler, because there is one Prometheus and nothing
-# to federate. The admission webhook's certgen Job, because cert-manager is
-# already here and can issue the webhook's certificate from the same authority
-# as everything else — which removes an image as well as a Job.
 ---
 apiVersion: v1
 kind: Namespace
@@ -31,10 +13,12 @@ metadata:
 spec:
   interval: 30m
   timeout: 20m
+  driftDetection:
+    mode: warn
   chart:
     spec:
       chart: kube-prometheus-stack
-      version: 88.3.0
+      version: 88.5.4
       sourceRef:
         kind: HelmRepository
         name: gitlab-charts
@@ -50,12 +34,10 @@ spec:
   values:
     crds:
       enabled: true
-
     thanosRuler:
       enabled: false
     windowsMonitoring:
       enabled: false
-
     prometheusOperator:
       admissionWebhooks:
         certManager:
@@ -75,19 +57,10 @@ spec:
             memory: 32Mi
           limits:
             memory: 96Mi
-
     prometheus:
       prometheusSpec:
-        # 60s, not the default 30s. Halving the scrape rate halves the sample
-        # volume and therefore the memory Prometheus holds, and nothing in this
-        # lab is diagnosed at 30-second resolution that cannot be diagnosed at
-        # 60.
         scrapeInterval: 60s
         evaluationInterval: 60s
-        # Both, and the size limit is the one that actually protects the
-        # cluster: a time window says how long data is kept, a size limit says
-        # how much disk it may take, and only the second is a promise the disk
-        # can keep.
         retention: 5d
         retentionSize: 6GB
         nodeSelector:
@@ -106,48 +79,14 @@ spec:
               resources:
                 requests:
                   storage: 8Gi
-        # Watch every namespace, not just this one. The default selectors are
-        # scoped to the release's own labels, which silently ignores every
-        # ServiceMonitor the rest of the cluster creates.
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
         ruleSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
-
-    # The control plane exporters. Their ServiceMonitors resolve to node
-    # addresses, which is why rke2_server and rke2_agent now bind etcd, the
-    # scheduler, the controller manager and kube-proxy off 127.0.0.1 — without
-    # that half, everything below still reports the control plane down.
-    #
-    # etcd, the scheduler and the controller manager need nothing here: the
-    # chart already targets 2381, 10259 and 10257, scrapes the latter two over
-    # HTTPS with the service account token, and sets insecureSkipVerify for
-    # certificates this cluster issued itself.
     kubeProxy:
       service:
-        # `component`, not `k8s-app`. The chart's default selector is kubeadm's
-        # label, and RKE2's static pods carry `component: kube-proxy` with
-        # `tier: control-plane` and nothing else — so the Service matched no
-        # pod, had no endpoints, and produced no `up` series at all. That is a
-        # different failure from a refused scrape: KubeProxyDown alerts on the
-        # metric being absent, so it fires with no failing target to point at.
         selector:
           component: kube-proxy
-
-    # No receiver, and that is the current state rather than an oversight.
-    # Nothing on this network can reach a mail server or a webhook endpoint, so
-    # the chart's default route to the `null` receiver is left in place and
-    # alerts are read in Grafana's Alerting section — with the datasource picker
-    # switched from Grafana to Alertmanager, since every rule here is a
-    # Prometheus rule and Grafana manages none of its own.
-    #
-    # The intended destination is Splunk or Elasticsearch, taking alerts as
-    # events. Alertmanager reaches either through its generic `webhook_config`,
-    # so what is missing is the endpoint and its credentials, not a change of
-    # shape here. Whoever adds it should set `alertmanager.config` whole rather
-    # than appending a receiver: declaring that key replaces the chart's default
-    # config, and the default carries the inhibit rules that stop one critical
-    # alert arriving alongside the three warnings it caused.
     alertmanager:
       alertmanagerSpec:
         nodeSelector:
@@ -166,7 +105,6 @@ spec:
               resources:
                 requests:
                   storage: 1Gi
-
     kube-state-metrics:
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
@@ -176,11 +114,7 @@ spec:
           memory: 64Mi
         limits:
           memory: 192Mi
-
     prometheus-node-exporter:
-      # The one component that belongs on the control plane too: a node with no
-      # exporter is a node with no metrics, and the tainted nodes are the ones
-      # holding etcd. Tolerations rather than a node selector, for that reason.
       tolerations:
         - operator: Exists
       resources:
@@ -189,15 +123,10 @@ spec:
           memory: 32Mi
         limits:
           memory: 64Mi
-
     grafana:
       enabled: true
       nodeSelector:
         node-role.kubernetes.io/worker: "true"
-      # No persistence. Every dashboard and datasource here comes from a
-      # ConfigMap in Git, so the only thing a volume would preserve is state
-      # someone clicked — which is the state this cluster deliberately does not
-      # keep.
       persistence:
         enabled: false
       resources:
@@ -221,17 +150,10 @@ spec:
             memory: 64Mi
           limits:
             memory: 128Mi
-      # The local administrator, which is now the break-glass account rather
-      # than the way in. It stays because Grafana federating to Keycloak means
-      # Grafana is unreachable when Keycloak will not start, and the cluster
-      # whose metrics would explain why is this one.
       admin:
         existingSecret: grafana-admin
         userKey: username
         passwordKey: password
-      # The OIDC client secret, and the domain CA Grafana verifies Keycloak's
-      # certificate with. Both are mounted rather than templated in, because
-      # grafana.ini is a ConfigMap in Git and a client secret is not.
       extraSecretMounts:
         - name: grafana-oidc
           secretName: grafana-oidc
@@ -244,62 +166,32 @@ spec:
       grafana.ini:
         server:
           root_url: https://grafana.{{ gitops_source_cluster_domain }}
+        auth:
+          # generic_oauth does not record a user_auth AuthID, so the user-sync
+          # hook reconciles a known user by email only when this is set.
+          # Without it, repeat SSO logins fail to resolve the existing user
+          # ("user not found") and no grafana_session is established.
+          oauth_allow_insecure_email_lookup: true
         auth.anonymous:
           enabled: false
-        # Keycloak is the front door.
-        #
-        # `generic_oauth` rather than a Keycloak-specific integration, because
-        # Grafana has none — this is the supported path and it is what the
-        # Grafana documentation's own Keycloak example configures.
         auth.generic_oauth:
           enabled: true
           name: dev.lo single sign-on
-          # On, and it has to be: no Grafana account exists for a federated
-          # user until their first sign-in creates one, so with this off every
-          # SSO login is refused and the only account that works is the local
-          # admin.
-          #
-          # What keeps that from meaning "anyone at Keycloak gets a Grafana
-          # account" is role_attribute_strict below, not this setting. A user
-          # in none of the Grafana groups matches neither branch of
-          # role_attribute_path, and strict mode refuses them outright rather
-          # than admitting them on auto_assign_org_role. The two are a pair:
-          # turning strict mode off while leaving this on is what makes
-          # "everyone in the domain is a Grafana Viewer" happen by accident.
           allow_sign_up: true
           auto_login: false
           client_id: grafana
-          # $__file, not the value. Grafana re-reads the file, so a rotated
-          # secret takes a restart rather than a re-render of this ConfigMap.
           client_secret: $__file{/etc/grafana/oidc/client-secret}
           scopes: openid profile email
           auth_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/auth
           token_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/token
           api_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/userinfo
           signout_redirect_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/logout
-          # Despite the name, this is the authority Grafana verifies the
-          # *server* against — it populates the root CA pool for the OAuth
-          # transport, not a client certificate. Without it every token
-          # exchange fails verification against a certificate the cluster
-          # issued itself, and the error surfaces as a login loop.
           tls_client_ca: /etc/grafana/ca/ca.crt
           use_pkce: true
-          # The claim keycloak_clients' protocol mapper writes the client's own
-          # roles into. `admin` and `user` are Longhorn's, Grafana's, OpenBao's
-          # — each client's mapper emits only its own, so this claim can be
-          # read without qualifying it by service.
           role_attribute_path: >-
             contains(roles[*], 'admin') && 'Admin' ||
             contains(roles[*], 'user') && 'Viewer'
-          # Refuse rather than admit. Without this a user matching neither
-          # branch above is signed in with the default org role, which is how
-          # "everyone in the domain is a Grafana user" happens by accident.
           role_attribute_strict: true
-          # Viewer, not Editor, and this is a real decision rather than
-          # caution. Every dashboard and datasource in this Grafana comes from
-          # a ConfigMap in Git and persistence is off, so anything an Editor
-          # created would be lost at the next restart — an edit permission that
-          # silently discards edits is worse than not having one.
           allow_assign_grafana_admin: false
       ingress:
         enabled: true

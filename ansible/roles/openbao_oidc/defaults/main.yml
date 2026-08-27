@@ -1,63 +1,20 @@
 ---
 openbao_oidc_enabled: true
 
-# The vault's API through its ingress, and the CA its certificate is verified
-# against. Same address, and the same reasoning, as openbao_config and
-# openbao_secrets.
 openbao_oidc_url: null
 openbao_oidc_ca_file: /etc/ssl/certs/ca-certificates.crt
 
-# Secret sourced from ~/.config/rke2lab/env.sh, written there by openbao_init.
-#
-# This role uses the root token and never replaces it. That is the point: the
-# root token stays the way in when Keycloak is the thing that is broken, and
-# OIDC is added beside it rather than instead of it. See tasks/main.yml.
-# openbao_oidc_root_token:
-
-# --- The identity provider -------------------------------------------------
-#
-# The issuer as a browser sees it, because it has to match the `iss` claim in
-# the token and the address the user is redirected to. The in-cluster service
-# address would work for neither.
 openbao_oidc_issuer: null
 openbao_oidc_client_id: openbao
 
-# The domain CA, read from this host and handed to the vault as
-# `oidc_discovery_ca_pem`.
-#
-# Not optional, and not obvious: the vault fetches the discovery document
-# itself, from inside the cluster, and **the OpenBao container's trust store
-# does not contain the domain CA**. Without this the configuration write fails
-# with `error checking oidc discovery URL` — an error that names the URL and
-# says nothing about certificates, and which looks identical to a wrong realm
-# name or an unreachable Keycloak.
-#
-# Passed as a PEM rather than fixed by mounting the CA into the pod, because
-# the vault's own API takes it: one parameter, no change to the StatefulSet,
-# and it rotates with whatever this file points at. Same problem Grafana solves
-# with `tls_client_ca` and the Longhorn proxy with `--provider-ca-file` — every
-# workload that talks to Keycloak over the ingress needs the authority, and
-# each of the three takes it a different way.
-#
-# The domain root is enough despite sso's certificate being issued by the
-# cluster's intermediate: cert-manager's CA issuer serves the intermediate
-# alongside the leaf, so the chain completes here.
 openbao_oidc_discovery_ca_file: null
-# openbao_oidc_client_secret:
 
-# The claim the client roles arrive in. Must equal keycloak_clients_roles_claim
-# — that role's protocol mapper is what puts them there.
 openbao_oidc_groups_claim: roles
 
-# Where OpenBao's own UI and CLI return to after authenticating. The localhost
-# entry is the CLI's: `bao login -method=oidc` opens a browser and listens on
-# 8250 for the callback, so a vault without it can be reached from the UI and
-# not from a terminal.
 openbao_oidc_redirect_uris:
   - /ui/vault/auth/oidc/oidc/callback
 openbao_oidc_cli_redirect_uri: http://localhost:8250/oidc/callback
 
-# The mount, the role and the two identity groups.
 openbao_oidc_mount: oidc
 openbao_oidc_role_name: default
 openbao_oidc_admin_role: admin
@@ -65,15 +22,9 @@ openbao_oidc_user_role: user
 openbao_oidc_admin_policy: sso-admins
 openbao_oidc_user_policy: sso-users
 
-# Where runtime secrets live. Must equal openbao_config_kv_path; the policies
-# below are written against it.
 openbao_oidc_kv_path: kv
 
-# Token lifetimes for an OIDC login. Deliberately shorter than the vault's
-# defaults: an interactive session is not a service account.
 openbao_oidc_token_ttl: 1h
 openbao_oidc_token_max_ttl: 8h
 
-# Set false only when debugging; it prints the root token and the client
-# secret.
 openbao_oidc_no_log: true

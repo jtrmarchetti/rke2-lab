@@ -17,6 +17,26 @@
     path: /etc/apt/apt.conf.d/99repo-proxy
     state: absent
 
+- name: main | Ensure apt acquire tuning is present for proxy hosts
+  when:
+    - (base_host_apt_proxy_enabled | bool)
+    - (base_host_apt_proxy_url | length > 0)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/99repo-acquire
+    content: |
+      Acquire::Retries "{{ base_host_apt_acquire_retries }}";
+      Acquire::http::Timeout "{{ base_host_apt_acquire_timeout }}";
+      Acquire::https::Timeout "{{ base_host_apt_acquire_timeout }}";
+      Acquire::http::Pipeline-Depth "{{ base_host_apt_acquire_pipeline_depth }}";
+      Acquire::https::Pipeline-Depth "{{ base_host_apt_acquire_pipeline_depth }}";
+    mode: "0644"
+
+- name: main | Ensure apt acquire tuning is absent when the host reaches upstream directly
+  when: not (base_host_apt_proxy_enabled | bool)
+  ansible.builtin.file:
+    path: /etc/apt/apt.conf.d/99repo-acquire
+    state: absent
+
 - name: main | Ensure split DNS netplan drop-in is present
   when:
     - (base_host_split_dns_enabled | bool)
@@ -39,10 +59,46 @@
     path: "{{ _var_base_host_split_dns_netplan_path }}"
     state: absent
 
+- name: main | Ensure periodic unattended upgrades are disabled in apt config
+  when: not (base_host_apt_unattended_upgrade | bool)
+  ansible.builtin.copy:
+
+    dest: /etc/apt/apt.conf.d/00no-unattended-upgrades
+    content: APT::Periodic::Unattended-Upgrade "0";
+    mode: "0644"
+
+- name: main | Ensure the apt-daily timer is stopped and disabled
+  when: not (base_host_apt_unattended_upgrade | bool)
+  ansible.builtin.systemd:
+    name: apt-daily.timer
+    state: stopped
+    enabled: false
+
+- name: main | Ensure the apt-daily-upgrade timer is stopped and disabled
+  when: not (base_host_apt_unattended_upgrade | bool)
+  ansible.builtin.systemd:
+    name: apt-daily-upgrade.timer
+    state: stopped
+    enabled: false
+
+- name: main | Ensure the unattended-upgrades shutdown hook is disabled
+  when: not (base_host_apt_unattended_upgrade | bool)
+  ansible.builtin.systemd:
+
+    name: unattended-upgrades
+    enabled: false
+
 - name: main | Ensure apt cache is updated
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: "{{ _var_base_host_apt_cache_valid_time }}"
+
+  register: _reg_base_host_apt_update
+  retries: "{{ base_host_apt_update_retries }}"
+  delay: "{{ base_host_apt_update_delay }}"
+  until: _reg_base_host_apt_update.rc == 0
+  ansible.builtin.shell: |
+    pkill -9 -f 'AnsiballZ_ap[t]' 2>/dev/null || true
+    pkill -9 -f '/usr/lib/apt/methods/[a-z]+' 2>/dev/null || true
+    pkill -9 -x apt-get 2>/dev/null || true
+    exec timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
 
 - name: main | Ensure base packages are installed
   ansible.builtin.apt:

@@ -1,14 +1,5 @@
 {{ ansible_managed | comment }}
-#
-# kube-vip in ARP mode, leader-elected across the control plane, holding the API
-# VIP. Written into the RKE2 auto-deploy manifest directory, so it is applied as
-# soon as the first server's apiserver answers — which is before the second
-# server needs the VIP to join.
-#
-# Generated from `kube-vip manifest daemonset` for this exact image tag rather
-# than copied from the documentation, whose published example is several major
-# versions behind. Two things are added to that output: the node selector, and
-# the RBAC below.
+
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -71,10 +62,7 @@ spec:
       labels:
         app.kubernetes.io/name: kube-vip-ds
     spec:
-      # `kube-vip manifest daemonset` emits no node selector, which is harmless
-      # while the cluster is control plane only and wrong the moment Phase 5
-      # adds workers: without this the VIP daemon would be scheduled onto every
-      # worker as well.
+
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
       containers:
@@ -104,9 +92,7 @@ spec:
               value: "true"
             - name: cp_namespace
               value: kube-system
-            # Only one node advertises the VIP at a time. Without leader
-            # election every control plane node would answer ARP for the same
-            # address.
+
             - name: vip_leaderelection
               value: "true"
             - name: vip_leasename

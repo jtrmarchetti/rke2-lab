@@ -1,61 +1,32 @@
 ---
 ipa_sub_ca_enabled: true
 
-# The identity host and the container the IPA CLI lives in. No default for the
-# host: signing against the wrong authority is worse than failing to sign.
-# ipa_sub_ca_ipa_host:
 ipa_sub_ca_ipa_container: freeipa-server
 ipa_sub_ca_admin_user: admin
-# Secret. Sourced from the environment by the caller; see plan/SECRETS.md.
-# ipa_sub_ca_admin_password:
 
-# The intermediate's identity. FreeIPA validates every request against a
-# subject principal and requires the certificate's CN to match it, so this is
-# both the common name and the host entry created to own it. It is an identity,
-# not a machine: nothing resolves this name and nothing needs to.
 ipa_sub_ca_common_name: null
 
-# The Dogtag profile this role imports, and the access rule that permits it.
-# FreeIPA ships no subordinate-CA profile, which is why one is created here.
 ipa_sub_ca_profile_id: subCA
 ipa_sub_ca_profile_description: >-
   Subordinate CA for the RKE2 cluster, path length 0
 ipa_sub_ca_acl_name: subca-k8s
 ipa_sub_ca_ca: ipa
 
-# Five years, against the domain CA's twenty. Long enough that renewal is not a
-# recurring chore, short enough that it is a chore someone still remembers how
-# to do. The renewal window is what makes a rerun of this role reissue rather
-# than report success on a certificate about to expire.
 ipa_sub_ca_validity_days: 1825
 ipa_sub_ca_renew_before_days: 90
 
+ipa_sub_ca_domain_ca_file: null
+
 ipa_sub_ca_key_size: 4096
 
-# Values the imported profile carries verbatim from the domain's own
-# caIPAserviceCert: the realm the subject DN is built with, and the two URLs a
-# client uses to check revocation. Wrong values here would produce certificates
-# that validate differently from every other certificate in the domain.
 ipa_sub_ca_realm: DEV.LO
 ipa_sub_ca_ocsp_url: null
 ipa_sub_ca_crl_url: null
 
-# Where the key, request and certificate land on the controller. Alongside the
-# other secrets this host holds, at mode 0600, and never copied anywhere in
-# plaintext — what reaches the cluster is a SealedSecret.
 ipa_sub_ca_output_dir: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/k8s-ca
 
-# Set false only when debugging; it exposes the admin password.
 ipa_sub_ca_no_log: true
 
-# Optional publication of the issued intermediate, in public form only, to the
-# artifact host. Anything that validates a certificate the cluster signed needs
-# this alongside the domain root: a browser being taught to trust k8s.dev.lo
-# has to be given both links, and only the root is published by the role that
-# issues repo01's own certificates.
-#
-# Set to the inventory name of the artifact host and a directory under its
-# document root. Empty host disables publishing.
 ipa_sub_ca_publish_host: ""
 ipa_sub_ca_publish_dir: ""

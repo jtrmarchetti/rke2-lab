@@ -1,5 +1,5 @@
 ---
-# Publish the sysadmin guide to GitHub Pages.
+# Publish the environment guide (sysadmin + developer sections) to GitHub Pages.
 #
 # Two jobs on purpose. `build` runs on every pull request as well, because the
 # guide builds with `-W` — a broken cross-reference or an orphaned page fails

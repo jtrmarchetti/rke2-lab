@@ -1,7 +1,6 @@
 ---
 freeipa_server_enabled: false
 
-# Identity
 freeipa_server_domain: null
 freeipa_server_realm: DEV.LO
 freeipa_server_hostname: null
@@ -9,122 +8,58 @@ freeipa_server_ip_address: null
 freeipa_server_admin_password: ""
 freeipa_server_directory_manager_password: ""
 
-# DNS behavior.
-#
-# The internal network has no internet access and no upstream resolver, so
-# FreeIPA is installed with --no-forwarders and is authoritative for dev.lo and
-# nothing else. Enabling forwarders would make every other lookup hang until it
-# times out.
 freeipa_server_setup_dns: true
 freeipa_server_forwarders_enabled: false
 freeipa_server_forwarders: []
 freeipa_server_allow_zone_overlap: true
 freeipa_server_setup_reverse_zone: true
-# Skip the installer's pre-flight resolution check. At install time the only
-# record for this host is the /etc/hosts entry the role writes, because FreeIPA
-# is the thing about to start answering DNS.
+
 freeipa_server_no_host_dns: true
 
-# Hand port 53 and the host resolver to FreeIPA.
-#
-# Ubuntu runs systemd-resolved, which holds 127.0.0.53:53 and 127.0.0.54:53 and
-# points /etc/resolv.conf at its own stub. FreeIPA's named cannot own port 53
-# beside it, and every lookup for the new domain reaches the stub, which has no
-# upstream to ask on this network and answers SERVFAIL. So resolved is stopped
-# and masked, and /etc/resolv.conf becomes a static file pointing at 127.0.0.1.
-#
-# Between that change and a running FreeIPA, the host resolves nothing. That is
-# the intended end state for core01 rather than a side effect: it is its own
-# resolver and this network has no other. Ansible reaches it by address, and
-# apt reaches the repo01 proxy by address, so neither depends on the resolver.
 freeipa_server_manage_resolver: true
 
-# Time. Left off until the internal network's time source is decided: with no
-# internet there is no upstream NTP pool, so enabling this would point clients
-# at core01's own clock. See plan/PHASE2_IMPLEMENTATION.md.
 freeipa_server_ntp: false
 freeipa_server_ntp_servers: []
 
-# Container deployment
 freeipa_server_container_name: freeipa-server
+# Held at almalinux-8 (FreeIPA 4.9) - see repo memory
+# freeipa-almalinux10-upgrade-failure.md for why the 3.x tag cannot take over
+# the running domain in place.
 freeipa_server_container_image: "freeipa/freeipa-server:almalinux-8"
 freeipa_server_compose_dir: /opt/rke2lab/freeipa
 freeipa_server_data_dir: /data1/freeipa
 
-# Air-gapped image delivery. core01 cannot reach a registry, so the image
-# arrives as a tarball from the Apache artifact host and is loaded locally.
-#
-# The path matches the artifact host document root layout: one directory per
-# consumer, named for the phase that consumes it. The staging role publishes
-# this tarball from the manifest entry in group_vars/repo/artifacts.yml.
 freeipa_server_image_tarball_url: null
-# Verified against the .sha256 file published next to the artifact rather than
-# a value pinned here. A `docker save` tarball has no reproducible checksum, so
-# the only correct expected value is the one generated at staging time.
-freeipa_server_image_tarball_checksum: null
 freeipa_server_image_tarball_path: /var/tmp/freeipa-server-almalinux-8.tar
 
-# Host prerequisites, installed through the repo01 apt proxy.
 freeipa_server_runtime_packages:
   - docker.io
   - docker-compose-v2
-  # Required by the ipa_dnsrecord tasks, which call the IPA API from this host
-  # because it is the only one that can resolve its own domain.
+
   - python3-requests
 
-# DNS zones to ensure exist, as a list of mappings with a name key. The
-# installer creates the forward zone; a reverse zone for the internal subnet has
-# to be asked for, and without it PTR queries leak to a resolver that knows
-# nothing about this address space.
+freeipa_server_apt_retries: 3
+freeipa_server_apt_delay: 15
+
 freeipa_server_dns_zones: []
 
-# Service records to publish in the domain, as a list of mappings:
-#   name  Record name, relative to the zone.
-#   value Record value.
-#   type  Record type. Defaults to A.
-#   zone  Zone to publish into. Defaults to freeipa_server_domain.
-# Empty by default: which names exist is environment state, so it comes from
-# inventory rather than from the role.
 freeipa_server_dns_records: []
 
-# --- BIND options ---------------------------------------------------------
-#
-# DNSSEC validation. Off here, and the reasoning is in tasks/named_options.yml:
-# a delegated subdomain of dev.lo cannot validate, because dev.lo sits under a
-# TLD the public root says does not exist, and BIND 9.11 offers no per-zone
-# exception. Default true so the role never silently weakens a deployment that
-# has not asked for it.
 freeipa_server_dnssec_validation: true
 freeipa_server_named_options_path: >-
   /data1/freeipa/etc/named/ipa-options-ext.conf
-# The group IPA gives its named configuration inside the container.
+
 freeipa_server_named_config_group: floppy
 
-# Forward zones, as a list of mappings:
-#   name       Zone to delegate.
-#   forwarder  Address of the server authoritative for it.
-#   policy     'only' (default) or 'first'.
-#
-# Phase 6b delegates the cluster's subdomain to the cluster's own DNS. Empty by
-# default: which zones are delegated is environment state.
 freeipa_server_dns_forward_zones: []
 
-# Set false only when debugging a record task; it exposes the admin password.
 freeipa_server_no_log: true
 
-# How long to wait for the first-run domain bootstrap, which is slow.
 freeipa_server_install_timeout: 1800
 
-# Readiness gating. The phases are meant to run back to back, so this role must
-# not report success until the domain actually serves: a later phase that starts
-# against a half-ready FreeIPA fails somewhere far from the real cause.
-# Defaults give ten minutes of polling, which covers the services coming up
-# after a host reboot as well as a first install.
 freeipa_server_ready_retries: 60
 freeipa_server_ready_delay: 10
 freeipa_server_ready_timeout: 300
 
-# How long to let the container settle before judging whether it is stable.
-# Long enough to cover two crash cycles of a failing install; see the task that
-# uses it for why a shorter wait misses a crash loop entirely.
-freeipa_server_settle_timeout: 210
+freeipa_server_settle_retries: 21
+freeipa_server_settle_delay: 10

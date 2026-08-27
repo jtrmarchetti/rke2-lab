@@ -1,18 +1,4 @@
 ---
-# The credential every cluster node pulls with. Scoped to reads and to this
-# group, so a compromised node cannot write to GitLab or read anything outside
-# the artifact mirror.
-#
-# Both read scopes are needed, and they are separate permissions. read_registry
-# covers the container registry; the generic package registry is governed by
-# read_package_registry and answers 404 to a token that lacks it. A node needs
-# both, because the installer and the binary arrive as packages before it has
-# anything that can pull an image.
-#
-# GitLab returns a deploy token's value exactly once, at creation. That single
-# fact drives the shape of this file: the value has to be recorded somewhere the
-# next run can find it, or the next run cannot tell whether the token it can see
-# in the API is the token the nodes are configured with.
 
 - name: deploy_token | Check for a previously recorded token
   register: _reg_rke2_publish_token_file
@@ -37,11 +23,6 @@
       }}/deploy_tokens?per_page={{ _var_rke2_publish_page_size }}
     headers: "{{ _var_rke2_publish_headers }}"
 
-# Reusable only when all three are true: the token exists in GitLab, its value
-# was recorded here, and it carries every scope the nodes need. Anything else is
-# replaced. Checking the scopes rather than only the name is what makes widening
-# rke2_publish_deploy_token_scopes take effect on the next run instead of
-# leaving a token that silently cannot read half of what it is asked for.
 - name: deploy_token | Decide whether the existing token can be reused
   ansible.builtin.set_fact:
     _rke2_publish_token_reusable: >-
@@ -94,11 +75,7 @@
           }}/deploy_tokens
         method: POST
         headers: "{{ _var_rke2_publish_headers }}"
-        # JSON rather than form-urlencoded, because this is the one call with an
-        # array parameter. Form encoding renders a list as repeated `scopes=`
-        # keys, and GitLab's API wants `scopes[]=`; it accepts the request, keeps
-        # one scope, and returns 201. The token then authenticates against
-        # whichever registry it kept and 401s against the other.
+
         body_format: json
         body:
           name: "{{ rke2_publish_deploy_token_name }}"
@@ -110,10 +87,6 @@
       no_log: "{{ rke2_publish_no_log | bool }}"
       ansible.builtin.copy:
         content: |
-          # Written by the rke2_publish role. Read by the phase 4 playbook to
-          # build /etc/rancher/rke2/registries.yaml on every cluster node. Not a
-          # repository file: GitLab returns a deploy token's value once, so this
-          # is the only copy.
           username: {{ _reg_rke2_publish_token_new['json']['username'] }}
           token: {{ _reg_rke2_publish_token_new['json']['token'] }}
         dest: "{{ rke2_publish_deploy_token_file }}"
@@ -121,16 +94,11 @@
         group: root
         mode: "0600"
 
-# Proves the credential against both registries, because they are separate
-# permissions and a token that can pull images but not packages fails later, on
-# a node, as an opaque request failure.
 - name: deploy_token | Prove the token can read the container registry
   changed_when: false
   no_log: "{{ rke2_publish_no_log | bool }}"
   vars:
-    # Assembled in a variable rather than folded across lines in the url key.
-    # A folded scalar turns each newline into a space, which would put literal
-    # spaces inside the query string.
+
     _rke2_publish_pull_scope: >-
       repository:{{ rke2_publish_group }}/{{ rke2_publish_images_project
       }}:pull

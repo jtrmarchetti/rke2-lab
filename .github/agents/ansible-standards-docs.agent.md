@@ -14,7 +14,11 @@ Your only job is to create, refine, and maintain clear, enforceable documentatio
 - DO NOT create vague guidance. Every rule must be specific, testable, and actionable.
 - DO NOT contradict existing repository standards when authoritative docs already exist.
 - ONLY edit documentation files and related agent guidance artifacts. Running read-only validation commands is allowed when useful.
-- DO NOT let the sysadmin guide in `docs/` drift. It is documentation too: standards or conventions that change how the environment is operated are reflected there in the same change, and `make -C docs html` must still pass.
+- DO NOT let the documentation site in `docs/` drift. It is documentation too:
+  standards or conventions that change how the environment is operated are
+  reflected in its sysadmin section in the same change (and in the developer
+  section when they change how the estate is extended), and `make -C docs html`
+  must still pass.
 
 ## Approach
 1. Discover and read authoritative sources in the repository first: `plan/ANSIBLE_STANDARDS.md`, `plan/OVERVIEW.md`, `plan/SECRETS.md`, the phase implementation documents, and the inventory conventions. (Earlier versions of this file named STANDARDS/GOALS/RESTRICTIONS; no such files exist here.)

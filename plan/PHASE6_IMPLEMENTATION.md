@@ -600,8 +600,11 @@ charts work unmodified in Phase 4, reused rather than rediscovered.
 2. Pin every image by digest read from its registry.
 3. Add manifest entries with `retention: transit`.
 4. Stage on `repo01`, publish into GitLab, local copies retire themselves.
-5. Add a `ghcr.io`/`docker.io` rewrite **only if the image is from a registry
-   prefix no existing rule covers** — and remember the node restart.
+5. Add a mirror entry **only if the image's upstream host has no catch-all
+   rule yet**. The rewrites are host-level (see
+   `inventory_rke2_node_registry_mirrors` in `group_vars/all/main.yml`), so a
+   new namespace under an already-listed host costs nothing; a brand-new host
+   costs one rolling restart, paid once.
 6. Declare it under `infrastructure/controllers`, its objects under
    `infrastructure/configs`, workloads under `apps`.
 7. Verify with a transaction, not a status.
@@ -934,8 +937,11 @@ Kerberos principal, no way to become a user — and Keycloak's provider is
 back is a Keycloak that can disagree with it.
 
 The FreeIPA half is applied and proven: the account binds and reads the user
-tree. The Keycloak half is written and gated behind `keycloak_ready`, waiting
-on the same power cycle Keycloak itself is waiting on.
+tree. The Keycloak half is applied too, and its roles are gated behind
+`keycloak_ready` — which `cluster_init.yml` now sets with a live probe of the
+admin API rather than a switch a person had to remember. The 2026-08-19
+rebuild record at the foot of this file covers both that and the shape of
+`garage_init`'s readiness wait.
 
 ## Run Record — 2026-08-16, the GitOps source
 
@@ -1029,8 +1035,9 @@ in the first place.
 ### What is now true that was not
 
 The direction is one-way. A file edited in GitLab survives until the next run
-of `playbooks/gitops.yml` and is then overwritten, because the render wipes the
-working tree before writing it. That is the point rather than a side effect: a
+of `playbooks/gitops.yml` and is then overwritten, because every run resets
+the working clone to the remote tip and then rewrites the render-owned files
+before committing. That is the point rather than a side effect: a
 repository that absorbs edits from both ends has two sources of truth and
 therefore none.
 
@@ -1196,7 +1203,16 @@ Two things follow that are worth stating rather than discovering:
   credentials were already in Git by the time Flux created it. `garage_init`
   gained an explicit readiness wait, with retries as well as a timeout, because
   `kubectl wait` fails immediately rather than after the timeout when the pod
-  does not exist yet.
+  does not exist yet. The 2026-08-19 rebuild showed the deeper shape of that
+  wait: the effective window is `retries × delay`, and on a cold build it is a
+  wait on the `apps` tree arriving through the infra Kustomizations, not on
+  this pod. `garage_init_ready_retries` moved from 20 to 30 and the delay
+  gained a name (`garage_init_ready_delay`), so the window has two dials
+  instead of one. It was tempting to wait on the Keycloak realm instead, but
+  the pod's ExternalSecret reads only `garage-cluster`, which `openbao_secrets`
+  writes earlier in the same play — the realm is not a prerequisite of this
+  pod, and waiting on it would have made the cold build longer for a
+  dependency the pod does not have.
 - **`kv/garage` is written one run late, and no ordering fixes it.**
   `lookup('env')` reads the environment the `ansible-playbook` process started
   with, so the S3 credentials `garage_init` appends to `env.sh` are invisible to
@@ -1940,3 +1956,79 @@ Worth stating plainly, because the existing note in `managing-services.rst` was
 not enough: "a change takes effect at the user's next sign-in" is true and
 insufficient. A new *group membership* for an already-imported user is not
 visible to any number of sign-ins until the cache is dropped.
+
+## Run Record — 2026-08-19, the from-scratch rebuild
+
+Everything in this phase was re-proven the only way that matters: the VMs were
+destroyed and recreated by Pulumi, and `site.yml` ran against the result. The
+run passed end-to-end, and its second run reports `changed=0` on every managed
+host. Two things from this phase came back different, and both are recorded
+here because a rebuild is when they are found.
+
+### `keycloak_ready` is now a probe, not a switch
+
+The 2026-08-17 section records the gate as a fact "nothing in the repository
+set" — a manual switch from the era when the VM's CPU model kept Keycloak from
+starting. That was the one line in this phase that would have made a clean
+rebuild skip the entire single sign-on path without a sound: seven includes
+gated on a fact that was `undefined`, and `default(false)` is a silent skip
+rather than an error.
+
+The CPU fix shipped inside the Pulumi VM, so the switch no longer protects
+anything. `cluster_init.yml` now probes: `GET /realms/master` through the
+ingress, retrying 40 times at 15 s, and records the answer. Two details cost a
+run each to learn.
+
+- **The probe had to verify against the domain CA explicitly.** The Python the
+  interpreter discovery finds on the controller is a Homebrew build with its
+  own OpenSSL trust store, so a `uri` task that omits `ca_path` verifies the
+  served chain against roots the controller's system bundle does not even
+  share with it. Every other Keycloak and OpenBao role already carried
+  `ca_path` for this reason; the probe had to as well.
+- **The probe is the only place that now reports the failure.** When it gives
+  up it prints where Keycloak is and how long it waited, and names that the
+  gated roles skipped. The old gate failed the same way — quietly.
+
+### `garage_init`'s wait was shorter than the cold build
+
+The first `site.yml` run reached `garage_init` with no garage namespace at
+all, and the readiness wait gave up at the default two hundred seconds. Two
+observations from the live cluster settled the fix:
+
+- The `apps` Kustomization — which owns both `garage` and `longhorn-auth` —
+  carries `wait: true` and depends on `infra-configs`, which depends on
+  `infra-controllers`. A fresh `longhorn-auth` crash-loops on the missing
+  realm until `keycloak_realm` runs later in this very play, and while it does
+  the `apps` tree never reports ready and `garage-0` is never created. The
+  cold-build wait is therefore really for that cascade, and it needs to be
+  longer than the cascade.
+- The pod does not depend on the realm, and the wait should not claim it does.
+  `garage-0` starts from the ExternalSecret on `garage-cluster`, which
+  `openbao_secrets` writes earlier in the same play; the S3 key lives in a
+  different vault path and a different ExternalSecret that `garage` never
+  reads. Waiting on the realm would have been a longer wait for a dependency
+  the pod does not have.
+
+So the role's two existing dials were made honest and larger: the retry count
+went from 20 to 30 and the hard-coded ten-second delay became
+`garage_init_ready_delay`. The window is now `retries × delay` on paper as it
+was always on the ground: `kubectl wait` against a missing pod fails at once,
+so only the space between attempts is what actually covers the cascade. On a
+warm run the first call succeeds and the new knobs cost nothing.
+
+### What the rebuild also confirmed, at no cost to the phase
+
+- Every defect the rebuild exposed was a role fix in this repository, and
+  each is a no-op in steady state: the idempotency run's only managed-host
+  change was the apt-cache refresh, and the controller's changes were the
+  GitOps re-render this repository expects.
+- cert-manager's `k8s-ca` issuer is stateful in the way `PHASE5`'s rotation
+  procedure already implied: it loads the intermediate once, at startup, and
+  neither re-applying the SealedSecret nor bouncing the workload re-signs an
+  existing certificate. The recovery — delete the leaf's backing Secret and
+  restart the issuer's Deployment — is already in the rotation procedure;
+  nothing here changed.
+- A stalled Flux HelmRelease does not respond to `annotate
+  reapply.fluxcd.io/force`; deleting it makes Flux apply it clean from the
+  committed tree. Both occurrences this rebuild hit were in `observability`
+  and both recovered in under a minute.

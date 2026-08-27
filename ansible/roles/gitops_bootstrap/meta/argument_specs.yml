@@ -3,10 +3,15 @@ argument_specs:
   main:
     short_description: Attach the cluster to the cluster-state repository
     description:
-      - Does the half of `flux bootstrap` that is still needed once Ansible
-        owns the repository content - installs the vendored Flux components,
-        gives Flux a read-only credential for the repository, and applies the
-        GitRepository and root Kustomization gitops_source rendered.
+      - Owns the flux-system subfolder of the cluster-state repository the way
+        `flux bootstrap` did - but regenerates it with the Flux CLI rather than
+        shipping the manifests through Ansible. It runs `flux install --export`
+        and `flux create source/kustomization --export`, writes the three
+        gotk files, and commits just that folder so gitops_source's scoped
+        commit and this role's scoped commit never touch each other's paths.
+      - Installs the generated Flux components, gives Flux a read-only
+        credential for the repository, and applies the GitRepository and root
+        Kustomization so the cluster starts reconciling from Git.
       - Creates that credential as a project deploy token rather than reading a
         personal access token from the environment, so nothing in the reconcile
         path depends on a secret that was made by hand.
@@ -31,8 +36,9 @@ argument_specs:
         type: str
         required: true
         description:
-          - Inventory name of the host GitLab runs on. The admin token is
-            minted there with gitlab-rails, which has no REST equivalent.
+          - Inventory name of the host GitLab runs on. The shared admin
+            credential is recorded there and minted there with gitlab-rails
+            when needed, which has no REST equivalent.
       gitops_bootstrap_group:
         type: str
         default: platform
@@ -48,8 +54,10 @@ argument_specs:
       gitops_bootstrap_work_dir:
         type: str
         description:
-          - The working clone gitops_source left behind. The two files applied
-            here come from it, so what is installed is what was pushed.
+          - The shared working clone both roles drive. gitops_source commits
+            the ansible-owned tree into it, this role regenerates and commits
+            the flux-system folder into it, and then installs from it - so
+            what the cluster pulls is exactly what was pushed.
       gitops_bootstrap_cluster_dir:
         type: str
         default: clusters/dev-lo
@@ -71,6 +79,13 @@ argument_specs:
         description:
           - Where the token value is recorded. GitLab returns it once, so this
             is the only copy.
+      gitops_bootstrap_admin_token_file:
+        type: str
+        default: /data1/gitlab/admin-token.yml
+        description:
+          - Where the gitlab_admin_token role records the shared admin
+            credential on the GitLab host. Reused by every admin-call role
+            while it still authenticates; a mint happens at most once a day.
       gitops_bootstrap_domain_ca_file:
         type: str
         description:
@@ -91,6 +106,29 @@ argument_specs:
         description:
           - Label selector the controller finds its keys by, and therefore how
             this role decides whether the cluster already has one.
+      gitops_bootstrap_flux:
+        type: str
+        description:
+          - The flux binary and any global flags. Runs with --kubeconfig
+            omitted on purpose, because every command used here is an
+            --export that only renders manifests and never talks to a
+            cluster.
+      gitops_bootstrap_commit_name:
+        type: str
+        description:
+          - user.name the regenerated flux-system commit is authored with.
+            The working clone is shared with gitops_source, so this is set
+            explicitly rather than trusting the machine's git config.
+      gitops_bootstrap_commit_email:
+        type: str
+        description:
+          - user.email the regenerated flux-system commit is authored with.
+      gitops_bootstrap_flux_commit_message:
+        type: str
+        description:
+          - Message for the flux-system regeneration commit. Kept distinct
+            from the ansible render commit so the two histories read as two
+            different owners.
       gitops_bootstrap_kubectl:
         type: str
         description: The client and kubeconfig this role drives the cluster with.

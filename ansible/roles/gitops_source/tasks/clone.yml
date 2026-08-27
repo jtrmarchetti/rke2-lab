@@ -1,19 +1,10 @@
 ---
-# A fresh clone every run, into a stable path.
-#
-# Fresh, because the alternative is reconciling a local working copy with a
-# remote that may have moved, and every form of that is a merge — which is the
-# wrong shape for a directory whose content is generated. Whatever is in GitLab
-# is history to append to, not state to reconcile with.
-#
-# Stable, because the rendered tree is worth being able to look at afterwards.
-# `git -C {{ gitops_source_work_dir }} show` answers "what did the last run
-# actually push" without a second clone.
 
-- name: clone | Remove the previous working clone
-  ansible.builtin.file:
-    path: "{{ gitops_source_work_dir }}"
-    state: absent
+- name: clone | Check for a working clone
+  register: _reg_gitops_source_repo
+  ansible.builtin.stat:
+    path: "{{ gitops_source_work_dir }}/.git"
+    get_checksum: false
 
 - name: clone | Ensure the parent directory exists
   ansible.builtin.file:
@@ -21,28 +12,41 @@
     state: directory
     mode: "0700"
 
-# Not the git module: it wants the credential in the URL it stores, and this
-# credential is a one-day admin token that must not be written into the clone's
-# config. The command form takes it per invocation, and the next task replaces
-# the stored remote with the plain URL.
-#
-# An empty project clones successfully and leaves an unborn branch, which is
-# the cold-rebuild case and is handled below rather than treated as an error.
 - name: clone | Clone the repository # noqa: command-instead-of-module
+  when: not _reg_gitops_source_repo['stat']['exists']
   changed_when: true
   no_log: "{{ gitops_source_no_log | bool }}"
-  register: _reg_gitops_source_clone
   ansible.builtin.command:
     cmd: >-
       git clone {{ _var_gitops_source_push_url }} {{ gitops_source_work_dir }}
 
+- name: clone | Fetch the remote branch # noqa: command-instead-of-module
+  changed_when: false
+  failed_when: false
+  no_log: "{{ gitops_source_no_log | bool }}"
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} fetch
+      {{ _var_gitops_source_push_url }}
+      {{ gitops_source_branch }}:refs/remotes/origin/{{ gitops_source_branch }}
+
+- name: clone | Look up the recorded remote URL # noqa: command-instead-of-module
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_remote_url
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} remote get-url origin
+
 - name: clone | Drop the token from the remote # noqa: command-instead-of-module
+  when:
+    - _reg_gitops_source_remote_url['stdout_lines'] | first
+      != _var_gitops_source_git_url
   changed_when: true
   ansible.builtin.command:
     cmd: >-
       git -C {{ gitops_source_work_dir }} remote set-url origin
-      {{ gitops_source_gitlab_url }}/{{ gitops_source_group }}/{{
-      gitops_source_project }}.git
+      {{ _var_gitops_source_git_url }}
 
 - name: clone | Look for the branch # noqa: command-instead-of-module
   changed_when: false
@@ -53,22 +57,49 @@
       git -C {{ gitops_source_work_dir }} rev-parse --verify --quiet
       refs/remotes/origin/{{ gitops_source_branch }}
 
-# `-B` rather than `-b`: it is the same command whether the branch exists
-# locally or not, which matters because the two cases here are "cloned a
-# repository that already has this branch" and "cloned an empty one".
-- name: clone | Check out the branch # noqa: command-instead-of-module
-  changed_when: true
+- name: clone | Note whether the fetch left a resolvable tip behind # noqa: command-instead-of-module
+  when: _reg_gitops_source_branch_head['rc'] != 0
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_fetch_head
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} rev-parse --verify --quiet FETCH_HEAD
+
+- name: clone | Pick the checkout start point
+  ansible.builtin.set_fact:
+    _gitops_source_checkout_start: >-
+      {{ 'refs/remotes/origin/' ~ gitops_source_branch
+         if _reg_gitops_source_branch_head['rc'] == 0
+         else ('FETCH_HEAD'
+               if (_reg_gitops_source_fetch_head['rc'] | default(1)) == 0
+               else '') }}
+
+- name: clone | Pin the working clone to the remote branch # noqa: command-instead-of-module
+  changed_when: false
   ansible.builtin.command:
     cmd: >-
       git -C {{ gitops_source_work_dir }} checkout -B
       {{ gitops_source_branch }}
-      {{ ('refs/remotes/origin/' ~ gitops_source_branch)
-         if _reg_gitops_source_branch_head['rc'] == 0 else '' }}
+      {{ _gitops_source_checkout_start | trim }}
 
-# Identity on the repository rather than globally: this host is a workstation
-# and the operator's own git identity is not this role's to change.
-- name: clone | Set the committer identity # noqa: command-instead-of-module
+- name: clone | Look for the untracked files a failed run left behind # noqa: command-instead-of-module
+  changed_when: false
+  failed_when: false
+  register: _reg_gitops_source_clean
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} clean -fdn
+
+- name: clone | Remove them # noqa: command-instead-of-module
+  when: _reg_gitops_source_clean['stdout_lines'] | default([]) | length > 0
   changed_when: true
+  ansible.builtin.command:
+    cmd: >-
+      git -C {{ gitops_source_work_dir }} clean -fd
+
+- name: clone | Set the committer identity # noqa: command-instead-of-module
+  changed_when: false
   loop:
     - key: user.name
       value: "{{ gitops_source_commit_name }}"
@@ -79,32 +110,6 @@
     label: "{{ _item_gitops_source_git_setting['key'] }}"
   ansible.builtin.command:
     cmd: >-
-      git -C {{ gitops_source_work_dir }} config {{ _item_gitops_source_git_setting['key'] }}
+      git -C {{ gitops_source_work_dir }} config
+      {{ _item_gitops_source_git_setting['key'] }}
       "{{ _item_gitops_source_git_setting['value'] }}"
-
-# The wipe that makes this repository a rendering rather than an accumulation.
-# Without it a file deleted from the template tree, or edited directly in
-# GitLab, would live on forever — and Flux would go on reconciling it, because
-# `prune` removes what a kustomization stops declaring and not what a
-# kustomization was never told about.
-#
-# The working tree only. `git add -A` after the render reads the deletions out
-# of it, so the index needs no separate clearing.
-- name: clone | List everything the render is about to replace
-  register: _reg_gitops_source_stale
-  ansible.builtin.find:
-    paths: "{{ gitops_source_work_dir }}"
-    patterns: "*"
-    hidden: true
-    file_type: any
-    excludes:
-      - .git
-
-- name: clone | Remove them
-  loop: "{{ _reg_gitops_source_stale['files'] }}"
-  loop_control:
-    loop_var: _item_gitops_source_stale_file
-    label: "{{ _item_gitops_source_stale_file['path'] | basename }}"
-  ansible.builtin.file:
-    path: "{{ _item_gitops_source_stale_file['path'] }}"
-    state: absent

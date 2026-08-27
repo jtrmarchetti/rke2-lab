@@ -69,4 +69,4 @@ Adding a bucket for a new service
        /garage bucket allow --read --write myapp --key myapp-key
 
 Then put the key into OpenBao and give the workload an ``ExternalSecret`` —
-never a Secret in Git. :doc:`../tasks/adding-a-service` has the full path.
+never a Secret in Git. :doc:`../developer/adding-a-service` has the full path.

@@ -57,7 +57,7 @@ It is not used as the login username.
 Minimum required stack config:
 
 ```bash
-pulumi config set deployment:templateNodeName proxmox-kube
+pulumi config set deployment:templateNodeName proxmox-rke2
 ```
 
 Template usage is optional:

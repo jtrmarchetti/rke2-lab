@@ -3,8 +3,8 @@ argument_specs:
   main:
     short_description: Artifact staging role inputs.
     description: >-
-      Stages every manifest artifact on the host that has upstream access, and
-      publishes each one with a checksum file for air-gapped consumers.
+      Stages every manifest artifact on the host that has upstream access,
+      and publishes each one under the document root for air-gapped consumers.
     options:
       artifact_stage_enabled:
         type: bool
@@ -24,8 +24,7 @@ argument_specs:
         required: false
         description: >-
           Artifacts to stage. Each entry needs name, phase, type, and dest;
-          type 'file' also needs url and sha256, type 'image' also needs image
-          and digest.
+          type 'file' also needs url, type 'image' also needs image.
         options:
           name:
             type: str
@@ -66,18 +65,13 @@ argument_specs:
             type: str
             required: false
             description: Upstream URL for a file artifact.
-          sha256:
-            type: str
-            required: false
-            description: Expected SHA256 of a file artifact.
           image:
             type: str
             required: false
-            description: Registry reference including tag for an image artifact.
-          digest:
-            type: str
-            required: false
-            description: Expected registry manifest digest for an image artifact.
+            description: >-
+              Registry reference including tag for an image artifact. The tag
+              is the pin: the export is built from that reference and the
+              consumer runs that tag.
       artifact_stage_owner:
         type: str
         required: false
@@ -98,6 +92,26 @@ argument_specs:
         required: false
         default: 600
         description: Timeout in seconds for a single download.
+      artifact_stage_download_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing download before the task is fatal.
+      artifact_stage_download_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between download attempts.
+      artifact_stage_image_pull_retries:
+        type: int
+        required: false
+        default: 3
+        description: Task-level attempts for a failing image pull before the task is fatal.
+      artifact_stage_image_pull_delay:
+        type: int
+        required: false
+        default: 30
+        description: Seconds between image pull attempts.
       artifact_stage_work_dir:
         type: str
         required: false
@@ -112,3 +126,13 @@ argument_specs:
           Names of transit artifacts already confirmed present at their
           destination. These are not restaged, because their local copy is
           deleted by design once published.
+      artifact_stage_runtime_packages:
+        type: list
+        elements: str
+        required: false
+        default:
+          - docker.io
+          - docker-compose-v2
+        description: >-
+          Host packages providing the container runtime the image step pulls
+          with. Delivered through apt, not as Apache artifacts.

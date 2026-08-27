@@ -1,11 +1,5 @@
 {{ ansible_managed | comment }}
-#
-# Automation runtime for the dev.lo RKE2 lab. Sourced from the shell profile by
-# a marked block; edit the template in roles/controller_runtime, not this file.
 
-# The Pulumi CLI, and the Ansible virtual environment's binaries. Prepended
-# only when not already present, so re-sourcing does not grow PATH without
-# bound.
 for __rke2lab_dir in \
     "{{ _var_controller_runtime_pulumi_bin }}" \
     "{{ controller_runtime_venv | trim }}/bin" ; do
@@ -16,17 +10,5 @@ for __rke2lab_dir in \
 done
 unset __rke2lab_dir
 
-# Where ansible-galaxy installed the collections, named explicitly for the
-# reason the role documents: this controller has had each collection present in
-# two places at once, with only one of them ever loaded. Setting the path means
-# the copy Ansible loads is the copy requirements.yml pins.
 ANSIBLE_COLLECTIONS_PATH="{{ controller_runtime_collections_path | trim }}"
 export ANSIBLE_COLLECTIONS_PATH
-
-# Secrets are deliberately NOT sourced here. Every playbook reads them from the
-# environment and asserts they are present, so the one action left to a human
-# is the one that puts credentials into a shell:
-#
-#     source ~/.config/rke2lab/env.sh
-#
-# See plan/SECRETS.md, and bootstrap/env.sh.example for the full set of names.

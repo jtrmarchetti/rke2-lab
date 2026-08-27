@@ -1,14 +1,8 @@
 ---
-# The two policies an OIDC login can land on.
-#
-# Read before written, so a run that changes nothing writes nothing. The vault
-# accepts a policy write whether or not the text differs, so without the
-# comparison this role could never report a clean second run — the same
-# reasoning openbao_config records for its own policy.
 
 - name: policies | Read the policy currently stored
   changed_when: false
-  # Absent before the first write.
+
   failed_when: false
   no_log: "{{ openbao_oidc_no_log | bool }}"
   register: _reg_openbao_oidc_policies
@@ -50,10 +44,6 @@
       policy: "{{ _item_openbao_oidc_written[0]['policy'] }}"
     status_code: [200, 204]
 
-# Read back and checked for what must *not* be in them. A policy that granted
-# sys/seal or sys/policies/acl write would quietly make Keycloak part of the
-# vault's recovery path, which is the one property this whole role is arranged
-# to preserve, and it would do it without any other symptom.
 - name: policies | Confirm the policies read back
   changed_when: false
   no_log: "{{ openbao_oidc_no_log | bool }}"
@@ -69,12 +59,6 @@
     headers: "{{ _var_openbao_oidc_headers }}"
     ca_path: "{{ openbao_oidc_ca_file }}"
 
-# The loop item is a (name, policy text) pair rather than the registered result
-# it came from, for two reasons. The results carry their producing loop's
-# variable rather than `item`, so indexing them by `item` fails at template
-# time — and they also carry the request that fetched them, X-Vault-Token
-# header included, which an assertion failure would print in full. A pair holds
-# exactly what the check needs and nothing that must not be logged.
 - name: policies | Assert no OIDC policy can seal, rekey or grant access
   loop: >-
     {{ _var_openbao_oidc_policies | map(attribute='name')
@@ -84,38 +68,21 @@
     loop_var: _item_openbao_oidc_stored
     label: "{{ _item_openbao_oidc_stored[0] }}"
   vars:
-    # Comments stripped before the check, because the policies explain
-    # themselves and the explanations contain the very words being searched
-    # for. Checking the prose as if it were policy is how a comment reading
-    # "sealing stays with the root token" fails an assertion about sealing —
-    # the check has to see what the vault sees.
-    #
-    # regex_replace rather than splitting on newlines and rejecting the comment
-    # lines, which is what this did until a comment mentioning `sys/auth/*`
-    # tripped the auth assertion and exposed it. Inside a folded scalar the
-    # `'\n'` those filters were given never became a newline, so the text was
-    # one long line, no line ever matched the comment pattern, and nothing was
-    # ever stripped. The check had been reading the prose all along and only
-    # passed because no comment had yet contained a forbidden path — a guard
-    # that silently checks the wrong thing until the day it fails on the right
-    # one. `(?m)` anchors ^ and $ per line, so no newline literal is needed.
+
     _openbao_oidc_text: >-
       {{ _item_openbao_oidc_stored[1] | default('')
          | regex_replace('(?m)^[ \\t]*#.*$', '') }}
   ansible.builtin.assert:
     that:
-      # The paths that would let a Keycloak session take the vault away from
-      # its offline operator.
+
       - '"sys/seal" not in _openbao_oidc_text'
       - '"sys/unseal" not in _openbao_oidc_text'
       - '"sys/rekey" not in _openbao_oidc_text'
       - '"sys/step-down" not in _openbao_oidc_text'
       - '"auth/*" not in _openbao_oidc_text'
-      # `sudo` is the capability that unlocks root-protected paths, and no
-      # policy here has any business carrying it. The KV paths legitimately
-      # grant create, update and delete, so those cannot be checked this way.
+
       - '"sudo" not in _openbao_oidc_text'
-      # A wildcard at the root grants everything, whatever the capabilities say.
+
       - '"path \"*\"" not in _openbao_oidc_text'
     fail_msg: >-
       The policy {{ _item_openbao_oidc_stored[0] }} grants a path

@@ -8,63 +8,84 @@
   ansible.builtin.assert:
     that:
       - _item_artifact_stage_entry['type'] != 'file' or (_item_artifact_stage_entry['url'] | default('') | length > 0)
-      - _item_artifact_stage_entry['type'] != 'file' or (_item_artifact_stage_entry['sha256'] | default('') | length == 64)
       - _item_artifact_stage_entry['type'] != 'image' or (_item_artifact_stage_entry['image'] | default('') | length > 0)
-      - >-
-        _item_artifact_stage_entry['type'] != 'image'
-        or (_item_artifact_stage_entry['digest'] | default('') is match('^sha256:[0-9a-f]{64}$'))
       - >-
         _item_artifact_stage_entry['type'] != 'mirror'
         or (_item_artifact_stage_entry['image'] | default('') | length > 0)
-      - >-
-        _item_artifact_stage_entry['type'] != 'mirror'
-        or (_item_artifact_stage_entry['digest'] | default('') is match('^sha256:[0-9a-f]{64}$'))
       - >-
         _item_artifact_stage_entry['type'] == 'mirror'
         or _item_artifact_stage_entry['dest'] | default('') is match('^[^/][^\\0]*[^/]$')
       - _item_artifact_stage_entry['retention'] | default('') in ['bootstrap', 'transit']
     fail_msg: >-
       Manifest entry '{{ _item_artifact_stage_entry['name'] | default('<unnamed>') }}' is incomplete.
-      A file entry needs url and a 64-character sha256; an image entry needs
-      image and a sha256: digest. dest must be a relative path under the
-      document root, and retention must be 'bootstrap' or 'transit' — an
-      artifact with no stated retention would be kept forever by default,
-      which is the behaviour this field exists to end.
+      A file entry needs url; an image or mirror entry needs image. dest must
+      be a relative path under the document root, and retention must be
+      'bootstrap' or 'transit' — an artifact with no stated retention would
+      be kept forever by default, which is the behaviour this field exists to
+      end.
     quiet: true
 
-# A transit artifact is deleted locally once GitLab confirms it holds the
-# content, so absence from disk cannot mean "fetch it again" — that would
-# re-download the whole set on every run. The marker rke2_publish leaves behind
-# is the local record of that confirmation, and it is read here rather than by
-# the caller: every playbook that stages artifacts needs this, and one that
-# forgot it would silently re-download gigabytes and report itself changed.
-- name: main | Find the markers of artifacts already published to GitLab
+- name: main | Note which manifest entries hold a marker for their own source
   when: (artifact_stage_enabled | bool)
-  register: _reg_artifact_stage_markers
+  register: _reg_artifact_stage_marker_stat
+  loop: "{{ _var_artifact_stage_local }}"
+  loop_control:
+    loop_var: _item_artifact_stage_local
+    label: "{{ _item_artifact_stage_local['name'] | default('<unnamed>') }}"
+  vars:
+    # The marker is named after the source the artifact was staged from:
+    # the entry's url, or its image reference, reduced to characters
+    # that are safe in a file name. An entry counts as published only
+    # while a marker for its *current* source exists, so a re-pinned
+    # or version-bumped artifact re-stages instead of being skipped;
+    # version-agnostic dests (rke2/install.sh and friends) cannot
+    # shadow each other.
+    _artifact_stage_marker_source: >-
+      {{ _item_artifact_stage_local.get('url',
+         _item_artifact_stage_local.get('image', ''))
+         | regex_replace('[^A-Za-z0-9._~-]', '') }}
+  ansible.builtin.stat:
+    path: >-
+      {{ artifact_stage_root }}/{{ _item_artifact_stage_local['dest']
+         }}{{ _var_artifact_stage_published_suffix
+         }}.{{ _artifact_stage_marker_source }}
+    get_checksum: false
+
+- name: main | Map the markers back to manifest entry names
+  when: (artifact_stage_enabled | bool)
+  ansible.builtin.set_fact:
+    _artifact_stage_marked_names: >-
+      {{ _reg_artifact_stage_marker_stat['results'] | default([])
+         | selectattr('stat.exists', 'defined')
+         | selectattr('stat.exists')
+         | map(attribute='_item_artifact_stage_local.name')
+         | list }}
+
+- name: main | Find first-generation markers that record no source
+  when: (artifact_stage_enabled | bool)
+  register: _reg_artifact_stage_legacy_markers
   ansible.builtin.find:
     paths: "{{ artifact_stage_root }}"
     patterns: "*{{ _var_artifact_stage_published_suffix }}"
     recurse: true
     file_type: file
 
-- name: main | Map the markers back to manifest entry names
-  when: (artifact_stage_enabled | bool)
-  vars:
-    _artifact_stage_marked_dests: >-
-      {{ _reg_artifact_stage_markers['files'] | map(attribute='path')
-         | map('regex_replace', '^' ~ artifact_stage_root ~ '/', '')
-         | map('regex_replace',
-                _var_artifact_stage_published_suffix | regex_escape ~ '$', '')
-         | list }}
-  ansible.builtin.set_fact:
-    _artifact_stage_marked_names: >-
-      {{ _var_artifact_stage_local
-         | selectattr('dest', 'in', _artifact_stage_marked_dests)
-         | map(attribute='name') | list }}
+- name: main | Remove first-generation markers
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_reg_artifact_stage_legacy_markers['files'] | length > 0)
+    - not ansible_check_mode
+  loop: "{{ _reg_artifact_stage_legacy_markers['files'] }}"
+  loop_control:
+    loop_var: _item_artifact_stage_legacy_marker
+    label: "{{ _item_artifact_stage_legacy_marker['path'] | trim }}"
+  ansible.builtin.file:
+    path: "{{ _item_artifact_stage_legacy_marker['path'] }}"
+    state: absent
+    # The first-generation markers are bare `touch` files that record
+    # nothing, so they would block re-staging forever; a marker that
+    # names its source is safe to hand to the check above.
 
-# Mirror entries are skipped throughout this role. They are copied straight
-# from one registry to another by rke2_publish and have no local path at all,
-# which is the whole point of them.
 - name: main | Ensure the destination directories exist
   when: (artifact_stage_enabled | bool)
   loop: "{{ _var_artifact_stage_local }}"
@@ -85,14 +106,47 @@
     - (_var_artifact_stage_files | length > 0)
   ansible.builtin.include_tasks: files.yml
 
+- name: main | Ensure container runtime packages are installed
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_var_artifact_stage_images | length > 0)
+  ansible.builtin.apt:
+    name: "{{ artifact_stage_runtime_packages }}"
+    state: present
+
+- name: main | Ensure the container runtime is running
+  when:
+    - (artifact_stage_enabled | bool)
+    - (_var_artifact_stage_images | length > 0)
+    - not ansible_check_mode
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
 - name: main | Stage container image artifacts
   when:
     - (artifact_stage_enabled | bool)
     - (_var_artifact_stage_images | length > 0)
   ansible.builtin.include_tasks: images.yml
 
-- name: main | Publish checksum files for every artifact
+- name: main | Find the legacy checksum sidecars this role used to publish
+  when: (artifact_stage_enabled | bool)
+  register: _reg_artifact_stage_legacy_sidecars
+  ansible.builtin.find:
+    paths: "{{ artifact_stage_root }}"
+    patterns: "*{{ _var_artifact_stage_checksum_suffix }}"
+    recurse: true
+    file_type: file
+
+- name: main | Remove the legacy checksum sidecars
   when:
     - (artifact_stage_enabled | bool)
-    - (artifact_stage_manifest | length > 0)
-  ansible.builtin.include_tasks: checksums.yml
+    - (_reg_artifact_stage_legacy_sidecars['files'] | length > 0)
+  loop: "{{ _reg_artifact_stage_legacy_sidecars['files'] }}"
+  loop_control:
+    loop_var: _item_artifact_stage_legacy_sidecar
+    label: "{{ _item_artifact_stage_legacy_sidecar['path'] }}"
+  ansible.builtin.file:
+    path: "{{ _item_artifact_stage_legacy_sidecar['path'] }}"
+    state: absent

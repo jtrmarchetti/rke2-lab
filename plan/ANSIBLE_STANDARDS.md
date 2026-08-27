@@ -477,9 +477,10 @@ every change that has an operational effect:
   invalidated — including "Status" and "Still open" sections in earlier phase
   documents, which describe the present and go stale even though the phase is
   finished.
-- **The sysadmin guide in `docs/`**, which is the operator's view: a new
+- **The documentation site in `docs/`** — the sysadmin section is the
+  operator's view and the developer section is the builder's view: a new
   service, credential, URL, address, version, storage decision or newly learned
-  failure mode all oblige a page there.
+  failure mode all oblige a page in the right section.
   `docs/source/reference/maintaining-this-guide.rst` maps the kind of change to
   the page, and `make -C docs html` must still pass — it builds with `-W`, so a
   broken cross-reference fails it.
@@ -487,6 +488,15 @@ every change that has an operational effect:
 The test is the same one the rest of this file applies to code: could someone
 who was not here follow it? A role that only its author can operate is not
 finished, however idempotent it is.
+
+## Working Notes
+
+Multi-step agentic work keeps a scratch pad and a verification log in
+`agent_plans/` (git-ignored: they are working state, not a source of truth).
+A verification log records, per claim, the command or file that grounds it —
+the standing rule is that a command or number is not written into `docs/` or
+`plan/` as fact until it has a live check or a read of the file it names,
+recorded there.
 
 ## Decision Rules
 

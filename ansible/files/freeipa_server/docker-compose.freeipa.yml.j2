@@ -1,52 +1,11 @@
-#jinja2: trim_blocks: True, lstrip_blocks: True
 {{ ansible_managed | comment }}
-#
-# The jinja2 directive above must stay on line 1 to take effect, so it precedes
-# the managed-by header rather than following it.
-#
-# This deployment follows the shape documented by upstream freeipa-container
-# (https://github.com/freeipa/freeipa-container). The notes below record why
-# each key is here, because several of them are not obvious and getting them
-# wrong fails late, in the middle of a domain install.
-#
-# * No `privileged:`. Upstream states plainly that "privileged setup is not
-#   supported and will not work", and running privileged is a known cause of the
-#   install failing at its final client stage with "No valid Negotiate header in
-#   server response".
-# * read_only: true — the documented shape. The container writes to the /data
-#   volume and to the tmpfs mounts below, and nowhere else.
-# * cgroup: host with /sys/fs/cgroup bind-mounted rw — upstream's documented
-#   cgroup v2 flags (--cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw).
-#   Rootful Docker on a cgroup v2 host mounts /sys/fs/cgroup read-only for any
-#   container that is not privileged, and systemd inside cannot start without
-#   write access, so this bind mount is what makes an unprivileged systemd work.
-# * The trade-off it creates: with the host cgroup namespace the container sees
-#   the host's root cgroup, which has no memory.max or memory.current.
-#   ipa-server-install reads exactly those to size RAM and aborts with "Unable
-#   to determine the amount of available RAM". --skip-mem-check in the install
-#   options is the answer; this VM's memory is fixed at 4 GiB by TARGETS.md,
-#   well above the installer's 1.2 GB floor.
-# * tmpfs on /run and /tmp — writable space systemd needs under read_only.
-# * network_mode: host — FreeIPA serves DNS (53), Kerberos (88, 464, 749), LDAP
-#   (389, 636), and HTTP/S to every internal node. Host networking avoids
-#   maintaining that port list and lets FreeIPA see real client addresses.
-# * No `hostname:` key — Docker rejects it alongside host networking. Upstream
-#   asks for a fully-qualified name via `-h`; with host networking the container
-#   inherits the host's, which the role sets to {{ freeipa_server_hostname }}.
-# * No `dns:` key — also rejected with host networking. The container inherits
-#   the host resolver, which the role points at 127.0.0.1: FreeIPA resolves for
-#   itself, and this network has no upstream resolver by design.
+
 services:
   freeipa-server:
     image: {{ freeipa_server_container_image }}
     container_name: {{ freeipa_server_container_name }}
     restart: unless-stopped
-    # Docker's default stop timeout is 10 seconds. systemd inside this container
-    # needs considerably longer to bring nine services down in order, and 389-ds
-    # is the one that matters: killed mid-write, its BDB database comes back with
-    # "BDB0060 PANIC: fatal region error detected" and refuses to start, while
-    # ipactl still reports the service as RUNNING. Every recreate of this
-    # container is a database shutdown, so the grace period has to cover it.
+
     stop_grace_period: 5m
     read_only: true
     network_mode: host
@@ -60,17 +19,7 @@ services:
     environment:
       IPA_SERVER_HOSTNAME: {{ freeipa_server_hostname }}
       IPA_SERVER_IP: {{ freeipa_server_ip_address }}
-    # Upstream's documented unattended form: the command is the installer and
-    # its arguments. The entrypoint writes each argument to
-    # /run/ipa/ipa-server-install-options and feeds that file to the installer
-    # through xargs, so one argument per list entry — the entrypoint quotes each
-    # with `printf %q`, and an entry holding "--realm DEV.LO" would arrive as a
-    # single quoted argument and be rejected.
-    #
-    # Both passwords are given explicitly rather than through the image's
-    # PASSWORD variable, which sets the admin and Directory Manager passwords to
-    # the same value. They come from the 0600 env file beside this compose file,
-    # so they are neither in this file nor on the persistent data volume.
+
     command:
       - "ipa-server-install"
 {% for _item_freeipa_server_option in (_var_freeipa_server_install_opts | trim).split() %}

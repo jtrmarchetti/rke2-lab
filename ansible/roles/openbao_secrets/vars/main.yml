@@ -1,20 +1,8 @@
 ---
-# The root token travels in a header, not in a command line: no process on any
-# host ever has it in argv.
+
 _var_openbao_secrets_headers:
   X-Vault-Token: "{{ openbao_secrets_root_token }}"
 
-# Everything except Garage's S3 key, which is the one entry that cannot exist
-# on a first pass.
-#
-# The ordering is unavoidable rather than awkward: Garage will not start
-# without the credentials this role writes, and it mints its S3 access key only
-# once it is running. So the first pass omits that entry, garage_init creates
-# the key and records it, and a second pass writes it in. cluster_init.yml runs
-# this role twice for exactly that reason.
-#
-# On every run after that both values are set and nothing is omitted, so the
-# steady state has no special case in it.
 _var_openbao_secrets_entries: >-
   {{ (_var_openbao_secrets_entries_all
       | selectattr('optional', 'undefined') | list)
@@ -24,18 +12,6 @@ _var_openbao_secrets_entries: >-
             and (openbao_secrets_garage_s3_secret_key | length) > 0)
         else []) }}
 
-# --- Every runtime secret in the vault -------------------------------------
-#
-# One entry per component, at a path an ExternalSecret in the cluster-state
-# repository names. Changing a path here without changing the `remoteRef` there
-# leaves the workload reading an entry that does not exist, which surfaces as
-# a Secret that never syncs rather than as an error here.
-#
-# Garage takes two entries rather than one, because the two halves have
-# different origins and different lifecycles: `garage-cluster` is authored by
-# hand and is what Garage needs in order to start, and `garage` is minted by
-# Garage itself once it has. Merging them would mean two writers to one path,
-# where whichever wrote last would drop the other's keys.
 _var_openbao_secrets_entries_all:
   - path: keycloak
     description: >-
@@ -91,7 +67,7 @@ _var_openbao_secrets_entries_all:
       cookie-secret: "{{ openbao_secrets_longhorn_cookie_secret }}"
 
   - path: garage
-    # The one entry that may legitimately be absent - see the filter above.
+
     optional: true
     description: >-
       The S3 access key Garage minted for its own buckets, read by Loki and

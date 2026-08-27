@@ -64,6 +64,13 @@ argument_specs:
         description:
           - Reissue when the certificate expires inside this window, so a rerun
             renews rather than reporting success on an expiring CA.
+      ipa_sub_ca_domain_ca_file:
+        type: path
+        required: false
+        description:
+          - Domain CA on this host used to verify the existing intermediate's
+            chain; a broken chain forces a reissue even while the certificate
+            is still in date. Null disables the check.
       ipa_sub_ca_key_size:
         type: int
         default: 4096

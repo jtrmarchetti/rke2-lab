@@ -2,7 +2,7 @@
 Longhorn (storage)
 =====================
 
-Longhorn 1.11.3 is the only storage class provider in the cluster. It writes
+Longhorn 1.12.1 is the only storage class provider in the cluster. It writes
 into one dedicated 100 GB disk per worker, mounted at ``/var/lib/longhorn``.
 
 Sizing, and why
@@ -84,7 +84,7 @@ worker: if the disk did not mount, Longhorn is writing to the OS disk under the
 mount point instead.
 
 **Disk full.** Longhorn over-provisions by default, so the sum of claims can
-exceed what the disks hold. See :doc:`../tasks/storage-longhorn` for growing
+exceed what the disks hold. See :doc:`../sysadmin/storage-longhorn` for growing
 capacity and for the eviction path.
 
 Backups

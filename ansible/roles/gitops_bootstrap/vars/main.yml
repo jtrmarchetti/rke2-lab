@@ -5,33 +5,33 @@ _var_gitops_bootstrap_project_path: >-
   {{ (gitops_bootstrap_group ~ '/' ~ gitops_bootstrap_project)
      | replace('/', '%2F') }}
 
-# Resolved lazily, so it is only valid after main.yml has minted the token.
-# Every task that uses it carries no_log, because it renders the token.
+_var_gitops_bootstrap_admin_token: >-
+  {{ _reg_gitops_bootstrap_admin_token_raw['content'] | b64decode | from_yaml }}
 _var_gitops_bootstrap_headers:
-  PRIVATE-TOKEN: "{{ _reg_gitops_bootstrap_pat['stdout'].split()[1] }}"
+  PRIVATE-TOKEN: "{{ _var_gitops_bootstrap_admin_token['token'] }}"
 
-# Same snippet, and the same reasoning, as rke2_publish and gitops_source use.
-_var_gitops_bootstrap_pat_script: |
-  docker exec -i gitlab gitlab-rails runner - <<'RUBY'
-  u = User.find_by_username("root")
-  t = u.personal_access_tokens.create!(
-    scopes: ["api"],
-    name: "gitops-bootstrap-#{Time.now.to_i}",
-    expires_at: 1.day.from_now)
-  puts "#{t.id} #{t.token}"
-  RUBY
-
-# The backed-up key pairs, as the dump recorded them. templates/sealing-keys
-# strips the server-owned metadata; see there for why that matters.
 _var_gitops_bootstrap_sealing_keys: >-
   {{ (lookup('file', gitops_bootstrap_sealing_key_file)
       | from_yaml)['items'] }}
 
-# Whether this run installs Flux. Absent, or forced by an operator repairing an
-# installation that is present but not working.
 _var_gitops_bootstrap_install: >-
   {{ _reg_gitops_bootstrap_installed['rc'] != 0
      or (gitops_bootstrap_force_install | bool) }}
+
+_var_gitops_bootstrap_git_url: >-
+  {{ gitops_bootstrap_gitlab_url }}/{{ gitops_bootstrap_group }}/{{
+  gitops_bootstrap_project }}.git
+
+_var_gitops_bootstrap_push_url: >-
+  {{ gitops_bootstrap_gitlab_url
+     | regex_replace('^https://',
+                     'https://oauth2:'
+                     ~ _var_gitops_bootstrap_admin_token['token'] ~ '@')
+  }}/{{ gitops_bootstrap_group }}/{{
+  gitops_bootstrap_project }}.git
+
+_var_gitops_bootstrap_flux_dir: >-
+  {{ gitops_bootstrap_cluster_dir }}/flux-system
 
 _var_gitops_bootstrap_component_file: >-
   {{ gitops_bootstrap_work_dir }}/{{ gitops_bootstrap_cluster_dir
@@ -40,15 +40,11 @@ _var_gitops_bootstrap_sync_file: >-
   {{ gitops_bootstrap_work_dir }}/{{ gitops_bootstrap_cluster_dir
   }}/flux-system/gotk-sync.yaml
 
-# The existing project deploy tokens carrying the configured name. More than
-# one is possible if a previous run was interrupted between delete and create.
 _var_gitops_bootstrap_token_match: >-
   {{ _reg_gitops_bootstrap_token_list['json']
      | selectattr('name', 'equalto', gitops_bootstrap_deploy_token_name)
      | list }}
 
-# The credential in force, from whichever of the two sources produced it.
-# Resolved lazily, so it is only valid after deploy_token.yml has run.
 _var_gitops_bootstrap_username: >-
   {{ _reg_gitops_bootstrap_token_new['json']['username']
      if (_reg_gitops_bootstrap_token_new is defined
@@ -64,11 +60,6 @@ _var_gitops_bootstrap_password: >-
      else (_reg_gitops_bootstrap_token_recorded['content']
            | b64decode | from_yaml)['token'] }}
 
-# The Secret gotk-sync.yaml's GitRepository names. Three keys, and each is
-# load-bearing: the first two authenticate, and caFile is what stops the source
-# controller rejecting the internally signed certificate. Its absence is the
-# single most confusing failure available here — the GitRepository reports a
-# TLS error that reads as a network problem.
 _var_gitops_bootstrap_secret:
   apiVersion: v1
   kind: Secret
@@ -76,24 +67,13 @@ _var_gitops_bootstrap_secret:
   metadata:
     name: flux-system
     namespace: "{{ gitops_bootstrap_namespace }}"
-  #
-  # `data` rather than `stringData`, which is the difference between a task
-  # that settles and one that never does. stringData is write-only: the API
-  # server consumes it into data and the stored object never has the field
-  # back, so the three-way merge sees it missing on the live object every time,
-  # patches it again, and `kubectl apply` reports `configured` on a Secret that
-  # has not changed since the day it was written.
+
   data:
     username: "{{ _var_gitops_bootstrap_username | trim | b64encode }}"
     password: "{{ _var_gitops_bootstrap_password | trim | b64encode }}"
-    # rstrip=false: the file lookup strips trailing newlines by default, and a
-    # PEM without its final newline is a different byte string from the one on
-    # disk. Harmless for most parsers and not worth finding out which.
+
     caFile: >-
       {{ lookup('file', gitops_bootstrap_domain_ca_file,
                 rstrip=false) | b64encode }}
 
-# Templates for this role live in ansible/files/gitops_bootstrap/ rather than
-# inside the role, so the tree that renders a host's configuration can
-# be read without opening the role.
 _var_gitops_bootstrap_files_dir: "{{ role_path | dirname | dirname }}/files/gitops_bootstrap"

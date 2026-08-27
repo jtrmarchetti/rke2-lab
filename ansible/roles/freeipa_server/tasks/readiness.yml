@@ -1,17 +1,4 @@
 ---
-# Prove the domain is actually serving before any caller depends on it.
-#
-# `ipactl status` is not enough on its own: it reports what systemd last knew
-# about each unit, so a directory server that died after startup — a killed
-# database coming back with "BDB0060 PANIC" is the case seen here — still reads
-# as "Directory Service: RUNNING" while every authentication against it fails.
-# The phases run back to back, so a false ready here becomes a Phase 3 failure
-# with no obvious cause.
-#
-# Each check below is something a consumer actually needs: the directory
-# answering on the wire, Kerberos issuing a ticket, and the API accepting an
-# authenticated login. They are ordered cheapest first so a failure points at
-# the lowest broken layer rather than at the last symptom.
 
 - name: readiness | Wait for the directory server to accept connections
   when:
@@ -19,10 +6,7 @@
     - not ansible_check_mode
   loop:
     - 389
-    # 636 as well as 389, because Keycloak federates over LDAPS and a
-    # directory that answers in the clear but not on TLS is a working domain
-    # with a broken single sign-on — a failure that would otherwise surface
-    # several roles later as a Keycloak connection test, pointing at Keycloak.
+
     - 636
     - 443
     - 88
@@ -51,9 +35,6 @@
     command: >-
       dig +short +time=5 SOA {{ freeipa_server_domain }} @127.0.0.1
 
-# The first check that needs a working directory behind it: the KDC validates
-# credentials against LDAP, so this fails whenever the database is unavailable
-# no matter what ipactl claims.
 - name: readiness | Wait for Kerberos to issue a ticket for admin
   when:
     - (freeipa_server_enabled | bool)
@@ -71,8 +52,6 @@
     stdin: "{{ freeipa_server_admin_password }}"
     stdin_add_newline: true
 
-# The exact path every Ansible module and Phase 3 consumer takes. IPA rejects a
-# login without a Referer header, so this sends the one it requires.
 - name: readiness | Wait for the IPA API to accept an authenticated login
   when:
     - (freeipa_server_enabled | bool)

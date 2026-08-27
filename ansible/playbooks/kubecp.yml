@@ -1,13 +1,4 @@
 ---
-# Phase 4 — the RKE2 control plane.
-#
-# Two plays, and the order between them is the whole point. Nothing on a cluster
-# node can be installed until GitLab actually holds the RKE2 artifact set,
-# because the nodes have no other source: no internet route, and no image
-# tarball on local disk. Publishing runs first, against repo01, and the node
-# play only starts once it has succeeded.
-#
-# See plan/PHASE4_IMPLEMENTATION.md.
 
 - name: Verify required secrets are present
   ansible.builtin.import_playbook: preflight_secrets.yml
@@ -22,9 +13,7 @@
   become: true
   force_handlers: true
   tasks:
-    # Re-runs the manifest so the phase 4 entries are staged before anything
-    # tries to publish them. A run where the artifacts are already present is a
-    # no-op; a run on a rebuilt repo01 downloads them first.
+
     - name: kubecp | Include artifact staging role
       tags:
         - artifact_stage
@@ -44,7 +33,8 @@
       vars:
         rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
         rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-        rke2_publish_chart_sets: "{{ inventory_rke2_publish_chart_sets }}"
+
+        rke2_publish_chart_sets: []
         rke2_publish_deploy_token_username: >-
           {{ inventory_rke2_publish_deploy_token_username }}
         rke2_publish_deploy_token_value: >-
@@ -67,35 +57,15 @@
           tags:
             - rke2_publish
 
-# serial: 1, because the first server has to be answering before the second one
-# is told to join it, and because a rolling restart of a three-member etcd is
-# the only safe kind. RKE2's own client-side load balancer makes the cluster
-# tolerant of a server being down once it is formed; it does not make forming
-# one in parallel a good idea.
 - name: Form the RKE2 control plane
   hosts: kubecp
   gather_facts: true
   become: true
-  # One at a time, because the first server has to be answering before the
-  # second is told to join it, and because a rolling restart of a three-member
-  # etcd is the only safe kind. RKE2's client-side load balancer makes a formed
-  # cluster tolerant of a server being down; it does not make forming one in
-  # parallel a good idea.
-  #
-  # Overridable for one case that the default gets wrong: an even-sized etcd.
-  # A two-member cluster has a quorum of two, so restarting it one node at a
-  # time can never succeed — the first node waits for a peer that this play will
-  # not start until the first node is ready. Recovering from that state needs
-  # `-e kubecp_serial=3`, and it is the only time that flag is correct.
-  serial: "{{ kubecp_serial | default(1) }}"
+
+  serial: "{{ kubecp_serial | default([1, 2]) }}"
   force_handlers: true
   tasks:
-    # Which host started the cluster is inventory data, not something to infer
-    # from play order. Deriving it from the first host in the play looks
-    # equivalent and is not: under `--limit kubecp02:kubecp03` the first host in
-    # the play is kubecp02, which would then be handed no `server:` address and
-    # would quietly start a second, separate cluster rather than joining the
-    # existing one.
+
     - name: kubecp | Assert the bootstrap server is named explicitly
       tags:
         - always
@@ -123,9 +93,6 @@
           tags:
             - base_host
 
-    # Before rke2_node, always. RKE2's data directory is on this volume, and a
-    # role that runs before the mount exists writes to the mount point on the
-    # OS disk instead — silently, and only visibly once the disk fills.
     - name: kubecp | Include data volume role
       tags:
         - data_volume
@@ -154,9 +121,6 @@
           tags:
             - time_sync
 
-    # The deploy token exists in exactly one place: the file rke2_publish wrote
-    # on the repo host. Reading it here keeps it out of inventory and out of
-    # this repository, and means rotating it is one file on one host.
     - name: kubecp | Read the registry deploy token from the repository host
       delegate_to: "{{ groups['repo'] | first }}"
       no_log: true
@@ -200,7 +164,7 @@
         rke2_server_api_address: "{{ inventory_rke2_server_api_address }}"
         rke2_server_api_name: "{{ inventory_rke2_server_api_name }}"
         rke2_server_api_port: "{{ inventory_rke2_server_api_port }}"
-        # Written only from the bootstrap host, and only once.
+
         rke2_server_bootstrap: >-
           {{ inventory_hostname == inventory_kubecp_bootstrap_host }}
         rke2_server_cni: "{{ inventory_rke2_server_cni }}"
@@ -230,8 +194,6 @@
           tags:
             - rke2_server
 
-    # After rke2_server, because it links binaries that the installer puts in
-    # place and reads a kubeconfig that only exists once the server has run.
     - name: kubecp | Include the node CLI role
       tags:
         - kube_cli

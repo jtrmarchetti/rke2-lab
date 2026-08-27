@@ -1,18 +1,4 @@
 ---
-# Public keys, derived rather than declared.
-#
-# A WireGuard public key is a pure function of its private key, and both
-# private keys in this tunnel are already on this host in
-# ~/.config/rke2lab/env.sh. Pasting the derived values into two group_vars
-# files — as this environment did until now — creates two copies that nothing
-# keeps in agreement with the secrets they came from. plan/SECRETS.md's
-# rotation procedure then has a manual step that fails silently: a tunnel with
-# a stale peer key comes up, shows an interface, reports a peer, and never
-# completes a handshake.
-#
-# The private keys reach `wg pubkey` on stdin, never on a command line, so they
-# do not appear in the process table of a host that also holds every other
-# secret in the environment.
 
 - name: keys | Derive this host's public key from its private key
   when: (controller_tunnel_private_key | trim | length) > 0
@@ -40,10 +26,6 @@
     cmd: wg pubkey
     stdin: "{{ controller_tunnel_peer_private_key | trim }}"
 
-# The derived value wins where both are available, and the assertion below is
-# what makes that safe to say: a declared key that disagrees with the derived
-# one is a stale paste, and silently preferring the correct one would leave the
-# stale copy in inventory to be trusted by the next person who reads it.
 - name: keys | Assert a declared gateway key matches the derived one
   when:
     - (controller_tunnel_peer_private_key | trim | length) > 0
