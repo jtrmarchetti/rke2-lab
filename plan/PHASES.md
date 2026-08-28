@@ -305,8 +305,12 @@ ingress controller after all. The other two are Longhorn for the CSI layer and
 3. Apply the base host role, APT proxy, DNS, and registry mirror configuration,
    and prepare both data disks.
 4. Install the RKE2 agent from GitLab-hosted artifacts and join the cluster.
-5. Label the workers, then taint the control plane, then deploy ingress — in
-   that order, and only once every worker is `Ready`.
+5. Label the workers, then taint the control plane. The ingress controller
+   needs no Ansible step of its own: Phase 4 already wrote the Traefik
+   HelmChartConfig into RKE2's auto-deploy directory on the bootstrap
+   server, and RKE2's manifest watcher deploys it the moment a worker node
+   exists to satisfy its nodeSelector. The control plane taint is still the
+   one thing that must wait for every worker to be `Ready`.
 6. Make the cluster operable: `kubectl` on `PATH` with a `KUBECONFIG` set on the
    controller and on the servers, `crictl` configured on every node, and `k9s`
    on the controller. This was not in the original plan for this phase; it was

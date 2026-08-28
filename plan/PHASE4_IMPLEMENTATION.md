@@ -72,9 +72,10 @@ for the three nodes and for the VIP, through the existing
 It records "Ingress: Traefik v3 (RKE2 default)". RKE2's packaged default is
 `rke2-ingress-nginx`; Traefik is the K3s default. RKE2 does ship a Traefik
 image set as a separate airgap tarball, so choosing Traefik remains possible —
-it is just not the default and not free. Phase 4 does not resolve this, because
-Phase 4 does not deploy ingress. It is flagged here so Phase 5 decides it
-knowingly rather than discovering it while a chart fails to appear.
+it is just not the default and not free. Phase 4 writes the `traefik` ingress
+selection and its HelmChartConfig into RKE2's auto-deploy directory; RKE2
+deploys it as soon as a worker exists to satisfy the chart's nodeSelector, so
+no separate ingress phase remains.
 
 ---
 
@@ -227,7 +228,7 @@ working apiserver to program them — it cannot front the thing it depends on.
 | etcd snapshots | Every 6 hours, retain 10, at the default location | RKE2 defaults to 12 hours and 5. Six hours costs nothing on a 100 GB disk and bounds the loss window to something a lab rebuild can tolerate. The snapshot directory is left at its default, which sits under the data directory and is therefore already on `/data1` — overriding it would be a second setting saying the same thing, and one more place for the two to disagree |
 | etcd sizing | Default 2 GB quota | Three nodes, no workloads until Phase 6. The default is roughly two orders of magnitude above what this cluster will hold |
 | Server taints | **None** in Phase 4 | There are no workers yet, so tainting the servers would leave nothing schedulable and nothing to test against. Phase 5 decides whether to taint once workers exist |
-| Ingress | `disable: rke2-ingress-nginx` | Phase 5 owns ingress, and it belongs on the workers. Leaving it enabled would schedule it onto control plane nodes and then have to be moved |
+| Ingress | `disable: rke2-ingress-nginx` | *(superseded)* Phase 5 once owned ingress and it belonged on the workers; the decision since became to keep nginx disabled and let Phase 4 write the `traefik` HelmChartConfig into RKE2's auto-deploy directory, which RKE2 deploys on the first worker join (see the note above) |
 
 ### The lab's storage is below etcd's floor, and it is structural
 

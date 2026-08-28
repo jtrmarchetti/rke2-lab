@@ -18,9 +18,6 @@
 - name: Phase 5 - RKE2 workers, and the control plane taint that follows them
   ansible.builtin.import_playbook: kubewk.yml
 
-- name: Phase 5 - deploy ingress now that there are workers to run it on
-  ansible.builtin.import_playbook: kubecp.yml
-
 - name: Phases 5-6a - controller tooling for operating the cluster
   ansible.builtin.import_playbook: controller.yml
 

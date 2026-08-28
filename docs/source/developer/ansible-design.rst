@@ -22,7 +22,8 @@ What lives where
    │       ├── main.yml        inventory_<ns>_<noun>  (desired state)
    │       └── artifacts.yml   where the group's artifacts are pinned
    ├── files/<role>/   templates, per role, OUTSIDE the roles
-   └── preflight       every playbook imports a secrets precheck first
+   └── preflight       every playbook except gitops and controller
+                      imports a secrets precheck first
 
 The one layout choice to understand first: **templates do not live inside
 their role.** Every role's templates sit under ``ansible/files/<role>/``, and
@@ -41,25 +42,22 @@ these roles are not published anywhere.
 A playbook is one phase
 =======================
 
-``site.yml`` is twelve ``import_playbook`` lines, in build order:
+``site.yml`` is eleven ``import_playbook`` lines, in build order:
 
 .. code-block:: text
 
    controller → repo01 → core01 → gitlab → kubecp → kubewk
-   → kubecp (again, for ingress) → controller tooling
-   → cluster_services → gitops → cluster_init → gitops (again)
+   → controller tooling → cluster_services → gitops
+   → cluster_init → gitops (again)
 
-Two non-obvious things about that order:
+One non-obvious thing about that order:
 
-* **``kubecp`` appears twice.** The first pass builds the control plane; the
-  second deploys the ingress, which needs workers to schedule on — hence it
-  sits after ``kubewk``.
 * **``gitops`` appears twice.** The first push creates the GitOps tree; the
   vault it deploys (OpenBao) does not exist yet, so the unseal keys cannot be
   sealed yet. ``cluster_init`` creates the vault; the second ``gitops`` run
   seals the keys into a tree that already exists.
 
-All eleven phase playbooks except ``gitops.yml`` and
+All ten phase playbooks except ``gitops.yml`` and
 ``controller.yml`` start by importing
 ``preflight_secrets.yml`` with their own list of required environment
 variables. The two exceptions carry no such list because they need
