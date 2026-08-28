@@ -12,6 +12,27 @@
       and the threshold cannot exceed the number of shares.
     quiet: true
 
+- name: main | Wait for the vault pod to report Ready
+  changed_when: false
+  failed_when: false
+  register: _reg_openbao_init_pod_ready
+  ansible.builtin.command:
+    cmd: >-
+      {{ openbao_init_kubectl }} wait -n {{ openbao_init_namespace }}
+      pod/{{ openbao_init_pod }}
+      --for=condition=Ready
+      --timeout={{ openbao_init_pod_ready_timeout }}s
+
+- name: main | Fail with an actionable message when the pod never became Ready
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_init_pod }} did not report Ready within
+      {{ openbao_init_pod_ready_timeout }}s. On a cold build the OpenBao stack
+      is installed by the Flux cascade; check `kubectl -n
+      {{ openbao_init_namespace }} get pods`, the HelmRelease conditions, and
+      pod events before re-running.
+  when: _reg_openbao_init_pod_ready.rc != 0
+
 - name: main | Read the vault's current state
   changed_when: false
 
@@ -20,8 +41,8 @@
   until: >-
     _reg_openbao_init_status['rc'] in [0, 1, 2]
     and ('"initialized"' in _reg_openbao_init_status['stdout'])
-  retries: 80
-  delay: 15
+  retries: 4
+  delay: 5
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
@@ -96,8 +117,8 @@
     _reg_openbao_init_final['rc'] == 0
     and not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
              ['sealed'] | default(false) | bool)
-  retries: 10
-  delay: 6
+  retries: 20
+  delay: 5
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}

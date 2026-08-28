@@ -14,4 +14,10 @@ openbao_init_kubectl: >-
   {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
   --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
 
+# How long to wait for the vault pod to report Ready before the role fails.
+# On a cold build the OpenBao stack still has to be installed by the Flux
+# cascade, so this is generous: 20 minutes covers the release install plus
+# pod scheduling on the nested-VM lab.
+openbao_init_pod_ready_timeout: 1200
+
 openbao_init_no_log: true

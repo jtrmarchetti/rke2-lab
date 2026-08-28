@@ -37,6 +37,13 @@ argument_specs:
       openbao_init_kubectl:
         type: str
         description: kubectl invocation, including the kubeconfig.
+      openbao_init_pod_ready_timeout:
+        type: int
+        default: 1200
+        description: >-
+          Seconds to wait for the vault pod to report Ready before failing.
+          On a cold build the OpenBao release is still installed by the Flux
+          cascade, so this must cover the release install plus pod scheduling.
       openbao_init_no_log:
         type: bool
         default: true
