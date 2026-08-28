@@ -6,6 +6,48 @@ Everything in ``dev.lo`` runs as a virtual machine on a single Proxmox
 hypervisor. Eight VMs, all Ubuntu 24.04, all root-only — there is no
 unprivileged login account anywhere in the estate.
 
+Hypervisor
+==========
+
+The Proxmox hypervisor is itself a virtual machine on a physical server,
+alongside the automation controller VM. Both boot with UEFI and have their
+virtual CPUs pinned to fixed physical cores.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 40 38
+
+   * - Setting
+     - Ubuntu VM (automation controller)
+     - Proxmox VM
+   * - OS
+     - Ubuntu 24.04
+     - Proxmox 9.2-1
+   * - Virtual CPUs
+     - 1
+     - 1
+   * - Cores
+     - 4
+     - 10
+   * - Threads
+     - 2
+     - 2
+   * - CPU set
+     - ``2,18,3,19,4,20,5,21``
+     - ``6,22,7,23,8,24,9,25,10,26,11,27,12,28,13,29,14,30,15,31``
+   * - Pin vCPUs
+     - true
+     - true
+   * - Memory
+     - 8 GiB
+     - 64 GiB
+   * - Boot loader
+     - UEFI
+     - UEFI
+   * - Disks
+     - 100 GB
+     - OS 32 GB, ``dev-lo-data`` 1.5 TB, ``dev-lo-directory`` 100 GB
+
 Hosts
 =====
 
