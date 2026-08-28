@@ -4,58 +4,7 @@
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
-      - GITLAB_ROOT_PASSWORD
       - RKE2_TOKEN
-
-- name: Publish the RKE2 artifact set from the repo host into GitLab
-  hosts: repo
-  gather_facts: true
-  become: true
-  force_handlers: true
-  tasks:
-
-    - name: kubewk | Include artifact staging role
-      tags:
-        - artifact_stage
-      vars:
-        artifact_stage_enabled: "{{ inventory_artifact_stage_enabled }}"
-        artifact_stage_manifest: "{{ inventory_artifact_stage_manifest }}"
-        artifact_stage_root: "{{ inventory_artifact_stage_root }}"
-      ansible.builtin.include_role:
-        name: artifact_stage
-        apply:
-          tags:
-            - artifact_stage
-
-    - name: kubewk | Include RKE2 publishing role
-      tags:
-        - rke2_publish
-      vars:
-        rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
-        rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-
-        rke2_publish_chart_sets: []
-        rke2_publish_deploy_token_username: >-
-          {{ inventory_rke2_publish_deploy_token_username }}
-        rke2_publish_deploy_token_value: >-
-          {{ inventory_rke2_publish_deploy_token_value }}
-        rke2_publish_enabled: "{{ inventory_rke2_publish_enabled }}"
-        rke2_publish_extra_images: "{{ inventory_rke2_publish_extra_images }}"
-        rke2_publish_gitlab_url: "{{ inventory_rke2_publish_gitlab_url }}"
-        rke2_publish_group: "{{ inventory_rke2_publish_group }}"
-        rke2_publish_images_project: "{{ inventory_rke2_publish_images_project }}"
-        rke2_publish_manifest: "{{ inventory_artifact_stage_manifest }}"
-        rke2_publish_package_version: >-
-          {{ inventory_rke2_publish_package_version }}
-        rke2_publish_packages_project: >-
-          {{ inventory_rke2_publish_packages_project }}
-        rke2_publish_registry_host: "{{ inventory_rke2_publish_registry_host }}"
-        rke2_publish_root_password: "{{ inventory_rke2_publish_root_password }}"
-      ansible.builtin.include_role:
-        name: rke2_publish
-        apply:
-          tags:
-            - rke2_publish
 
 - name: Join the RKE2 workers to the cluster
   hosts: kubewk
