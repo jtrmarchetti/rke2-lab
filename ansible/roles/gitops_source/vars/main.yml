@@ -47,13 +47,23 @@ _var_gitops_source_docker_config: >-
 _var_gitops_source_unseal_shares: >-
   {{ (gitops_source_openbao_unseal_keys | default('', true)).split(',')[:3] }}
 
-_var_gitops_source_sealed_secrets: >-
+# The full pass: every non-optional secret, plus the optional unseal-key
+# entry while the keys are known.
+_var_gitops_source_sealed_secrets_base: >-
   {{ (_var_gitops_source_sealed_secrets_all
       | selectattr('optional', 'undefined') | list)
      + ((_var_gitops_source_sealed_secrets_all
          | selectattr('optional', 'defined') | list)
         if (gitops_source_openbao_unseal_keys | default('', true) | length) > 0
         else []) }}
+
+# The surgical pass seals only the unseal-key entry; the full pass seals
+# everything the base list names.
+_var_gitops_source_sealed_secrets: >-
+  {{ (_var_gitops_source_sealed_secrets_all
+         | selectattr('optional', 'defined') | list)
+     if (gitops_source_unseal_keys_only | default(false, true))
+     else _var_gitops_source_sealed_secrets_base }}
 
 _var_gitops_source_sealed_secrets_all:
   - path: infrastructure/controllers/registry/registry-credentials.yaml

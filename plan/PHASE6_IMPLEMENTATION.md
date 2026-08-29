@@ -1048,11 +1048,16 @@ OpenBao's unseal keys cannot predate the vault, and the vault is deployed from
 the repository the first pass creates. `cluster_services.yml` was split at that
 seam, with the initialisation plays moving to `cluster_init.yml`.
 
-That second pass does not do what this paragraph originally claimed, and the
-correction is below under *The vault was built, wired, and left empty*: it reads
-the unseal keys through `lookup('env')`, which sees the environment the process
-started with rather than the `env.sh` the first pass wrote. Sealing them takes a
-re-source and a second invocation, not a second play in the same run.
+An earlier version of `gitops.yml` read the unseal keys through
+`lookup('env')`, which sees the environment the process started with rather
+than the `env.sh` the first pass wrote — sealing took a re-source and a second
+invocation, not a second play. That is superseded: `gitops.yml` now re-reads
+`env.sh` at task time (`lookup('file')`, the environment only as a fallback),
+and `site.yml`'s second pass runs the role with
+`gitops_source_unseal_keys_only: true` — a surgical seal of that single entry
+(project and render skipped; a no-op when steady). Cold evidence: the fresh
+rebuild seals it (`1 sealed secrets: 0 unchanged, 1 re-sealed` → commit) and
+the re-run is a no-op (`1 unchanged, 0 re-sealed`, no commit).
 
 ## Status
 
@@ -1216,11 +1221,11 @@ Two things follow that are worth stating rather than discovering:
 - **`kv/garage` is written one run late, and no ordering fixes it.**
   `lookup('env')` reads the environment the `ansible-playbook` process started
   with, so the S3 credentials `garage_init` appends to `env.sh` are invisible to
-  the run that created them. The same is true of `OPENBAO_UNSEAL_KEYS` in
-  `gitops.yml` — which means `site.yml`'s second `gitops.yml` pass does not
-  actually seal them on a cold rebuild, and the note above claiming it does is
-  wrong about the mechanism. Both need `env.sh` re-sourced and the playbook run
-  again.
+  the run that created them; they need `env.sh` re-sourced and the playbook
+  run again. (The unseal-key half of this concern is obsolete: `gitops.yml`
+  re-reads `env.sh` via `lookup('file')` at task time, so the second pass does
+  seal `OPENBAO_UNSEAL_KEYS` on a cold rebuild — see the corrected note
+  above.)
 
 The decisions Phase 6 inherited are settled: OpenBao in-cluster with Sealed
 Secrets holding the unseal keys, the seal kept swappable toward PKCS#11,

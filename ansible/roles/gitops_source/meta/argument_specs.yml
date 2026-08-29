@@ -169,6 +169,18 @@ argument_specs:
             not enough to rekey.
           - Empty is a real state, not a mistake - on a cold rebuild the vault
             does not exist yet. The entry is omitted while this is empty.
+      gitops_source_unseal_keys_only:
+        type: bool
+        default: false
+        description:
+          - The surgical second pass. When true the role skips the project
+            calls and the template-tree render, and seals only the OpenBao
+            unseal-key entry into the working clone the earlier full pass
+            left behind. In steady state, where the keys did not change,
+            the sealed entry is reused and no commit happens. The unseal
+            keys must be present for this mode to work; it is the
+            `site.yml` second `gitops.yml` import that runs it, after
+            `cluster_init` has recorded the keys.
       gitops_source_no_log:
         type: bool
         default: true

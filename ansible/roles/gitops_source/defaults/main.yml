@@ -48,6 +48,9 @@ gitops_source_commit_email: null
 
 gitops_source_openbao_unseal_keys: ""
 
+# Surgical pass: seal only the unseal-key entry, skip project + render.
+gitops_source_unseal_keys_only: false
+
 gitops_source_deploy_token_file: /data1/gitlab/rke2-deploy-token.yml
 
 gitops_source_admin_token_file: /data1/gitlab/admin-token.yml

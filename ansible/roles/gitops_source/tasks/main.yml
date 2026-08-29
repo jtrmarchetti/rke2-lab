@@ -26,6 +26,20 @@
     path: "{{ _item_gitops_source_input }}"
     get_checksum: false
 
+- name: main | Assert the unseal keys are present in the surgical pass
+  when:
+    - (gitops_source_enabled | bool)
+    - (gitops_source_unseal_keys_only | bool)
+  ansible.builtin.assert:
+    that:
+      - (gitops_source_openbao_unseal_keys | length) > 0
+    fail_msg: >-
+      The surgical pass seals only the OpenBao unseal-key entry, and the
+      keys are still empty. It is meant to run after cluster_init has
+      initialised the vault and recorded the keys; the first pass omits
+      the entry on purpose while the vault does not exist yet.
+    quiet: true
+
 - name: main | Render the cluster state and push it into GitLab
   when:
     - (gitops_source_enabled | bool)
@@ -58,15 +72,17 @@
         src: "{{ gitops_source_deploy_token_file }}"
 
     - name: main | Ensure the cluster-state project exists
+      when: not (gitops_source_unseal_keys_only | bool)
       ansible.builtin.include_tasks: project.yml
 
     - name: main | Take a working clone of the repository
       ansible.builtin.include_tasks: clone.yml
 
     - name: main | Render the template tree into the clone
+      when: not (gitops_source_unseal_keys_only | bool)
       ansible.builtin.include_tasks: render.yml
 
-    - name: main | Seal every secret into the clone
+    - name: main | Seal the secrets into the clone
       ansible.builtin.include_tasks: seal.yml
 
     - name: main | Commit and push whatever changed

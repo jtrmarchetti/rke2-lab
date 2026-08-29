@@ -32,3 +32,9 @@
 
 - name: Phase 6 - seal the vault keys now that the vault exists
   ansible.builtin.import_playbook: gitops.yml
+  vars:
+    # The first gitops pass already rendered, sealed, and pushed the tree
+    # with the unseal-key entry omitted (the vault did not exist yet).
+    # This pass seals that one entry into the working clone the first
+    # pass left behind and skips the render and the other secrets.
+    gitops_source_unseal_keys_only: true
