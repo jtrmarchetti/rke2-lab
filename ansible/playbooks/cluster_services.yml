@@ -97,7 +97,7 @@
   hosts: kubewk
   gather_facts: true
   become: true
-  serial: 1
+  serial: 100%
   force_handlers: true
 
   vars:

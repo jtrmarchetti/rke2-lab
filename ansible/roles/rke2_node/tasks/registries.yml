@@ -1,6 +1,23 @@
 ---
 
+# check_mode=true renders to nothing: `is_changed` says whether the file on
+# disk already matches the template, so the real render (and the RKE2
+# restart it notifies) runs only when the configuration actually moved.
+- name: registries | Check whether the rendered configuration would change
+  check_mode: true
+  no_log: true
+  register: _reg_rke2_node_registries_would_change
+  ansible.builtin.template:
+    src: "{{ _var_rke2_node_files_dir }}/registries.yaml.j2"
+    dest: /etc/rancher/rke2/registries.yaml
+    owner: root
+    group: root
+    mode: "0600"
+
 - name: registries | Render the containerd registry configuration
+  when: >-
+    _reg_rke2_node_registries_would_change is defined
+    and _reg_rke2_node_registries_would_change is changed
   no_log: true
   notify: Restart RKE2
   ansible.builtin.template:
