@@ -15,7 +15,7 @@ time_sync_makestep: "1.0 3"
 
 time_sync_require_source: true
 time_sync_ready_retries: 30
-time_sync_ready_delay: 10
+time_sync_ready_delay: 5
 
 time_sync_packages:
   - chrony

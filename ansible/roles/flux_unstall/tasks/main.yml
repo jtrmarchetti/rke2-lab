@@ -31,13 +31,9 @@
       {{ flux_unstall_flux }} suspend helmrelease
       {{ item }} -n {{ flux_unstall_namespace }}
 
-- name: flux_unstall | Let the controller settle after the suspend
-  when: >-
-    (flux_unstall_enabled | bool)
-    and (_flux_unstall_stalled | length > 0)
-  changed_when: false
-  ansible.builtin.command:
-    cmd: "sleep {{ flux_unstall_settle }}"
+# No static settle between the suspend and the resume: the resume's
+# --timeout and the confirm loop below already wait on the real
+# reconciliation result, so the blind sleep was pure static wait.
 
 - name: flux_unstall | Resume the releases and wait for the reconciliation
   when: >-

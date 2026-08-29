@@ -60,8 +60,11 @@ in the installed version, so the recovery path lives in Ansible instead:
 
    detect:  kubectl jsonpath scan for Stalled=True releases
    suspend: each stalled release (resets the retry budget)
-   settle:  sleep (the controller reconciles the suspension)
    resume:  each release, then wait for the reconciliation
+
+No static settle between the suspend and the resume: the resume's
+``--timeout`` and the confirm loop wait on the real reconciliation
+result, so a blind sleep would be pure static wait.
 
 ``flux_unstall`` is wired into ``cluster_init.yml`` after the Garage
 sequence and is an idempotent no-op when nothing is stalled — the same
