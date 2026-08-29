@@ -1,4 +1,32 @@
 ---
+- name: main | Refresh the apt cache while the packages have no candidate
+  when: (wireguard_gateway_enabled | bool) and not ansible_check_mode
+  changed_when: >-
+    _reg_wireguard_gateway_apt['stdout'] | default('') != 'ok'
+  register: _reg_wireguard_gateway_apt
+  retries: 5
+  delay: 15
+  until: >-
+    _reg_wireguard_gateway_apt['stdout'] | default('') == 'ok'
+  ansible.builtin.shell: |
+    # A freshly created host keeps an empty apt list until the first
+    # boot update finishes, so the install below can race that empty
+    # cache and fail with no candidate. Refresh only in that case;
+    # the retries clear an update the first boot still holds.
+    set -o pipefail
+    PKGS="{{ _var_wireguard_gateway_packages | join(' ') }}"
+    out=$(apt-cache policy $PKGS 2>/dev/null)
+    if printf '%s\n' "$out" | grep -qE 'Candidate: \((none|null)\)' \
+       || ! printf '%s\n' "$out" | grep -q 'Candidate:'; then
+      flock -w 120 /var/lib/dpkg/lock-frontend \
+        timeout -k 30 1800 apt-get update
+      echo refresh
+    else
+      echo ok
+    fi
+  args:
+    executable: /bin/bash
+
 - name: main | Ensure WireGuard packages are installed
   when: (wireguard_gateway_enabled | bool)
   ansible.builtin.apt:

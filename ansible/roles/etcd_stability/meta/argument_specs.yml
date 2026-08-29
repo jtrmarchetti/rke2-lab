@@ -1,0 +1,50 @@
+---
+argument_specs:
+  main:
+    short_description: Settle the control plane etcd cluster into a live quorum
+    description:
+      - Runs on every control plane node after the servers have joined.
+        A freshly joined three node cluster can oscillate its etcd
+        leadership long enough for two of the three rke2-server
+        processes to self-exit on a failed lease renewal; with one
+        healthy voter left, the wedged members can never catch up
+        again, and the failure only surfaces hours later.
+      - Each node confirms its own API server answers /readyz, which
+        is the same local signal that kills a wedged rke2-server.
+      - The bootstrap node then settles the cluster census. Every
+        control plane node must be Ready with the etcd voter
+        condition, the rke2-etcd lease must be held by a live voter,
+        and a quorum write and delete must succeed.
+      - The census is a transactional probe. A wedged member still
+        lists itself while the healthy quorum cannot commit, so only
+        a real write proves the cluster is usable.
+    options:
+      etcd_stability_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      etcd_stability_bootstrap:
+        type: bool
+        default: false
+        description: True on the bootstrap host, which runs the cluster census.
+      etcd_stability_cp_hostnames:
+        type: list
+        elements: str
+        default: []
+        description: The control plane hosts; the voter count must equal it.
+      etcd_stability_kubectl:
+        type: str
+        default: ""
+        description: kubectl invocation, including the kubeconfig.
+      etcd_stability_api_address:
+        type: str
+        default: null
+        description: The API virtual address, named in the failure guidance.
+      etcd_stability_retries:
+        type: int
+        default: 30
+        description: Attempts to settle the probes before the gate fails.
+      etcd_stability_delay:
+        type: int
+        default: 15
+        description: Seconds between settle attempts.

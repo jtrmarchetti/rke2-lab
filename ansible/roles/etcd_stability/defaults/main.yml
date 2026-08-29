@@ -1,0 +1,13 @@
+---
+etcd_stability_enabled: true
+
+etcd_stability_bootstrap: false
+
+etcd_stability_cp_hostnames: []
+
+etcd_stability_kubectl: ""
+
+etcd_stability_api_address: null
+
+etcd_stability_retries: 30
+etcd_stability_delay: 15

@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: etcd_stability
+  author: rke2lab
+  description: >-
+    Settles the control plane etcd cluster into a live quorum after the
+    servers have joined. A freshly joined three node cluster can
+    oscillate its etcd leadership long enough for two of the three
+    rke2-server processes to self-exit on a failed lease renewal, and
+    the wedged members then never catch up. The role confirms each
+    node's local API server is healthy and settles the cluster census
+    (all control plane nodes voters, lease held by a live voter, a
+    quorum write) within a bounded wait, so the failure is surfaced
+    on the cold build instead of hours later.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

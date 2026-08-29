@@ -204,3 +204,26 @@
         apply:
           tags:
             - kube_cli
+
+- name: Settle the control plane etcd cluster into a live quorum
+  hosts: kubecp
+  gather_facts: false
+  become: true
+  tasks:
+
+    - name: etcd_stability | Include the etcd stability gate
+      tags:
+        - etcd_stability
+      vars:
+        etcd_stability_api_address: "{{ inventory_rke2_server_api_address }}"
+        etcd_stability_bootstrap: >-
+          {{ inventory_hostname == inventory_kubecp_bootstrap_host }}
+        etcd_stability_cp_hostnames: "{{ groups['kubecp'] }}"
+        etcd_stability_kubectl: >-
+          {{ inventory_rke2_server_data_dir }}/bin/kubectl
+          --kubeconfig /etc/rancher/rke2/rke2.yaml
+      ansible.builtin.include_role:
+        name: etcd_stability
+        apply:
+          tags:
+            - etcd_stability

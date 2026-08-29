@@ -20,6 +20,7 @@
     daemon_reload: true
 
 - name: service | Wait for the API server to report ready
+  when: not ansible_check_mode
   changed_when: false
   failed_when: false
   register: _reg_rke2_server_readyz
@@ -35,6 +36,7 @@
       get --raw=/readyz
 
 - name: service | Assert the API server became ready
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - _reg_rke2_server_readyz['stdout'] | default('') == 'ok'

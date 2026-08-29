@@ -74,6 +74,7 @@
     - (kube_cli_node_enabled | bool)
     - (kube_cli_node_kubeconfig | length) > 0
   changed_when: false
+  check_mode: false
   ansible.builtin.shell:
     cmd: >-
       {{ kube_cli_node_link_dir }}/kubectl completion bash
@@ -96,6 +97,7 @@
     - (kube_cli_node_enabled | bool)
     - (kube_cli_node_kubeconfig | length) > 0
   changed_when: false
+  check_mode: false
   ansible.builtin.file:
     path: /tmp/kubectl-completion.new
     state: absent
