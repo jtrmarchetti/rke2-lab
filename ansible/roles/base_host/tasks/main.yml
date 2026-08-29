@@ -95,10 +95,12 @@
   delay: "{{ base_host_apt_update_delay }}"
   until: _reg_base_host_apt_update.rc == 0
   ansible.builtin.shell: |
-    pkill -9 -f 'AnsiballZ_ap[t]' 2>/dev/null || true
-    pkill -9 -f '/usr/lib/apt/methods/[a-z]+' 2>/dev/null || true
-    pkill -9 -x apt-get 2>/dev/null || true
-    exec timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
+    # flock on the dpkg frontend lock instead of killing apt
+    # processes: a lock held by a live process clears itself when it
+    # finishes, so the bounded retries below clear it without killing
+    # anyone. -w caps the per-attempt wait; until/retries re-attempt.
+    exec flock -w 120 /var/lib/dpkg/lock-frontend \
+      timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
 
 - name: main | Ensure base packages are installed
   ansible.builtin.apt:
