@@ -18,7 +18,12 @@ base_host_apt_acquire_pipeline_depth: 0
 base_host_apt_update_retries: 3
 base_host_apt_update_delay: 15
 
-base_host_apt_update_timeout: 1800
+# Per-attempt wall-clock cap on the apt-get update command. Sized for the
+# warm-store case: the apt_proxy pre-warm task fills repo01's cacher store
+# before any VM bursts, so a VM's fetch is a small local download and 300s
+# is ample. The old 1800s cap only existed to survive a poisoned-store
+# stall, which the pre-warm now prevents.
+base_host_apt_update_timeout: 300
 
 base_host_manage_hostname: false
 base_host_target_hostname: ""

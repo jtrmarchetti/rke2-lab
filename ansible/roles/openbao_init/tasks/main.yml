@@ -16,6 +16,9 @@
   changed_when: false
   failed_when: false
   register: _reg_openbao_init_pod_ready
+  until: _reg_openbao_init_pod_ready.rc == 0
+  retries: "{{ openbao_init_pod_ready_retries }}"
+  delay: "{{ openbao_init_pod_ready_delay }}"
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} wait -n {{ openbao_init_namespace }}
@@ -26,8 +29,10 @@
 - name: main | Fail with an actionable message when the pod never became Ready
   ansible.builtin.fail:
     msg: >-
-      {{ openbao_init_pod }} did not report Ready within
-      {{ openbao_init_pod_ready_timeout }}s. On a cold build the OpenBao stack
+      {{ openbao_init_pod }} did not report Ready after
+      {{ openbao_init_pod_ready_retries }} x
+      {{ openbao_init_pod_ready_delay }}s polls. On a cold build the OpenBao
+      stack
       is installed by the Flux cascade; check `kubectl -n
       {{ openbao_init_namespace }} get pods`, the HelmRelease conditions, and
       pod events before re-running.

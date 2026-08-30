@@ -14,7 +14,7 @@
     group: "{{ _var_apt_proxy_group }}"
     mode: "0755"
 
-- name: main | Ensure the packaged config is left unmanaged and overrides are rendered
+- name: main | Ensure the packaged config is unmanaged and overrides render
   when: (apt_proxy_enabled | bool)
   notify:
     - Restart apt-cacher-ng
@@ -33,3 +33,45 @@
     name: "{{ _var_apt_proxy_service }}"
     enabled: true
     state: started
+
+- name: main | Pre-warm the cacher store with a single-client apt update
+  # The 3.x cacher store races on same-second cold fetches of an index that
+  # is not cached yet (500 + a poisoned InRelease that later fails GPG
+  # verification). A warm store is served verbatim with no write path, so a
+  # single clean client pass before the lab's multi-client burst makes the
+  # race unreachable. This runs in the repo01 play, before core01/kubecp/
+  # kubewk, so clearing the store on the BADSIG path below cannot race a
+  # live fetch. Assumption: every lab host's apt sources are a subset of
+  # repo01's, so each index is warmed here before the first client hit; a
+  # repo added to only one VM's lists would still cold-fetch through the
+  # cacher and could stall past the tightened base_host cap.
+  when:
+    - (apt_proxy_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_apt_proxy_prewarm
+  until: _reg_apt_proxy_prewarm.rc == 0
+  retries: 3
+  delay: 10
+  changed_when: false
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PROXY_URL="{{ _var_apt_proxy_prewarm_proxy }}"
+    run_update() {
+      DEBIAN_FRONTEND=noninteractive \
+        apt-get -o "Acquire::http::Proxy=${PROXY_URL}" \
+                 -o "Acquire::https::Proxy=${PROXY_URL}" \
+                 update
+    }
+    if run_update; then
+      exit 0
+    fi
+    # A signature failure against a valid key means the cacher store is
+    # poisoned by the cold-fetch race; clear the index store, restart the
+    # cacher, and retry once against the clean store.
+    find "{{ apt_proxy_cache_dir }}" \
+      \\( -name 'InRelease*' -o -name '*.head' \\) -delete
+    systemctl restart "{{ _var_apt_proxy_service }}"
+    sleep 5
+    run_update
+  args:
+    executable: /bin/bash

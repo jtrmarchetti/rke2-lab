@@ -113,3 +113,14 @@
     - (base_host_target_hostname | length > 0)
   ansible.builtin.hostname:
     name: "{{ base_host_target_hostname }}"
+
+# The PVE cloud image ships with the ssh unit disabled; only a one-shot
+# cloud-init start brings it up at first boot, and that one-shot can race
+# the first-boot remount/resize and never fire, stranding an unreachable
+# VM. Enabling + starting the unit here makes every boot and re-run
+# self-heal instead of leaving the host down until a manual reset.
+- name: main | Ensure the SSH server is enabled and started
+  ansible.builtin.systemd:
+    name: ssh
+    state: started
+    enabled: true

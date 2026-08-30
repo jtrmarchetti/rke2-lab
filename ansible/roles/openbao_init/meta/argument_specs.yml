@@ -37,13 +37,32 @@ argument_specs:
       openbao_init_kubectl:
         type: str
         description: kubectl invocation, including the kubeconfig.
+      openbao_init_pod_ready_retries:
+        type: int
+        default: 240
+        description: >-
+          How many times to poll the vault pod for Ready before failing.
+          Each poll fast-fails while the pod does not exist yet (the Flux
+          cascade is still installing), so the effective cold-build window is
+          retries x delay. Sized 240 x 15s = 60 minutes after a measured
+          cold build where the pod reached Ready ~27 minutes after the gate
+          started and a whole install chain (longhorn 30m + openbao 15m)
+          can still be running.
+      openbao_init_pod_ready_delay:
+        type: int
+        default: 15
+        description:
+          - Seconds between Ready polls; see openbao_init_pod_ready_retries
+            for the effective-window calculation.
       openbao_init_pod_ready_timeout:
         type: int
-        default: 1200
+        default: 60
         description: >-
-          Seconds to wait for the vault pod to report Ready before failing.
-          On a cold build the OpenBao release is still installed by the Flux
-          cascade, so this must cover the release install plus pod scheduling.
+          Per-poll bound for the individual `kubectl wait` call, in seconds.
+          While the pod exists this is how long one poll blocks for
+          Ready; while it does not exist yet the call returns immediately.
+          Kept small so one blocked poll cannot eat the whole retries x
+          delay window.
       openbao_init_no_log:
         type: bool
         default: true

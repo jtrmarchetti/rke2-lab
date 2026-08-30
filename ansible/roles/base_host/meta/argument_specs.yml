@@ -38,6 +38,9 @@ argument_specs:
           Per-attempt wall-clock cap (seconds) on the apt-get update command
           itself (exec timeout -k 30 <cap> apt-get update). NOT a task-level
           timeout, which would bypass retries/until and kill the task.
+          Sized 300s for the warm-store case: the apt_proxy pre-warm task
+          fills the cacher store before any VM bursts, so a fetch is a
+          small local download.
         type: int
         required: false
       base_host_manage_hostname:

@@ -16,8 +16,23 @@ openbao_init_kubectl: >-
 
 # How long to wait for the vault pod to report Ready before the role fails.
 # On a cold build the OpenBao stack still has to be installed by the Flux
-# cascade, so this is generous: 20 minutes covers the release install plus
-# pod scheduling on the nested-VM lab.
-openbao_init_pod_ready_timeout: 1200
+# cascade before the pod can start. The gate polls `kubectl wait` with
+# retries x delay (the garage_init pattern) because `kubectl wait` returns
+# immediately when the pod does not exist yet: a single wait would see a
+# missing pod, fail at once, and never run its --timeout. Measured on the
+# nested-VM lab: the pod reached Ready ~27 minutes after the gate started on
+# f_cold3, and a single 1800s wait fataled at 0.025s on g1_cold3
+# (2026-08-30) because the whole cascade was still installing; 240 x 15s
+# = 60 minutes of polls covers the longest install chain (longhorn 30m +
+# openbao 15m + scheduling) with headroom for the slower-IO VMs this lab
+# runs on. Each poll bounds its own wait at
+# `openbao_init_pod_ready_timeout` (60s) so one blocked call adds at most
+# that to a poll; the absolute worst case is retries x (delay + timeout),
+# ~5.2h, which only occurs when every poll stays blocked. On warm or
+# idempotent runs the gate sees an already-Ready pod and passes on the
+# first poll.
+openbao_init_pod_ready_retries: 240
+openbao_init_pod_ready_delay: 15
+openbao_init_pod_ready_timeout: 60
 
 openbao_init_no_log: true

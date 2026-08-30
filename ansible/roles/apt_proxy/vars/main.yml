@@ -7,3 +7,10 @@ _var_apt_proxy_group: apt-cacher-ng
 _var_apt_proxy_override_config_path: /etc/apt-cacher-ng/zzz-rke2lab.conf
 
 _var_apt_proxy_files_dir: "{{ role_path | dirname | dirname }}/files/apt_proxy"
+
+# Address of the cacher as seen from the cacher host itself, for the
+# pre-warm fetch: the first configured bind address, or loopback.
+_var_apt_proxy_prewarm_bind: >-
+  {{ (apt_proxy_bind_addresses or ['127.0.0.1']) | first }}
+_var_apt_proxy_prewarm_proxy: >-
+  http://{{ _var_apt_proxy_prewarm_bind }}:{{ apt_proxy_bind_port }}
