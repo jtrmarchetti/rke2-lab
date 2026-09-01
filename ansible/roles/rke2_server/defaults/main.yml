@@ -29,9 +29,23 @@ rke2_server_data_dir: /data1/rancher/rke2
 rke2_server_etcd_snapshot_schedule: "0 */6 * * *"
 rke2_server_etcd_snapshot_retention: 10
 
+# etcd is run against the shared PVE LVM, whose slow IO has wedged the
+# leader 6 times (2026-08-24..31): overloaded-leader quorum loss under the
+# alloy/loki/kps read burst. RKE2's generated etcd config has no compaction
+# tuning at all, so the keyspace revision history and the WAL grow without
+# bound, amplifying every read burst into a leader stall. Periodic
+# auto-compaction bounds the history etcd has to serve. No defrag-interval:
+# defrag rewrites the whole ~220M db file on the slowest storage in the
+# topology, and a 30m recurring whole-file rewrite is itself a stall storm
+# (g2_cold3 strike window 00:36:44 sat 4m after defrag #2's ~00:32:40 fire;
+# the WAL stays pinned ~184M by the 6h snapshot schedule anyway, so there
+# is no disk-space pressure that would justify it). The heartbeat/election
+# pair keeps the cluster from mistaking a slow commit for a dead leader.
 rke2_server_etcd_args:
   - heartbeat-interval=1000
   - election-timeout=5000
+  - auto-compaction-mode=periodic
+  - auto-compaction-retention=30m
 
 rke2_server_expose_metrics: true
 

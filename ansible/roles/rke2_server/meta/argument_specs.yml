@@ -104,7 +104,9 @@ argument_specs:
         description:
           - Extra arguments passed to etcd, as key=value strings. Used here to
             raise the heartbeat and election timeouts so etcd tolerates slow
-            storage instead of mistaking a slow commit for a dead leader.
+            storage instead of mistaking a slow commit for a dead leader, and to
+            cap the revision history with periodic auto-compaction so the WAL
+            and keyspace stay bounded on the shared PVE LVM.
       rke2_server_kube_vip_enabled:
         type: bool
         default: true

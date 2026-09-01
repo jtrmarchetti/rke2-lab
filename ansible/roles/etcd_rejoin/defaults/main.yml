@@ -1,0 +1,34 @@
+---
+etcd_rejoin_enabled: true
+
+etcd_rejoin_data_dir: /data1/rancher/rke2
+
+etcd_rejoin_kubectl: ""
+
+# Ordered probe list for the join port: the API virtual address first,
+# then the peer control plane nodes. A wedged bootstrap node may have
+# taken the virtual address down with it, so a peer must be probeable.
+etcd_rejoin_candidate_addresses: []
+
+etcd_rejoin_api_port: 6443
+etcd_rejoin_supervisor_port: 9345
+
+# Bounded wait for the surviving cluster to drop the stale member
+# (member removal controller on the leader, RemovePeer with self
+# removal allowed) before the local store is wiped.
+# 30 x 10s = 300s.
+etcd_rejoin_member_wait_retries: 30
+etcd_rejoin_member_wait_delay: 10
+
+etcd_rejoin_reboot_timeout: 600
+
+# Budget for waiting on the node to be promoted from learner to voter.
+# Learner promotion is not time-bounded on this storage: the leader only
+# evicts a stalled learner when its progress check succeeds, and the
+# status checks themselves time out on the shared LVM, so a learner can
+# stall far longer than the default 5m stall budget. A wide budget here
+# is the widest in the role; the heal is safe to re-run if the node is
+# still a learner after this point.
+# 36 x 30s = 1800s.
+etcd_rejoin_voter_wait_retries: 36
+etcd_rejoin_voter_wait_delay: 30

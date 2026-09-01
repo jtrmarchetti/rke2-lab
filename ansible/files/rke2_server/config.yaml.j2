@@ -1,9 +1,18 @@
 {{ ansible_managed | comment }}
 
 token: {{ rke2_server_token }}
-{% if not (rke2_server_bootstrap | bool) %}
+{# The join-pin marker written by the etcd_rejoin heal pins this node
+   into the cluster join path on every re-render: a healed bootstrap
+   node keeps the server address, or a wiped store restarts into
+   new-cluster mode and fatals again. Unhealed join nodes render the
+   canonical virtual-address line. #}
+{% if (not (rke2_server_bootstrap | bool))
+      or (_rke2_server_join_pin | length > 0) %}
 
-server: https://{{ rke2_server_api_address }}:{{ rke2_server_supervisor_port }}
+server: {{ _rke2_server_join_pin
+          if (_rke2_server_join_pin | length > 0)
+          else ('https://' ~ rke2_server_api_address
+                ~ ':' ~ (rke2_server_supervisor_port | string)) }}
 {% else %}
 
 {% endif %}

@@ -1,0 +1,38 @@
+---
+
+# Strike window 2: the flux / observability install burst is the window
+# that has wedged the etcd leader on every recorded strike. It runs
+# after the control plane has settled once, so the settle gate in
+# kubecp.yml has already passed and a wedged node only surfaces here.
+# This play re-runs the self-healing etcd_rejoin role on every control
+# plane node; it is a no-op on a healthy node, and a healed node is
+# proven back in the quorum by the role's own voter gate before this
+# play returns. The cluster_init and gitops plays that follow then see
+# a healthy quorum; nothing after this play re-settles the census.
+- name: Resettle the control plane after the service install burst
+  hosts: kubecp
+  gather_facts: false
+  become: true
+  tasks:
+
+    - name: etcd_rejoin | Heal control plane nodes wedged out of etcd
+      tags:
+        - etcd_rejoin
+      vars:
+        etcd_rejoin_api_port: "{{ inventory_rke2_server_api_port }}"
+        etcd_rejoin_candidate_addresses: >-
+          {{ ([inventory_rke2_server_api_address]
+              + (groups['kubecp']
+                 | map('extract', hostvars, 'inventory_rke2_server_node_ip')
+                 | reject('equalto', inventory_rke2_server_node_ip)
+                 | list)) }}
+        etcd_rejoin_data_dir: "{{ inventory_rke2_server_data_dir }}"
+        etcd_rejoin_kubectl: >-
+          {{ inventory_rke2_server_data_dir }}/bin/kubectl
+          --kubeconfig /etc/rancher/rke2/rke2.yaml
+        etcd_rejoin_supervisor_port: "{{ inventory_rke2_server_supervisor_port }}"
+      ansible.builtin.include_role:
+        name: etcd_rejoin
+        apply:
+          tags:
+            - etcd_rejoin

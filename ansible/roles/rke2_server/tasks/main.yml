@@ -12,6 +12,32 @@
       ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
     quiet: true
 
+- name: main | Record the etcd rejoin join-pin marker
+  # The etcd_rejoin heal writes a marker holding the surviving control
+  # plane address it rejoined through. The config template renders the
+  # server address from the marker on every build, so a healed bootstrap
+  # node stays pinned into the join path instead of falling back to
+  # new-cluster mode. Healthy nodes have no marker and render the
+  # canonical line.
+  register: _reg_rke2_server_join_pin
+  when: (rke2_server_enabled | bool)
+  changed_when: false
+  failed_when: false
+  ansible.builtin.slurp:
+    src: "{{ rke2_server_data_dir }}/join-pin"
+
+- name: main | Resolve the join-pin value for the config render
+  # A failed slurp (no marker) registers without a content key, and its
+  # failed_when override means there is no failed key either, so the
+  # value must be read key-safely with subscript access: no marker ->
+  # empty string -> the template renders the canonical line.
+  when: (rke2_server_enabled | bool)
+  changed_when: false
+  ansible.builtin.set_fact:
+    _rke2_server_join_pin: >-
+      {{ (_reg_rke2_server_join_pin['content'] | default('', true))
+         | b64decode | trim | default('', true) }}
+
 - name: main | Configure the RKE2 server
   when: (rke2_server_enabled | bool)
   ansible.builtin.include_tasks: config.yml

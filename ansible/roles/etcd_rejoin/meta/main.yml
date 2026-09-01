@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: etcd_rejoin
+  author: rke2lab
+  description: >-
+    Self-heals a control plane node whose local etcd store is wedged out of
+    sync with the surviving cluster. It asks the surviving cluster to drop
+    the stale member, wipes the local store, pins the node into the join
+    path, reboots, and restarts the server so the node returns as a
+    learner the surviving leader promotes to a voter. No-op on a healthy
+    node.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - rke2
+    - kubernetes
+    - etcd
+
+dependencies: []

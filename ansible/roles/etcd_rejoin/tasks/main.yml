@@ -1,0 +1,378 @@
+---
+# Self-heal for the etcd wedge class, in the build path. A control plane
+# node whose local etcd store is wedged out of sync with the surviving
+# cluster crash-loops forever: the etcd pod cannot run (kubelet is a child
+# of the fatalling rke2-server), and a wiped store restarts into
+# new-cluster mode on the bootstrap node instead of taking the join path.
+# This role recovers the node by asking the surviving cluster to drop the
+# stale member, wiping the local store, pinning a reachable control plane
+# address into the join path, rebooting to flush the orphaned containerd
+# shims, and restarting the server. The node returns as a learner and the
+# surviving leader's learner management promotes it to a voter.
+#
+# The role is self-detecting and a no-op on a healthy node, so it is
+# included on every control plane node in every strike window: the settle
+# gate in kubecp.yml, and the settle play after the flux install burst
+# (the window that has wedged the leader on every recorded strike).
+
+- name: etcd_rejoin | Scan the current-boot journal for the wedge signatures
+  # Two distinct signatures of the wedge class. "failed to bootstrap
+  # cluster data" and "failed to read consistent index" are the
+  # terminal-fatal signatures: the local store cannot sync and rke2-server
+  # exits. "Failed to check local etcd status for learner management"
+  # is the second-order stall: the node is a learner and the leader's
+  # promotion status checks time out on the slow shared LVM, so the node
+  # is not promoted to a voter for longer than the learner stall budget.
+  # The scan is restricted to the current boot, so a wedge that an
+  # earlier boot already healed never re-triggers the heal.
+  register: _reg_etcd_rejoin_signature
+  changed_when: false
+  failed_when: false
+  ansible.builtin.shell: |
+    set -o pipefail
+    journalctl -u rke2-server -b --no-pager 2>/dev/null \
+      | grep -F -e "failed to bootstrap cluster data" \
+                -e "failed to read consistent index" \
+                -e "Failed to check local etcd status for learner management"
+  args:
+    executable: /bin/bash
+
+- name: etcd_rejoin | Gather the current service state
+  # Repo convention: service_facts, no shelling out. The state is read
+  # through ansible_facts below, the same as in rke2_server.
+  ansible.builtin.service_facts:
+
+- name: etcd_rejoin | Record whether the rke2-server service is running
+  ansible.builtin.set_fact:
+    _etcd_rejoin_service_running: >-
+      {{ ansible_facts['services']['rke2-server.service']['state']
+         | default('') == 'running' }}
+
+- name: etcd_rejoin | Read this node's etcd voter condition
+  # The second-order stall keeps rke2-server active and the local API
+  # answering: the local etcd runs as a learner and only the promotion
+  # to a voter stalls, so the service state alone cannot see it. The
+  # voter condition is the only signal that the node is actually in the
+  # quorum. A terminal wedge has the API down, so the read fails and
+  # reads as not-a-voter, which the test below treats the same.
+  register: _reg_etcd_rejoin_voter
+  changed_when: false
+  failed_when: false
+  ansible.builtin.command:
+    cmd: >-
+      {{ etcd_rejoin_kubectl }} get node
+      {{ inventory_hostname }}.dev.lo
+      -o jsonpath='{.status.conditions[?(@.type=="EtcdIsVoter")].status}'
+
+- name: etcd_rejoin | Decide whether this node is wedged
+  # Two classes, both fatal to the build. The terminal class: a wedge
+  # signature is in the current-boot journal and rke2-server is not
+  # running - no amount of restarting converges it. The stall class:
+  # the stall signature is in the journal and the voter condition is
+  # not true - the node is a learner that the leader cannot promote in
+  # time. A healthy or transiently recovering node has a running
+  # service and a true voter condition, and the role stops here. The
+  # enabled gate lets a caller opt the heal out of the run entirely.
+  ansible.builtin.set_fact:
+    _etcd_rejoin_wedged: >-
+      {{ (etcd_rejoin_enabled | bool)
+         and ((_reg_etcd_rejoin_signature.rc | default(1)) == 0)
+         and ((not (_etcd_rejoin_service_running | bool))
+              or (_reg_etcd_rejoin_voter.stdout | default('') | trim
+                  != 'True')) }}
+
+- name: etcd_rejoin | Report the healthy node
+  when: not (_etcd_rejoin_wedged | bool)
+  ansible.builtin.debug:
+    msg: >-
+      etcd store on this node is healthy; the rejoin heal is a no-op
+    verbosity: 0
+
+- name: etcd_rejoin | Record the registered node name
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  register: _reg_etcd_rejoin_fqdn
+  changed_when: false
+  ansible.builtin.command:
+    cmd: hostname --fqdn
+
+- name: etcd_rejoin | Stop the RKE2 server so etcd releases the store
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.systemd_service:
+    name: rke2-server
+    state: stopped
+    daemon_reload: true
+
+- name: etcd_rejoin | Find a surviving control plane to rejoin through
+  # Probe each candidate on the RKE2 join port: the API virtual address
+  # first, then the peer control plane nodes. A wedged bootstrap node has
+  # taken the virtual address down with it, so a peer must be probeable.
+  # A transient refusal on every address for one pass is not a
+  # cluster-down, so the whole pass retries a bounded number of times.
+  register: _reg_etcd_rejoin_probe
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: >-
+    (_reg_etcd_rejoin_probe.results
+       | select('succeeded') | list | length) > 0
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  loop: "{{ etcd_rejoin_candidate_addresses }}"
+  loop_control:
+    label: "{{ item }}"
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: "{{ etcd_rejoin_supervisor_port }}"
+    state: started
+    timeout: 10
+
+- name: etcd_rejoin | Record the reachable candidate address
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.set_fact:
+    _etcd_rejoin_peer: >-
+      {{ _reg_etcd_rejoin_probe.results
+         | select('succeeded')
+         | map(attribute='item') | first }}
+
+- name: etcd_rejoin | Record the surviving control plane's join URL
+  # One URL reused by the pin tasks below: the address the heal reached,
+  # joined to the supervisor port the join path needs.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.set_fact:
+    _etcd_rejoin_server_url: >-
+      https://{{ _etcd_rejoin_peer }}:{{ etcd_rejoin_supervisor_port }}
+
+- name: etcd_rejoin | Ask the surviving cluster to drop the stale member
+  # Runs through a reachable control plane address, not the local API,
+  # which is precisely what is down. The embedded admin client in the
+  # kubeconfig is signed by the cluster CA whose SANs cover every control
+  # plane address, so the overridden server still verifies. The managed
+  # etcd member removal controller on a surviving leader turns the remove
+  # annotation into a RemovePeer and stamps the removed-node-name marker.
+  register: _reg_etcd_rejoin_annotate
+  changed_when: false
+  # The surviving cluster answered the join port probe moments before
+  # this call, but the API port can still refuse a connection
+  # transiently under load. The annotation is idempotent and
+  # --overwrite, so a bounded retry is safe.
+  failed_when: false
+  until: (_reg_etcd_rejoin_annotate.rc | default(1)) == 0
+  retries: 6
+  delay: 10
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.command:
+    cmd: >-
+      {{ etcd_rejoin_kubectl }}
+      --server https://{{ _etcd_rejoin_peer }}:{{ etcd_rejoin_api_port }}
+      annotate node/{{ _reg_etcd_rejoin_fqdn.stdout | trim }}
+      etcd.rke2.cattle.io/remove=true --overwrite
+
+- name: etcd_rejoin | Assert the remove annotation was recorded
+  # Without this, a spent annotate budget would fall through to the
+  # store wipe with the stale member still in the surviving cluster,
+  # and the join would fatal on the duplicate member. The assert makes
+  # the failure explicit and the heal is safe to re-run: the annotation
+  # is idempotent and the wait re-checks the marker from scratch.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.assert:
+    that:
+      - _reg_etcd_rejoin_annotate.rc | default(1) == 0
+    fail_msg: >-
+      The remove annotation could not be recorded against a surviving
+      control plane after 6 attempts. The surviving cluster's API port
+      {{ etcd_rejoin_api_port }} is refusing connections through
+      {{ _etcd_rejoin_peer }}. Check the peer's journal and re-run; the
+      heal converges on the same surviving cluster.
+    quiet: true
+
+- name: etcd_rejoin | Wait for the surviving cluster to drop the member
+  # The marker is the only signal that the stale member is gone: a
+  # wedged member still lists itself, and re-adding the node with the
+  # same name and address while the stale entry persists would fail
+  # the join. The grep keeps the probe inside one bounded command, so
+  # a transient kubectl refusal re-runs the whole probe instead of
+  # failing the wait.
+  register: _reg_etcd_rejoin_removed
+  changed_when: false
+  failed_when: false
+  until: (_reg_etcd_rejoin_removed.rc | default(1)) == 0
+  retries: "{{ etcd_rejoin_member_wait_retries }}"
+  delay: "{{ etcd_rejoin_member_wait_delay }}"
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.shell: |
+    set -o pipefail
+    {{ etcd_rejoin_kubectl }} \
+      --server https://{{ _etcd_rejoin_peer }}:{{ etcd_rejoin_api_port }} \
+      get node/{{ _reg_etcd_rejoin_fqdn.stdout | trim }} -o json \
+      | grep -q '"etcd\.rke2\.cattle\.io/removed-node-name"'
+  args:
+    executable: /bin/bash
+
+- name: etcd_rejoin | Assert the surviving cluster dropped the member
+  # The wipe below must not run while the stale member is still in the
+  # surviving cluster's membership: a wiped store re-adding this node
+  # by name while the stale entry persists fails the join. Asserting
+  # here turns a spent wait budget into a loud, re-runnable failure.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.assert:
+    that:
+      - _reg_etcd_rejoin_removed.rc | default(1) == 0
+    fail_msg: >-
+      The surviving cluster did not stamp the removed-node-name marker
+      on this node within
+      {{ etcd_rejoin_member_wait_retries | int
+         * etcd_rejoin_member_wait_delay | int }}s.
+      Check `journalctl -u rke2-server` on the surviving leader for
+      the member removal controller, and re-run.
+    quiet: true
+
+- name: etcd_rejoin | Wipe the local etcd store
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.file:
+    path: "{{ etcd_rejoin_data_dir }}/server/db"
+    state: absent
+
+- name: etcd_rejoin | Pin the node into the join path with a durable marker
+  # A line-in-the-config pin is not durable: the rke2_server config
+  # template re-renders the file on the next build and the pin is gone,
+  # so a healed bootstrap node would restart into new-cluster mode
+  # again. The marker file is read by the rke2_server role and feeds the
+  # template, keeping this node on the join path for every future boot
+  # and re-render. Once a cluster exists, the bootstrap node is a joiner
+  # like any other, and re-deriving first-init on a later build is the
+  # failure this marker exists to prevent, so it is kept permanently:
+  # the next wiped-store restart joins through the pinned address, and
+  # the marker keeps every config render converging on it.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.copy:
+    content: "{{ _etcd_rejoin_server_url }}"
+    dest: "{{ etcd_rejoin_data_dir }}/join-pin"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: etcd_rejoin | Pin the live config into the join path
+  # The marker only fixes future config re-renders. The restart below
+  # reads the live config as it stands now: a bootstrap node's config has
+  # no server line at all, and a wiped store started without one re-enters
+  # the new-cluster path and fatals. Replacing or appending the server
+  # line now is what makes the restarted server take the join path.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.lineinfile:
+    path: /etc/rancher/rke2/config.yaml
+    regexp: "^server:"
+    line: "server: {{ _etcd_rejoin_server_url }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: etcd_rejoin | Reboot to flush the orphaned containerd shims
+  # A stop/start leaves dead shims and a wedged containerd socket behind;
+  # a full reboot is what the 2026-08-24 recovery needed to clear.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ etcd_rejoin_reboot_timeout }}"
+    post_reboot_delay: 30
+    msg: etcd rejoin reboot complete, the node is back
+
+- name: etcd_rejoin | Start the RKE2 server into the join path
+  # With the store wiped and the reachable address pinned, k3s takes the
+  # join path: this node returns as a learner and the surviving leader's
+  # learner management promotes it to a voting member.
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.systemd_service:
+    name: rke2-server
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: etcd_rejoin | Wait for this node to be promoted to a voter
+  # Learner promotion is not time-bounded on this storage: the leader
+  # only evicts a stalled learner when its progress check succeeds, and
+  # the status checks themselves time out on the shared LVM, so a
+  # learner can stall far longer than the default stall budget. The
+  # voter condition is the only gate that proves the node is back in
+  # the quorum; readyz alone is not enough, a node that answers its
+  # own API is still out of the cluster until it votes.
+  register: _reg_etcd_rejoin_voter_wait
+  changed_when: false
+  # A transient kubectl refusal is not a promotion failure: keep
+  # polling until the condition reads true, only a spent budget is a
+  # real result.
+  failed_when: false
+  until: >-
+    (_reg_etcd_rejoin_voter_wait.rc | default(1)) == 0
+    and (_reg_etcd_rejoin_voter_wait.stdout | default('') | trim) == 'True'
+  retries: "{{ etcd_rejoin_voter_wait_retries }}"
+  delay: "{{ etcd_rejoin_voter_wait_delay }}"
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.command:
+    # Poll through the same peer address the heal used: the local
+    # kubeconfig points at the API virtual address, which a wedged
+    # bootstrap node may have taken down with it, and the surviving
+    # cluster's own address is the one that can answer.
+    cmd: >-
+      {{ etcd_rejoin_kubectl }}
+      --server https://{{ _etcd_rejoin_peer }}:{{ etcd_rejoin_api_port }}
+      get node/{{ _reg_etcd_rejoin_fqdn.stdout | trim }}
+      -o jsonpath='{.status.conditions[?(@.type=="EtcdIsVoter")].status}'
+
+- name: etcd_rejoin | Assert the node was promoted to a voter
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.assert:
+    that:
+      - _reg_etcd_rejoin_voter_wait.rc | default(1) == 0
+      - _reg_etcd_rejoin_voter_wait.stdout | default('') | trim == 'True'
+    fail_msg: >-
+      This node rejoined as a learner but was not promoted to a voter
+      within
+      {{ etcd_rejoin_voter_wait_retries | int
+         * etcd_rejoin_voter_wait_delay | int }}s.
+      The surviving leader's learner management is stalling on the slow
+      shared LVM. Check `journalctl -u rke2-server` on the leader for
+      learner management timeout errors, and re-run; the heal is safe to
+      repeat - it converges on the same surviving cluster.
+    quiet: true
+
+- name: etcd_rejoin | Report the healed node
+  when:
+    - not ansible_check_mode
+    - (_etcd_rejoin_wedged | bool)
+  ansible.builtin.debug:
+    msg: >-
+      Rejoined this node to the etcd cluster through
+      {{ _etcd_rejoin_peer }}: the stale member was removed, the local
+      store wiped, and the node restarted into the join path as a
+      learner
+    verbosity: 0

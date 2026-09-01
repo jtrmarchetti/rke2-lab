@@ -27,6 +27,9 @@
 - name: Phase 6 - the GitOps source, and the cluster attached to it
   ansible.builtin.import_playbook: gitops.yml
 
+- name: Phase 6 - heal any control plane member the service install burst wedged
+  ansible.builtin.import_playbook: etcd_rejoin.yml
+
 - name: Phase 6 - initialise the vault, the object store, and the federation
   ansible.builtin.import_playbook: cluster_init.yml
 

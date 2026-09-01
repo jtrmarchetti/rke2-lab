@@ -24,4 +24,8 @@ __pycache__/
 # Docs — the built site is generated from docs/source, never committed.
 docs/_build/
 
+# Scratch space for machine-driven build chains and their logs.
+# (Workstation /tmp is wiped on host reboot — chains live here instead.)
+.scratch/
+
 agent_plans/

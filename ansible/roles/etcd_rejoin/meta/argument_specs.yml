@@ -1,0 +1,86 @@
+---
+argument_specs:
+  main:
+    short_description: >-
+      Rejoin a wedged control plane node to the surviving etcd cluster
+    description:
+      - >-
+        The etcd wedge class is terminal for the stuck node: the
+        surviving members keep serving, but the wedged node crash-loops
+        and cannot rejoin on its own. A wiped store restarts into
+        new-cluster mode on the bootstrap node, and the stale member
+        blocks the join.
+      - >-
+        The role is self-detecting. It scans the current-boot journal of
+        rke2-server for the wedge signature and is a no-op on a healthy
+        node, so it can run on every control plane node in every build.
+      - >-
+        The heal asks the surviving cluster, through a reachable peer
+        address, to drop the stale member via the managed etcd member
+        removal annotation, wipes the local store, pins the node into
+        the join path, reboots to flush the orphaned containerd shims,
+        and restarts the server. The node returns as a learner; the
+        surviving leader's learner management promotes it once it has
+        caught up. The gate the caller runs after the role re-waits on
+        readiness.
+    options:
+      etcd_rejoin_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      etcd_rejoin_data_dir:
+        type: str
+        default: /data1/rancher/rke2
+        description: RKE2 data directory; the local store to wipe.
+      etcd_rejoin_kubectl:
+        type: str
+        default: ""
+        description: >-
+          kubectl invocation including the kubeconfig, as on this node. The
+          server address is overridden per call, so the call reaches a
+          surviving control plane while this node's own API is down.
+      etcd_rejoin_candidate_addresses:
+        type: list
+        elements: str
+        default: []
+        description: >-
+          Ordered addresses the heal probes on the join port. The API
+          virtual address first, then the peer control plane nodes; the
+          first that answers is used, because a wedged bootstrap node may
+          have taken the virtual address down with it.
+      etcd_rejoin_api_port:
+        type: int
+        default: 6443
+        description: The Kubernetes API port the candidates answer on.
+      etcd_rejoin_supervisor_port:
+        type: int
+        default: 9345
+        description: The RKE2 join port probed and pinned into the config.
+      etcd_rejoin_member_wait_retries:
+        type: int
+        default: 30
+        description: >-
+          How many times the heal waits for the surviving cluster to drop
+          the stale member before wiping the local store.
+      etcd_rejoin_member_wait_delay:
+        type: int
+        default: 10
+        description: Seconds between member-dropped waits.
+      etcd_rejoin_reboot_timeout:
+        type: int
+        default: 600
+        description: >-
+          Seconds to wait for the node to come back after the rejoin
+          reboot.
+      etcd_rejoin_voter_wait_retries:
+        type: int
+        default: 36
+        description: >-
+          How many times the heal polls for the node's EtcdIsVoter
+          condition to read true after the restart. Learner promotion is
+          not time-bounded on the shared LVM, so this is the widest
+          budget in the role.
+      etcd_rejoin_voter_wait_delay:
+        type: int
+        default: 30
+        description: Seconds between voter-promotion polls.
