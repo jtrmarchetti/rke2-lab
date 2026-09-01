@@ -56,6 +56,17 @@ argument_specs:
         type: int
         default: 9345
         description: The RKE2 join port probed and pinned into the config.
+      etcd_rejoin_probe_retries:
+        type: int
+        default: 3
+        description: >-
+          Polls of the bounded surviving-control-plane probe before the
+          heal fails loudly.
+      etcd_rejoin_probe_delay:
+        type: int
+        default: 10
+        description: >-
+          Seconds between surviving-control-plane probe polls.
       etcd_rejoin_member_wait_retries:
         type: int
         default: 30

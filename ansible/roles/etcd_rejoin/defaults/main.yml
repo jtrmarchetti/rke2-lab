@@ -13,6 +13,12 @@ etcd_rejoin_candidate_addresses: []
 etcd_rejoin_api_port: 6443
 etcd_rejoin_supervisor_port: 9345
 
+# Bounded budget for the surviving-control-plane probe: 3 x 10s = 30s of
+# retrying a single whole-candidate-list pass before the heal gives up
+# and fails loudly.
+etcd_rejoin_probe_retries: 3
+etcd_rejoin_probe_delay: 10
+
 # Bounded wait for the surviving cluster to drop the stale member
 # (member removal controller on the leader, RemovePeer with self
 # removal allowed) before the local store is wiped.

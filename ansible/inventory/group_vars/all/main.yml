@@ -57,3 +57,15 @@ inventory_rke2_node_registry_mirrors:
   - upstream: registry.access.redhat.com
     pattern: "^(.*)"
     replacement: rke2/images/$1
+
+# Join concurrency. The kubecp and kubewk join plays each pull the RKE2
+# tarball from repo01's GitLab registry, unpack to the shared PVE LVM,
+# start the RKE2 service, and pull the ~11-node image set (including the
+# hardened CNI plugin set) through the repo01 mirror. A multi-node burst
+# saturates that shared path and is what turns one node's CNI image
+# extract into a partial write that RKE2's .extracted marker then locks in
+# permanently. A 1-wide batch keeps exactly one node in that window at a
+# time; on a warm re-run every role is a no-op, so serial width costs
+# nothing. Overridable in case the topology changes.
+kubecp_serial: 1
+kubewk_serial: 1

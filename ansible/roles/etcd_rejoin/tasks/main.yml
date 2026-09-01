@@ -107,39 +107,40 @@
     daemon_reload: true
 
 - name: etcd_rejoin | Find a surviving control plane to rejoin through
-  # Probe each candidate on the RKE2 join port: the API virtual address
-  # first, then the peer control plane nodes. A wedged bootstrap node has
-  # taken the virtual address down with it, so a peer must be probeable.
-  # A transient refusal on every address for one pass is not a
-  # cluster-down, so the whole pass retries a bounded number of times.
+  # One bounded shell pass over every candidate join address: the API
+  # virtual address first, then the peer control plane nodes. A wedged
+  # bootstrap node has taken the virtual address down with it, so a
+  # peer must be probeable. A transient refusal of every address for
+  # one pass is not a cluster-down, so the whole pass retries a
+  # bounded number of times. The probe prints the first reachable
+  # address; it has no pipes (no pipefail: the remote default shell is
+  # /bin/sh) but /dev/tcp needs bash. A spent budget still fails
+  # loudly, as the looped wait_for version did.
   register: _reg_etcd_rejoin_probe
   changed_when: false
-  retries: 3
-  delay: 10
-  until: >-
-    (_reg_etcd_rejoin_probe.results
-       | select('succeeded') | list | length) > 0
+  until: (_reg_etcd_rejoin_probe.rc | default(1)) == 0
+  retries: "{{ etcd_rejoin_probe_retries }}"
+  delay: "{{ etcd_rejoin_probe_delay }}"
   when:
     - not ansible_check_mode
     - (_etcd_rejoin_wedged | bool)
-  loop: "{{ etcd_rejoin_candidate_addresses }}"
-  loop_control:
-    label: "{{ item }}"
-  ansible.builtin.wait_for:
-    host: "{{ item }}"
-    port: "{{ etcd_rejoin_supervisor_port }}"
-    state: started
-    timeout: 10
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      for a in {{ etcd_rejoin_candidate_addresses | join(' ') }}; do
+        host="$a"; port={{ etcd_rejoin_supervisor_port }}
+        if timeout 5 bash -c "exec 3<>/dev/tcp/$host/$port"; then
+          echo "$a"; exit 0
+        fi
+      done
+      exit 1
 
 - name: etcd_rejoin | Record the reachable candidate address
   when:
     - not ansible_check_mode
     - (_etcd_rejoin_wedged | bool)
   ansible.builtin.set_fact:
-    _etcd_rejoin_peer: >-
-      {{ _reg_etcd_rejoin_probe.results
-         | select('succeeded')
-         | map(attribute='item') | first }}
+    _etcd_rejoin_peer: "{{ _reg_etcd_rejoin_probe.stdout | default('') | trim }}"
 
 - name: etcd_rejoin | Record the surviving control plane's join URL
   # One URL reused by the pin tasks below: the address the heal reached,

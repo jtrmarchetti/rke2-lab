@@ -11,7 +11,13 @@
   gather_facts: true
   become: true
 
-  serial: 100%
+  # One worker in the heavy fetch/unpack/image-pull window at a time. A
+  # 3-way parallel join saturates repo01's GitLab registry and the shared
+  # PVE LVM, which is what turns the CNI image extract on one node into a
+  # partial write (kubewk02 portmap FIPS abort) that RKE2's .extracted
+  # marker then locks in. serial:1 keeps the window single-node; the knob
+  # stays overridable.
+  serial: "{{ kubewk_serial | default(1) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role
@@ -189,6 +195,11 @@
               -l {{ _kubewk_worker_label }} --no-headers
 
         - name: kubewk | Wait for every registered worker to report Ready
+          # 600s covers the cilium CNI-installer init container's 600s
+          # startup-probe window: a worker whose CNI set is still
+          # converging must not be read NotReady by the NoExecute-taint
+          # guard below. The agent role already waits 900s per node; this
+          # re-checks the whole set from one control plane host.
           changed_when: false
           failed_when: false
           register: _reg_kubewk_ready
@@ -197,7 +208,7 @@
           ansible.builtin.command:
             cmd: >-
               {{ _kubewk_kubectl }} wait --for=condition=Ready
-              node -l {{ _kubewk_worker_label }} --timeout=300s
+              node -l {{ _kubewk_worker_label }} --timeout=600s
 
         - name: kubewk | Assert every worker is Ready before tainting anything
           tags:

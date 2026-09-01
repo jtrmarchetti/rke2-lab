@@ -62,7 +62,12 @@
   gather_facts: true
   become: true
 
-  serial: "{{ kubecp_serial | default([1, 2]) }}"
+  # One control plane node in the heavy fetch/unpack/image-pull/etcd-join
+  # window at a time. A 2-wide join burst saturates repo01's GitLab registry
+  # and the shared PVE LVM, which is what turns a CNI image extract into a
+  # partial write that RKE2's .extracted marker then locks in permanently.
+  # serial:1 keeps the window single-node; the knob stays overridable.
+  serial: "{{ kubecp_serial | default(1) }}"
   force_handlers: true
   tasks:
 
