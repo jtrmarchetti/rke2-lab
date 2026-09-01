@@ -1,6 +1,7 @@
 ---
 
 - name: sysaccount | Look for the existing bind account
+  check_mode: false
   changed_when: false
   delegate_to: "{{ keycloak_ldap_ipa_host }}"
   no_log: "{{ keycloak_ldap_no_log | bool }}"
@@ -14,7 +15,9 @@
     stdin: "{{ keycloak_ldap_dir_manager_password }}"
 
 - name: sysaccount | Create the bind account
-  when: "'1' not in _reg_keycloak_ldap_existing['stdout']"
+  when:
+    - "'1' not in _reg_keycloak_ldap_existing['stdout']"
+    - not ansible_check_mode
   changed_when: true
   delegate_to: "{{ keycloak_ldap_ipa_host }}"
   no_log: "{{ keycloak_ldap_no_log | bool }}"
@@ -38,6 +41,7 @@
       {{ keycloak_ldap_bind_password }}
 
 - name: sysaccount | Prove the account can bind and read users
+  check_mode: false
   changed_when: false
   delegate_to: "{{ keycloak_ldap_ipa_host }}"
   no_log: "{{ keycloak_ldap_no_log | bool }}"
@@ -51,6 +55,11 @@
     stdin: "{{ keycloak_ldap_bind_password }}"
 
 - name: sysaccount | Assert the bind account can read the user tree
+  # The probe above proves it on a live run; in check mode the
+  # create was skipped, so an account that does not exist yet
+  # would fatal this assert on an empty probe — a check-only
+  # false alarm.
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - (_reg_keycloak_ldap_probe['stdout'] | trim | int) > 0

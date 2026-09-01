@@ -39,6 +39,7 @@
   when: _reg_openbao_init_pod_ready.rc != 0
 
 - name: main | Read the vault's current state
+  when: not ansible_check_mode
   changed_when: false
 
   failed_when: _reg_openbao_init_status['rc'] not in [0, 1, 2]
@@ -54,6 +55,7 @@
       {{ openbao_init_pod }} -- bao status -format=json
 
 - name: main | Parse the read result (an empty dict when the pod was unreachable)
+  when: not ansible_check_mode
   ansible.builtin.set_fact:
     _var_openbao_init_status: >-
       {{ _reg_openbao_init_status['stdout'] | default('{}', true) | from_json }}
@@ -65,9 +67,12 @@
       the pod is probably not up yet. On a cold build the OpenBao stack is
       installed by the Flux cascade, which may still be settling. Re-run
       this playbook once the cluster workloads are Ready.
-  when: (_var_openbao_init_status | length) == 0
+  when:
+    - not ansible_check_mode
+    - (_var_openbao_init_status | default({}, true) | length) == 0
 
 - name: main | Report the vault's state
+  when: not ansible_check_mode
   ansible.builtin.debug:
     msg: >-
       {{ openbao_init_pod }}: initialised =
@@ -76,7 +81,9 @@
     verbosity: 0
 
 - name: main | Initialise the vault
-  when: not (_var_openbao_init_status['initialized'] | default(false) | bool)
+  when:
+    - not (_var_openbao_init_status['initialized'] | default(false) | bool)
+    - not ansible_check_mode
   block:
     - name: main | Run the one-time initialisation
       changed_when: true
@@ -112,9 +119,11 @@
       ansible.builtin.command:
         cmd: >-
           {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
-          {{ openbao_init_pod }} -- bao operator unseal {{ _item_openbao_init_unseal_key }}
+          {{ openbao_init_pod }} -- bao operator unseal
+          {{ _item_openbao_init_unseal_key }}
 
 - name: main | Confirm the vault is initialised and unsealed
+  when: not ansible_check_mode
   changed_when: false
   failed_when: _reg_openbao_init_final['rc'] not in [0, 2]
   register: _reg_openbao_init_final
@@ -130,6 +139,7 @@
       {{ openbao_init_pod }} -- bao status -format=json
 
 - name: main | Assert the vault is open
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - (_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)

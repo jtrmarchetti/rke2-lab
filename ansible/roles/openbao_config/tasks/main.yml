@@ -13,6 +13,9 @@
     quiet: true
 
 - name: main | Read the enabled secrets engines
+  # A GET is read-only: let it run in check mode too, or the writes
+  # below that gate on its ['json'] fatal on a skipped register.
+  check_mode: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_engines
   ansible.builtin.uri:
@@ -38,6 +41,7 @@
     status_code: [200, 204]
 
 - name: main | Read the enabled authentication methods
+  check_mode: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_auth
   ansible.builtin.uri:
@@ -59,6 +63,7 @@
     status_code: [200, 204]
 
 - name: main | Read the cluster's API server certificate authority
+  check_mode: false
   changed_when: false
   register: _reg_openbao_config_cluster_ca
   ansible.builtin.command:
@@ -70,6 +75,7 @@
   changed_when: false
 
   failed_when: false
+  check_mode: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_auth
   ansible.builtin.uri:
@@ -103,6 +109,7 @@
   changed_when: false
 
   failed_when: false
+  check_mode: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_policy
   ansible.builtin.uri:
@@ -136,6 +143,7 @@
   changed_when: false
 
   failed_when: false
+  check_mode: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_binding
   ansible.builtin.uri:
@@ -174,6 +182,11 @@
     status_code: [200, 204]
 
 - name: main | Confirm the role reads back
+  # Tolerates a 404 (role not yet created on a cold cluster) so a
+  # cold --check does not fatal; the assert below is skipped in
+  # check mode anyway and is the real proof in a live run.
+  check_mode: false
+  failed_when: false
   no_log: "{{ openbao_config_no_log | bool }}"
   register: _reg_openbao_config_role
   ansible.builtin.uri:
@@ -182,8 +195,14 @@
       openbao_config_role_name }}
     headers: "{{ _var_openbao_config_headers }}"
     ca_path: "{{ openbao_config_ca_file }}"
+    status_code: [200, 404]
 
 - name: main | Assert the role is bound as narrowly as intended
+  # Skipped in check mode: if the bind POST was skipped (cold or
+  # drifted), the read-back returns no role and this assert would
+  # fatal on the undefined `json.data` — a check-mode-only false
+  # alarm. In a real run it is the final proof the bind landed.
+  when: not ansible_check_mode
   vars:
     _openbao_config_bound: "{{ _reg_openbao_config_role['json']['data'] }}"
   ansible.builtin.assert:

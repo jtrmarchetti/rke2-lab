@@ -18,7 +18,9 @@
       ipactl restart --ignore-service-failures
 
 - name: named_options | Wait for the domain to answer again
-  when: _reg_freeipa_server_named_options is changed
+  when:
+    - _reg_freeipa_server_named_options is changed
+    - not ansible_check_mode
   changed_when: false
   register: _reg_freeipa_server_named_ready
   until: (_reg_freeipa_server_named_ready['stdout'] | trim | length) > 0

@@ -7,7 +7,8 @@
   ansible.builtin.command:
     cmd: >-
       {{ flux_unstall_kubectl }} get helmrelease -n {{ flux_unstall_namespace }}
-      -o jsonpath="{range .items[*]}{.metadata.name} {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
+      -o jsonpath="{range .items[*]}{.metadata.name}
+      {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
 
 - name: flux_unstall | Reduce the listing to the stalled release names
   ansible.builtin.set_fact:
@@ -19,9 +20,10 @@
          | list }}
 
 - name: flux_unstall | Suspend the stalled releases to reset the retry budget
-  when: >-
-    (flux_unstall_enabled | bool)
-    and (_flux_unstall_stalled | length > 0)
+  when:
+    - flux_unstall_enabled | bool
+    - _flux_unstall_stalled | length > 0
+    - not ansible_check_mode
   changed_when: true
   loop: "{{ _flux_unstall_stalled }}"
   loop_control:
@@ -36,9 +38,10 @@
 # reconciliation result, so the blind sleep was pure static wait.
 
 - name: flux_unstall | Resume the releases and wait for the reconciliation
-  when: >-
-    (flux_unstall_enabled | bool)
-    and (_flux_unstall_stalled | length > 0)
+  when:
+    - flux_unstall_enabled | bool
+    - _flux_unstall_stalled | length > 0
+    - not ansible_check_mode
   changed_when: true
   loop: "{{ _flux_unstall_stalled }}"
   loop_control:
@@ -50,9 +53,10 @@
       --timeout {{ flux_unstall_resume_timeout }}
 
 - name: flux_unstall | Confirm no release stays stalled after the retry
-  when: >-
-    (flux_unstall_enabled | bool)
-    and (_flux_unstall_stalled | length > 0)
+  when:
+    - flux_unstall_enabled | bool
+    - _flux_unstall_stalled | length > 0
+    - not ansible_check_mode
   changed_when: false
   register: _reg_flux_unstall_confirm
   until: >-
@@ -66,7 +70,8 @@
   ansible.builtin.command:
     cmd: >-
       {{ flux_unstall_kubectl }} get helmrelease -n {{ flux_unstall_namespace }}
-      -o jsonpath="{range .items[*]}{.metadata.name} {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
+      -o jsonpath="{range .items[*]}{.metadata.name}
+      {.status.conditions[?(@.type==\"Stalled\")].status}{\"\n\"}{end}"
 
 - name: flux_unstall | Report the releases that were retried
   when: >-
