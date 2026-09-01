@@ -1,0 +1,86 @@
+---
+
+- name: flux_ready | Survey the HelmRelease set and reset the stalled ones
+  # One bounded pass per poll: pull the whole HelmRelease set as JSON,
+  # reset each Stalled=True release with the live-verified suspend +
+  # resume (the only way to clear the retry budget the helm-controller
+  # burned, MissingRollbackTarget included), then exit with the count
+  # of releases that are not yet Ready. The until re-polls until that
+  # count reaches zero, so the build only completes when every release
+  # reports Ready=True and the verify phase never races Flux
+  # convergence. A spent budget fails the build loudly; a healthy
+  # cluster passes on the first poll with no change. The survey is a
+  # single remote pass (no loop over register .results, no pipes into
+  # the until predicate, and no pipefail under the default /bin/sh -
+  # bash is requested explicitly for the herestring), so it is free of
+  # the G2/G3 defect classes the earlier looped-wait_for probes hit.
+  when:
+    - (flux_ready_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_flux_ready_survey
+  changed_when: >-
+    ('RESET=-' not in (_reg_flux_ready_survey.stdout | default('')))
+  until: (_reg_flux_ready_survey.rc | default(1)) == 0
+  retries: "{{ flux_ready_retries }}"
+  delay: "{{ flux_ready_delay }}"
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -u
+      # Arrays (not quoted-string vars): a "kubectl --kubeconfig ..."
+      # string in one var would become a single command name when
+      # expanded as "$K" and rc=127; the array re-splits at the spaces.
+      K=( {{ flux_ready_kubectl }} )
+      F=( {{ flux_ready_flux }} )
+      RT="{{ flux_ready_resume_timeout }}"
+      # The array must sit in the command position inside $( ), so the
+      # first element is the command and the rest are its arguments.
+      # A bare JSON="${K[@]}" get ... would be an assignment prefix.
+      if ! JSON=$("${K[@]}" get helmrelease -A -o json 2>/dev/null); then
+        echo "SURVEY=FAIL NOTREADY=1 STALLED=0 RESET=-"
+        exit 1
+      fi
+      # "-" sentinel for an absent condition: an empty field would
+      # collapse the columns and shift the read -r fields right (a
+      # release with only a Stalled condition read as Ready=True).
+      LINES=$(printf '%s' "$JSON" | python3 -c '
+      import sys, json
+      for it in json.load(sys.stdin).get("items", []):
+          m = it["metadata"]
+          ready = stalled = "-"
+          for c in it.get("status", {}).get("conditions", []):
+              if c.get("type") == "Ready":
+                  ready = c.get("status", "-")
+              if c.get("type") == "Stalled":
+                  stalled = c.get("status", "-")
+          print(m["namespace"], m["name"], ready, stalled)
+      ')
+      NOTREADY=0
+      STALLED=0
+      RESET="-"
+      while read -r ns nm ready stalled; do
+        [ -z "${nm:-}" ] && continue
+        [ "${ready:-}" = "True" ] || NOTREADY=$((NOTREADY+1))
+        if [ "${stalled:-}" = "True" ]; then
+          "${F[@]}" suspend helmrelease "$nm" -n "$ns" > /dev/null 2>&1
+          "${F[@]}" resume helmrelease "$nm" -n "$ns" \
+            --timeout "$RT" > /dev/null 2>&1
+          if [ "$RESET" = "-" ]; then
+            RESET="$ns/$nm"
+          else
+            RESET="$RESET $ns/$nm"
+          fi
+          STALLED=$((STALLED+1))
+        fi
+      done <<< "$LINES"
+      echo "SURVEY=OK NOTREADY=$NOTREADY STALLED=$STALLED RESET=$RESET"
+      [ "$NOTREADY" -eq 0 ] && exit 0 || exit 1
+
+- name: flux_ready | Report the gated release set
+  when:
+    - (flux_ready_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ _reg_flux_ready_survey.stdout | default('') | trim }}
+    verbosity: 0

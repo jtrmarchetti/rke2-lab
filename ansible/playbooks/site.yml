@@ -41,3 +41,13 @@
     # This pass seals that one entry into the working clone the first
     # pass left behind and skips the render and the other secrets.
     gitops_source_unseal_keys_only: true
+
+- name: Phase 6 - gate the build on every HelmRelease reporting Ready
+  # Runs last: the observability releases read the sealed keys the final
+  # gitops pass pushed, so this is the only point in the path where a
+  # fully Ready set is achievable. The gate absorbs the alloy/HelmRelease
+  # stale-stall class (Flux burned its retry budget on a missing
+  # prerequisite, MissingRollbackTarget included) with the live-verified
+  # suspend + resume reset, so no manual flux_unstall run is ever
+  # required and the verify phase never races Flux convergence.
+  ansible.builtin.import_playbook: flux_ready.yml

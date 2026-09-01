@@ -1,0 +1,45 @@
+---
+argument_specs:
+  main:
+    short_description: >-
+      Build-path gate: wait for every HelmRelease in the cluster to report
+      Ready=True
+    description:
+      - Polls the cluster-wide HelmRelease set until every release reports
+        Ready=True; a release wedged into Stalled=True is reset in place
+        with a suspend + resume (the only live-verified retry-budget reset),
+        so no manual flux_unstall run is required.
+      - Runs last in the build path, after the final gitops seal pass - the
+        observability releases read the sealed keys that pass pushes, so the
+        gate is the only place in the path where a Ready set is achievable.
+      - A spent poll budget fails the build loudly; a healthy cluster
+        passes on the first poll, so the gate costs nothing on warm re-runs.
+    options:
+      flux_ready_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      flux_ready_retries:
+        type: int
+        default: 100
+        description:
+          - Polls of the bounded Ready survey. Multiplied by the delay to
+            form the gate budget (100 x 30s = 50m, which must exceed the
+            worst observed cold-build convergence window).
+      flux_ready_delay:
+        type: int
+        default: 30
+        description: Seconds between Ready polls.
+      flux_ready_resume_timeout:
+        type: str
+        default: 90s
+        description:
+          - Per-release bound on the resume inside the gate's reset step;
+            a resume that times out leaves the reconciliation running and
+            the next poll picks it up.
+      flux_ready_kubectl:
+        type: str
+        description: kubectl invocation, including the kubeconfig.
+      flux_ready_flux:
+        type: str
+        description: flux CLI invocation, including the kubeconfig.

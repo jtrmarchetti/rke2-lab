@@ -66,8 +66,13 @@ own. The split:
   ownership transfer (`apps` → `observability`) is expected; S3 data in Garage
   and longhorn PVCs persist, so it is non-destructive for durable data.
 
-`flux_unstall` remains as the out-of-band recovery path for the rare terminal
-`Stalled` HelmRelease that a health-check gate cannot express.
+`flux_ready` is the in-path counterpart (G4): the tail of `site.yml` surveys
+the HelmRelease set after the last gitops pass and resets any `Stalled`
+release with the same `flux suspend`/`resume` repair, so the stale
+`MissingRollbackTarget` stall class no longer needs a manual run mid-build.
+`flux_unstall` remains as the out-of-band recovery path for a terminal
+`Stalled` HelmRelease surfaced outside the build (e.g. discovered days later),
+which a build gate cannot see.
 
 ## Ownership boundary, role by role
 
@@ -84,6 +89,7 @@ own. The split:
 | `helm_cli`, `kube_cli_controller`, `kube_cli_node` | Binary installs on hosts | Tooling | No |
 | `rke2_publish` | GitLab registry/chart publishing | Artifact publishing | No |
 | `flux_unstall` | `flux suspend/resume helmrelease` (repair only) | Out-of-band recovery | No |
+| `flux_ready` | No objects written; surveys HelmRelease `status` and runs `flux suspend/resume` on `Stalled` ones only (repair only, same class as `flux_unstall`) | In-path build gate — tail of `site.yml` | No |
 | `kubewk.yml` | Node label + `CriticalAddonsOnly` taint | One-time node bootstrap | No |
 | `validate_phase5.yml` | Ephemeral test namespace (create/delete) | Test scaffolding | No |
 

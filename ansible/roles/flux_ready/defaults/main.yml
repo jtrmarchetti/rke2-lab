@@ -1,0 +1,24 @@
+---
+flux_ready_enabled: true
+
+# 100 x 30s = 50-minute budget. The observed worst cold build took about
+# 45 minutes from the final gitops seal pass to a fully Ready release set
+# (settle window plus the verify retry, g3_cold 2026-09-01), so the budget
+# must exceed that or the gate re-introduces the verify flake it exists to
+# kill. On a healthy cluster the first poll already passes, so the budget
+# only ever costs time when something is actually wrong.
+flux_ready_retries: 100
+flux_ready_delay: 30
+
+# Per-release wait on the resume inside the gate's reset step. A resume that
+# runs out its wait leaves the reconciliation running in the background and
+# the next poll picks it up, so this only bounds one pass, not the gate.
+flux_ready_resume_timeout: 90s
+
+flux_ready_kubectl: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+flux_ready_flux: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config

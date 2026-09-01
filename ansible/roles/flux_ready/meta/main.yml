@@ -1,0 +1,23 @@
+---
+galaxy_info:
+  role_name: flux_ready
+  author: rke2lab
+  description: >-
+    Build-path gate: the build only completes when every HelmRelease in the
+    cluster reports Ready=True. A release wedged into Stalled=True after a
+    cold build (Flux burned its retry budget on a missing prerequisite,
+    MissingRollbackTarget included) is reset in place with the live-verified
+    suspend + resume, then re-polled, so no manual flux_unstall run is ever
+    required and the verify phase never races Flux convergence.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - flux
+    - helm
+    - kubernetes
+
+dependencies: []
