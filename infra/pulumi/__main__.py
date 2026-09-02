@@ -4,6 +4,7 @@ import sys
 import pulumi
 import pulumi.runtime
 import pulumi_proxmoxve as proxmox
+from pulumi_proxmoxve.file_legacy import FileLegacySourceRawArgs
 
 from modules.pve_cleanup import CleanupSettings, clean_orphans
 from modules.provider import ProviderSettings, build_provider
@@ -89,6 +90,40 @@ selected_vm_keys = deployment_cfg.get_object("selectedVmKeys")
 boot_image_file_id = None
 depends_on_resources: list[pulumi.Resource] = []
 
+# G7: cold-boot sshd guarantee. PVE's REST API refuses snippet upload on
+# PVE 9.x, so this goes through the provider's SSH/SFTP path. On every boot
+# (cold, warm, reboot-mid-build) the VM's own cloud-init runcmd enables and
+# starts sshd within ~3 minutes - no Ansible, agent, or recovery step.
+SNIPPET_FILE_NAME = "sshd-selfheal.cloud-config.yaml"
+SNIPPET_CONTENT = """\
+#cloud-config
+# Bounded sshd self-heal: cloud-init runcmd runs on EVERY boot. If sshd is
+# not already active within ~3 minutes (36 x 5s), it is enabled and started.
+# This is the VM-layer prevention for the g1_cold2 flake where a slow-IO
+# first boot left sshd down and the cluster join play stalled 50+ minutes.
+runcmd:
+  - >
+    for i in $(seq 1 36); do
+      if systemctl is-active --quiet ssh; then break; fi
+      systemctl enable --quiet ssh
+      systemctl start ssh
+      sleep 5
+    done
+"""
+sshd_snippet = proxmox.file_legacy.FileLegacy(
+    resource_name="sshd-selfheal-snippet",
+    content_type="snippets",
+    datastore_id=image_datastore_id,
+    node_name=common_settings.template_node_name,
+    source_raw=FileLegacySourceRawArgs(
+        data=SNIPPET_CONTENT,
+        file_name=SNIPPET_FILE_NAME,
+    ),
+    opts=pulumi.ResourceOptions(provider=provider),
+)
+depends_on_resources.append(sshd_snippet)
+vendor_data_file_id = sshd_snippet.id
+
 if manage_internal_bridge:
     internal_bridge_ports = deployment_cfg.get_object("internalBridgePorts")
     if internal_bridge_ports is None:
@@ -171,6 +206,7 @@ for spec in deployment_set:
         common=common_settings,
         provider=provider,
         boot_image_file_id=boot_image_file_id,
+        vendor_data_file_id=vendor_data_file_id,
         depends_on=depends_on_resources,
     )
     created[spec.key] = {

@@ -1,0 +1,31 @@
+---
+
+# Strike window 2, gate half: the observability install burst lands on a
+# control plane that has not finished settling into a 3/3 live quorum, and
+# that is the exact window that wedges the etcd primary's commit path. The
+# etcd_rejoin play above heals a node the burst already wedged (out-of-band
+# recovery, kept on the path for now); this gate is the belt-and-suspenders
+# half that stops the build from completing on an unproven quorum and holds
+# the read-burst tier off the control plane for the duration of the census.
+#
+# The gate runs on the controller, which holds the cluster-wide kubectl and
+# flux CLIs the census and release phases use. On a warm re-run every phase
+# is a bounded no-op, so the gate costs nothing when the cluster is already
+# settled.
+
+- name: Hold the etcd read-burst tier until a 3/3 live quorum is provable
+  hosts: controller
+  gather_facts: true
+  become: false
+  tasks:
+
+    - name: readburst_gate | Hold the tier, prove the quorum, release it
+      tags:
+        - readburst_gate
+      vars:
+        readburst_gate_cp_count: "{{ groups['kubecp'] | length }}"
+      ansible.builtin.include_role:
+        name: readburst_gate
+        apply:
+          tags:
+            - readburst_gate

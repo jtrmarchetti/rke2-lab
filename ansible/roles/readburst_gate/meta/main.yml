@@ -1,0 +1,27 @@
+---
+galaxy_info:
+  role_name: readburst_gate
+  author: rke2lab
+  description: >-
+    Holds the etcd read-burst tier (the observability releases whose install
+    and query load has wedged the etcd primary's commit path on every cold
+    build) off the control plane until a transactional quorum census proves
+    every control plane node is a live voter and a quorum write succeeds.
+    Only then does it release the tier and wait for those releases to
+    converge. A warm re-run is a no-op because the tier is already released
+    and Ready. The gate exists so a freshly healed cluster is never hit by
+    the read burst before it has finished settling into a 3/3 live quorum,
+    which is the exact window that wedges the etcd primary.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - flux
+    - helm
+    - kubernetes
+    - etcd
+
+dependencies: []

@@ -1,0 +1,73 @@
+---
+argument_specs:
+  main:
+    short_description: >-
+      Hold the etcd read-burst tier off the control plane until a 3/3 quorum
+      is provable
+    description:
+      - The observability read-burst tier (alloy, kube-prometheus-stack,
+        loki) generates the etcd read load that has wedged the etcd
+        primary's commit path on every recorded cold build. The wedge only
+        strikes once that load lands on a cluster that has not finished
+        settling into a 3/3 live quorum.
+      - This gate holds the tier off the control plane until a transactional
+        quorum census proves every control plane node is a live voter and a
+        quorum write succeeds. Only then does it release the tier and wait
+        for those releases to converge.
+      - On a warm re-run the tier is already released and Ready, so the hold
+        and release phases are no-ops and the gate costs nothing.
+    options:
+      readburst_gate_enabled:
+        type: bool
+        default: true
+        description: Whether the role does anything.
+      readburst_gate_tier:
+        type: list
+        elements: str
+        default: []
+        description: >-
+          The namespace/name pairs of the read-burst tier held off the
+          control plane until the quorum census passes.
+      readburst_gate_cp_count:
+        type: int
+        default: 3
+        description: >-
+          The control plane node count; the quorum census requires every one
+          of them to be a live voter.
+      readburst_gate_hold_retries:
+        type: int
+        default: 20
+        description: Polls of the hold phase before the gate fails.
+      readburst_gate_hold_delay:
+        type: int
+        default: 15
+        description: Seconds between hold polls.
+      readburst_gate_quorum_retries:
+        type: int
+        default: 40
+        description: Polls of the transactional quorum census before it fails.
+      readburst_gate_quorum_delay:
+        type: int
+        default: 15
+        description: Seconds between quorum census polls.
+      readburst_gate_release_retries:
+        type: int
+        default: 100
+        description: Polls of the release phase before the gate fails.
+      readburst_gate_release_delay:
+        type: int
+        default: 30
+        description: Seconds between release polls.
+      readburst_gate_resume_timeout:
+        type: str
+        default: 90s
+        description: >-
+          Per-release bound on the resume inside the release phase's reset
+          step; a resume that times out leaves the reconciliation running
+          and the next poll picks it up.
+      readburst_gate_kubectl:
+        type: str
+        description: kubectl invocation, including the kubeconfig.
+      readburst_gate_flux:
+        type: str
+        description: flux CLI invocation, including the kubeconfig.

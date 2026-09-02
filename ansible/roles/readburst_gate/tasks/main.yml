@@ -1,0 +1,196 @@
+---
+# Hold the etcd read-burst tier off the control plane until a 3/3 live
+# quorum is provable, then release it and verify convergence. This is the
+# belt-and-suspenders half of G8: it does not pre-empt the observability
+# install burst (that is the creation-gate half), it guarantees the build
+# never completes on a cluster whose quorum is unproven and holds the
+# tier's steady-state read load off etcd for the duration of the census so
+# that load cannot keep the cluster from settling.
+#
+# Phase 1 holds the tier (suspended). Phase 2 proves a transactional 3/3
+# quorum (every control plane node a live voter, the rke2-etcd lease held
+# by a live voter, and a quorum write succeeds) - a spent budget fails the
+# build loudly, with no recovery of any kind in the path. Phase 3 releases
+# the tier onto the proven-quorum cluster and waits for those releases to
+# converge, resetting the stalled class in place with the live-verified
+# suspend + resume. On a warm re-run every phase is a bounded no-op: the
+# hold is idempotent, the census passes on the first poll, and the tier
+# re-converges to Ready almost immediately.
+
+- name: readburst_gate | Hold the read-burst tier off the control plane
+  # One bounded pass over the tier: any release that exists is suspended so
+  # its steady-state etcd read load stops landing on the control plane for
+  # the duration of the census. A release not yet created (absent) is
+  # recorded and left to the kustomize-controller; the census below is the
+  # thing that must pass regardless. Suspend is idempotent, so this is safe
+  # on a warm cluster. No pipes, no looped probes.
+  when:
+    - (readburst_gate_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_readburst_hold
+  changed_when: "'HOLD=NONE' not in (_reg_readburst_hold.stdout | default(''))"
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      K=( {{ readburst_gate_kubectl }} )
+      F=( {{ readburst_gate_flux }} )
+      # The tier tokens are simple namespace/name pairs with no spaces, so
+      # join(' ') (the etcd_rejoin candidate-address idiom) renders them
+      # straight into a shell array.
+      TIER=( {{ readburst_gate_tier | join(' ') }} )
+      SUSPENDED=""
+      for tn in "${TIER[@]}"; do
+        ns=${tn%%/*}; nm=${tn##*/}
+        if "${K[@]}" get helmrelease "$nm" -n "$ns" >/dev/null 2>&1; then
+          "${F[@]}" suspend helmrelease "$nm" -n "$ns" >/dev/null 2>&1
+          SUSPENDED="$SUSPENDED $nm"
+        fi
+      done
+      if [ -z "$SUSPENDED" ]; then
+        echo "HOLD=NONE"
+      else
+        echo "HOLD=SUSPENDED:$SUSPENDED"
+      fi
+
+- name: readburst_gate | Prove a live 3/3 control plane quorum
+  # The transactional census. A wedged member still lists itself while the
+  # healthy quorum cannot commit, so a plain member listing proves nothing:
+  # a real write is the only signal the cluster is usable. Every control
+  # plane node must be Ready with the etcd voter condition, the rke2-etcd
+  # lease must be held by a live voter, and a quorum write + delete must
+  # succeed. A spent budget fails the build loudly - there is no recovery
+  # of any kind in the path (G8), so an unsettled cluster aborts the build
+  # instead of stalling into the verify phase. The tier is still held
+  # (suspended) for the whole window, so its read load cannot keep the
+  # cluster from settling.
+  when:
+    - (readburst_gate_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_readburst_quorum
+  changed_when: false
+  until: (_reg_readburst_quorum.rc | default(1)) == 0
+  retries: "{{ readburst_gate_quorum_retries }}"
+  delay: "{{ readburst_gate_quorum_delay }}"
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -euo pipefail
+      K=( {{ readburst_gate_kubectl }} )
+      CP="{{ readburst_gate_cp_count | int }}"
+      # Voter census: name + Ready + EtcdIsVoter, one per node.
+      JP='{range .items[*]}{.metadata.name} '
+      JP="${JP}{.status.conditions[?(@.type==\"Ready\")].status} "
+      JP="${JP}{.status.conditions[?(@.type==\"EtcdIsVoter\")].status}{\"\n\"}{end}"
+      census=$("${K[@]}" get nodes -o jsonpath="$JP")
+      voters=$(printf '%s\n' "$census" | grep -c ' True True$' || true)
+      if [ "$voters" -ne "$CP" ]; then
+        echo "CENSUS=FAIL voters=$voters/CP=$CP"
+        exit 1
+      fi
+      # The lease holder must itself be a live voter: an orphaned holder
+      # that is not Ready or a voter is a stale leader the quorum cannot
+      # commit through.
+      holder=$("${K[@]}" -n kube-system get lease rke2-etcd \
+        -o jsonpath='{.spec.holderIdentity}' 2>/dev/null || true)
+      if [ -z "${holder:-}" ] || \
+         ! printf '%s\n' "$census" | grep -q "^${holder} True True$"; then
+        echo "CENSUS=FAIL holder=${holder:-<none>} not a live voter"
+        exit 1
+      fi
+      # Quorum write: only a real commit proves the cluster is usable.
+      "${K[@]}" create configmap readburst-quorum-probe -n kube-system \
+        --from-literal probe=readburst --dry-run=client -o yaml | "${K[@]}" apply -f -
+      "${K[@]}" delete configmap readburst-quorum-probe -n kube-system --ignore-not-found
+      echo "CENSUS=OK voters=$voters holder=$holder"
+
+- name: readburst_gate | Release the tier and verify it converges
+  # Resume the held tier onto the proven-quorum cluster and wait for those
+  # releases to report Ready. A release wedged into Stalled=True (Flux
+  # burned its retry budget on a missing prerequisite,
+  # MissingRollbackTarget included) is reset in place with the live-
+  # verified suspend + resume, the same reset flux_ready uses, so no
+  # manual flux_unstall run is required. Only the tier's releases are
+  # gated here; the rest of the set is confirmed Ready by flux_ready after
+  # this gate.
+  when:
+    - (readburst_gate_enabled | bool)
+    - not ansible_check_mode
+  register: _reg_readburst_release
+  changed_when: >-
+    ('RESET=-' not in (_reg_readburst_release.stdout | default('')))
+  until: (_reg_readburst_release.rc | default(1)) == 0
+  retries: "{{ readburst_gate_release_retries }}"
+  delay: "{{ readburst_gate_release_delay }}"
+  ansible.builtin.shell:
+    executable: /bin/bash
+    cmd: |
+      set -uo pipefail
+      K=( {{ readburst_gate_kubectl }} )
+      F=( {{ readburst_gate_flux }} )
+      RT="{{ readburst_gate_resume_timeout }}"
+      # Resume the whole tier first (a resume is a no-op on an already
+      # released release), then survey. The survey is a single remote pass:
+      # no loop over register .results, no pipes into the until predicate,
+      # no pipefail under the default /bin/sh - bash is requested for the
+      # herestring.
+      for i in $(seq 0 2); do
+        case $i in
+          0) ns=observability; nm=alloy ;;
+          1) ns=observability; nm=kube-prometheus-stack ;;
+          2) ns=observability; nm=loki ;;
+        esac
+        "${F[@]}" resume helmrelease "$nm" -n "$ns" >/dev/null 2>&1
+      done
+      if ! JSON=$("${K[@]}" get helmreleases -A -o json 2>/dev/null); then
+        echo "RELEASE=FAIL NOTREADY=1 STALLED=0 RESET=-"
+        exit 1
+      fi
+      LINES=$(printf '%s' "$JSON" | python3 -c '
+      import sys, json
+      tier = {"observability/alloy", "observability/kube-prometheus-stack",
+              "observability/loki"}
+      for it in json.load(sys.stdin).get("items", []):
+          m = it["metadata"]
+          key = m["namespace"] + "/" + m["name"]
+          if key not in tier:
+              continue
+          ready = stalled = "-"
+          for c in it.get("status", {}).get("conditions", []):
+              if c.get("type") == "Ready":
+                  ready = c.get("status", "-")
+              if c.get("type") == "Stalled":
+                  stalled = c.get("status", "-")
+          print(m["namespace"], m["name"], ready, stalled)
+      ')
+      NOTREADY=0
+      STALLED=0
+      RESET="-"
+      while read -r ns nm ready stalled; do
+        [ -z "${nm:-}" ] && continue
+        [ "${ready:-}" = "True" ] || NOTREADY=$((NOTREADY+1))
+        if [ "${stalled:-}" = "True" ]; then
+          "${F[@]}" suspend helmrelease "$nm" -n "$ns" > /dev/null 2>&1
+          "${F[@]}" resume helmrelease "$nm" -n "$ns" \
+            --timeout "$RT" > /dev/null 2>&1
+          if [ "$RESET" = "-" ]; then
+            RESET="$ns/$nm"
+          else
+            RESET="$RESET $ns/$nm"
+          fi
+          STALLED=$((STALLED+1))
+        fi
+      done <<< "$LINES"
+      echo "RELEASE=OK NOTREADY=$NOTREADY STALLED=$STALLED RESET=$RESET"
+      [ "$NOTREADY" -eq 0 ] && exit 0 || exit 1
+
+- name: readburst_gate | Report the held and released tier
+  when:
+    - (readburst_gate_enabled | bool)
+    - not ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      Hold: {{ _reg_readburst_hold.stdout | default('') | trim }}
+      | Census: {{ _reg_readburst_quorum.stdout | default('') | trim }}
+      | Release: {{ _reg_readburst_release.stdout | default('') | trim }}
+    verbosity: 0

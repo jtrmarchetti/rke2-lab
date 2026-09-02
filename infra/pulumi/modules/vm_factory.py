@@ -97,6 +97,7 @@ def create_vm(
     common: VmCommonSettings,
     provider: proxmox.Provider,
     boot_image_file_id: pulumi.Input[str] | None = None,
+    vendor_data_file_id: pulumi.Input[str] | None = None,
     depends_on: list[pulumi.Resource] | None = None,
 ) -> proxmox.VmLegacy:
     clone_args = None
@@ -106,6 +107,35 @@ def create_vm(
             vm_id=common.template_vm_id,
             full=True,
         )
+
+    # upgrade=False: PVE otherwise runs the unbounded first-boot auto-upgrade
+    # tail (apt full-upgrade before cloud-init user-data processing), which is
+    # the non-deterministic source of the slow-IO flake where a cold-booted VM
+    # stays SSH-unreachable for 50+ minutes while Ansible's join window has
+    # already expired. Updates are a first-class Ansible concern, not a PVE
+    # first-boot side effect.
+    # vendor_data_file_id: a PVE snippet whose cloud-init runcmd is a bounded
+    # sshd self-heal loop. PVE attaches this file to the VM's cloud-init
+    # datasource alongside the user-data, so on EVERY boot (cold, warm,
+    # reboot-mid-build) the VM's own init brings sshd up within ~3 minutes
+    # with no Ansible, agent, or out-of-band recovery step.
+    init_kwargs: dict = {
+        "type": "nocloud",
+        "datastore_id": common.cloud_init_datastore_id,
+        "dns": proxmox.VmLegacyInitializationDnsArgs(
+            domain=common.vm_domain,
+            servers=spec.dns_servers,
+        ),
+        "ip_configs": _ip_config_args(spec.nics),
+        "user_account": proxmox.VmLegacyInitializationUserAccountArgs(
+            username=common.vm_username,
+            password=common.vm_user_password,
+            keys=[common.vm_ssh_public_key],
+        ),
+        "upgrade": False,
+    }
+    if vendor_data_file_id is not None:
+        init_kwargs["vendor_data_file_id"] = vendor_data_file_id
 
     vm = proxmox.VmLegacy(
         resource_name=spec.key,
@@ -130,20 +160,7 @@ def create_vm(
         clone=clone_args,
         disks=_disk_args(common, spec.disks_gb, boot_image_file_id),
         network_devices=_network_args(spec.nics),
-        initialization=proxmox.VmLegacyInitializationArgs(
-            type="nocloud",
-            datastore_id=common.cloud_init_datastore_id,
-            dns=proxmox.VmLegacyInitializationDnsArgs(
-                domain=common.vm_domain,
-                servers=spec.dns_servers,
-            ),
-            ip_configs=_ip_config_args(spec.nics),
-            user_account=proxmox.VmLegacyInitializationUserAccountArgs(
-                username=common.vm_username,
-                password=common.vm_user_password,
-                keys=[common.vm_ssh_public_key],
-            ),
-        ),
+        initialization=proxmox.VmLegacyInitializationArgs(**init_kwargs),
         opts=pulumi.ResourceOptions(provider=provider, depends_on=depends_on),
     )
     return vm

@@ -50,7 +50,10 @@ def build_vm_specs(external_bridge: str, internal_bridge: str) -> dict[str, VmSp
             phase=4,
             hostname="kubecp01.dev.lo",
             vm_id=2101,
-            cpu_cores=2,
+            # 4 vCPU: CPs host etcd + 3x apiserver + flux + the full
+            # observability read path; 2 vCPU starves etcd commit latency
+            # under read bursts (observed DeadlineExceeded wedge class).
+            cpu_cores=4,
             cpu_sockets=1,
             memory_mb=6144,
             disks_gb=[32, 100],
@@ -69,7 +72,7 @@ def build_vm_specs(external_bridge: str, internal_bridge: str) -> dict[str, VmSp
             phase=4,
             hostname="kubecp02.dev.lo",
             vm_id=2102,
-            cpu_cores=2,
+            cpu_cores=4,
             cpu_sockets=1,
             memory_mb=6144,
             disks_gb=[32, 100],
@@ -88,7 +91,7 @@ def build_vm_specs(external_bridge: str, internal_bridge: str) -> dict[str, VmSp
             phase=4,
             hostname="kubecp03.dev.lo",
             vm_id=2103,
-            cpu_cores=2,
+            cpu_cores=4,
             cpu_sockets=1,
             memory_mb=6144,
             disks_gb=[32, 100],

@@ -1,0 +1,44 @@
+---
+readburst_gate_enabled: true
+
+# The etcd read-burst tier: the observability releases whose install + query
+# load has wedged the etcd primary's commit path on every cold build. Held
+# off the control plane until a 3/3 quorum is provable, then released. tempo
+# is deliberately not held: it is a trace backend with no meaningful etcd
+# read pressure, and holding it adds a release to the release window for
+# nothing.
+readburst_gate_tier:
+  - observability/alloy
+  - observability/kube-prometheus-stack
+  - observability/loki
+
+# Number of control plane nodes that must all be live voters for the quorum
+# census to pass. Supplied by the play as groups['kubecp'] | length so the
+# gate stays correct if the control plane size ever changes.
+readburst_gate_cp_count: 3
+
+# Bounded budgets. The hold phase only ever costs a few polls (the
+# kustomize-controller creates the tier within minutes of the gitops pass),
+# the census a bounded settle window (a freshly healed cluster needs time to
+# commit), and the release a converge window that is smaller than flux_ready's
+# because the read-burst tier is the only thing still converging at that
+# point.
+readburst_gate_hold_retries: 20
+readburst_gate_hold_delay: 15
+readburst_gate_quorum_retries: 40
+readburst_gate_quorum_delay: 15
+readburst_gate_release_retries: 100
+readburst_gate_release_delay: 30
+
+# Per-release bound on the resume inside the release phase's reset step; a
+# resume that runs out its wait leaves the reconciliation running and the
+# next poll picks it up, so this bounds one pass, not the gate.
+readburst_gate_resume_timeout: 90s
+
+readburst_gate_kubectl: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+
+readburst_gate_flux: >-
+  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
+  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
