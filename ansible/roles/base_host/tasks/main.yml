@@ -45,7 +45,7 @@
   notify:
     - Apply netplan configuration
   ansible.builtin.template:
-    src: "{{ _var_base_host_files_dir }}/split_dns_netplan.j2"
+    src: "{{ base_host_split_dns_template }}"
     dest: "{{ _var_base_host_split_dns_netplan_path }}"
     owner: root
     group: root

@@ -33,4 +33,4 @@ base_host_apt_unattended_upgrade: false
 base_host_split_dns_enabled: false
 base_host_split_dns_interface: ""
 base_host_split_dns_servers: []
-base_host_split_dns_domains: null
+base_host_split_dns_template: null

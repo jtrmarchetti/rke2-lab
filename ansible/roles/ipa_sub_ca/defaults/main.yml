@@ -12,16 +12,13 @@ ipa_sub_ca_profile_description: >-
 ipa_sub_ca_acl_name: subca-k8s
 ipa_sub_ca_ca: ipa
 
-ipa_sub_ca_validity_days: 1825
 ipa_sub_ca_renew_before_days: 90
 
 ipa_sub_ca_domain_ca_file: null
 
 ipa_sub_ca_key_size: 4096
 
-ipa_sub_ca_realm: DEV.LO
-ipa_sub_ca_ocsp_url: null
-ipa_sub_ca_crl_url: null
+ipa_sub_ca_profile_template: null
 
 ipa_sub_ca_output_dir: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/k8s-ca

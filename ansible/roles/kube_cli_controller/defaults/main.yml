@@ -23,7 +23,8 @@ kube_cli_controller_k9s_version: null
 kube_cli_controller_k9s_url: null
 
 kube_cli_controller_shell_enabled: true
-kube_cli_controller_alias: k
+
+kube_cli_controller_shell_template: null
 
 kube_cli_controller_flux_enabled: true
 kube_cli_controller_flux_version: null

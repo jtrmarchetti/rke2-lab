@@ -16,7 +16,7 @@
   no_log: "{{ gitops_bootstrap_no_log | bool }}"
   ansible.builtin.command:
     cmd: "{{ gitops_bootstrap_kubectl }} create -f -"
-    stdin: "{{ lookup('template', _var_gitops_bootstrap_files_dir ~ '/sealing-keys.yaml.j2') }}"
+    stdin: "{{ lookup('template', gitops_bootstrap_files_dir ~ '/sealing-keys.yaml.j2') }}"
 
 - name: install | Look for an existing Flux installation
   changed_when: false

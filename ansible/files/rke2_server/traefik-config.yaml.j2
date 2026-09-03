@@ -10,10 +10,10 @@ spec:
   valuesContent: |-
 
     nodeSelector:
-      {{ rke2_server_ingress_node_selector }}: "true"
+      {{ inventory_rke2_server_ingress_node_selector }}: "true"
 
     service:
       spec:
         type: LoadBalancer
       annotations:
-        kube-vip.io/loadbalancerIPs: "{{ rke2_server_ingress_address }}"
+        kube-vip.io/loadbalancerIPs: "{{ inventory_rke2_server_ingress_address }}"

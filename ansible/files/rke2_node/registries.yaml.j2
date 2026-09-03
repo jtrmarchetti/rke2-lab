@@ -1,10 +1,10 @@
 {{ ansible_managed | comment }}
 
 mirrors:
-{% for _item_rke2_node_upstream, _item_rke2_node_rules in rke2_node_registry_mirrors | groupby('upstream') %}
+{% for _item_rke2_node_upstream, _item_rke2_node_rules in inventory_rke2_node_registry_mirrors | groupby('upstream') %}
   {{ _item_rke2_node_upstream }}:
     endpoint:
-      - "https://{{ rke2_node_registry_host }}"
+      - "https://{{ inventory_rke2_node_registry_host }}"
     rewrite:
 {% for _item_rke2_node_rule in _item_rke2_node_rules %}
       "{{ _item_rke2_node_rule['pattern'] }}": "{{ _item_rke2_node_rule['replacement'] }}"
@@ -12,10 +12,10 @@ mirrors:
 {% endfor %}
 
 configs:
-  "{{ rke2_node_registry_host }}":
+  "{{ inventory_rke2_node_registry_host }}":
     auth:
 
       username: "{{ rke2_node_registry_username }}"
       password: "{{ rke2_node_registry_password }}"
     tls:
-      ca_file: {{ rke2_node_ca_rke2_path }}
+      ca_file: {{ inventory_rke2_node_ca_rke2_path }}

@@ -26,7 +26,17 @@ inventory_freeipa_server_realm: DEV.LO
 inventory_freeipa_server_hostname: core.dev.lo
 inventory_freeipa_server_ip_address: 192.168.2.4
 
-inventory_freeipa_server_admin_password: "{{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}"
+inventory_freeipa_server_resolv_template: >-
+  {{ inventory_files_base }}/freeipa_server/resolv.conf.j2
+inventory_freeipa_server_env_template: >-
+  {{ inventory_files_base }}/freeipa_server/freeipa.env.j2
+inventory_freeipa_server_compose_template: >-
+  {{ inventory_files_base }}/freeipa_server/docker-compose.freeipa.yml.j2
+inventory_freeipa_server_named_options_template: >-
+  {{ inventory_files_base }}/freeipa_server/named-options-ext.conf.j2
+
+inventory_freeipa_server_admin_password: >-
+  {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
 inventory_freeipa_server_directory_manager_password: >-
   {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
 

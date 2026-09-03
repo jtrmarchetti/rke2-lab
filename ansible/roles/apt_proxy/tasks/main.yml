@@ -19,7 +19,7 @@
   notify:
     - Restart apt-cacher-ng
   ansible.builtin.template:
-    src: "{{ _var_apt_proxy_files_dir }}/acng_local.conf.j2"
+    src: "{{ apt_proxy_template }}"
     dest: "{{ _var_apt_proxy_override_config_path }}"
     owner: root
     group: root

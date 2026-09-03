@@ -45,7 +45,6 @@ freeipa_server_dns_zones: []
 
 freeipa_server_dns_records: []
 
-freeipa_server_dnssec_validation: true
 freeipa_server_named_options_path: >-
   /data1/freeipa/etc/named/ipa-options-ext.conf
 
@@ -63,3 +62,8 @@ freeipa_server_ready_timeout: 300
 
 freeipa_server_settle_retries: 21
 freeipa_server_settle_delay: 10
+
+freeipa_server_resolv_template: null
+freeipa_server_env_template: null
+freeipa_server_compose_template: null
+freeipa_server_named_options_template: null

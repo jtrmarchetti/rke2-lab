@@ -1,22 +1,22 @@
 {{ ansible_managed | comment }}
 
-KUBECONFIG="{{ kube_cli_controller_kubeconfig }}"
+KUBECONFIG="{{ inventory_kube_cli_controller_kubeconfig }}"
 export KUBECONFIG
 
 case ":${PATH}:" in
-    *":{{ kube_cli_controller_bin_dir }}:"*) ;;
-    *) PATH="{{ kube_cli_controller_bin_dir }}:${PATH}" ; export PATH ;;
+    *":{{ inventory_kube_cli_controller_bin_dir }}:"*) ;;
+    *) PATH="{{ inventory_kube_cli_controller_bin_dir }}:${PATH}" ; export PATH ;;
 esac
 
 case $- in
     *i*)
-{% if kube_cli_controller_alias | length > 0 %}
-        alias {{ kube_cli_controller_alias }}=kubectl
+{% if inventory_kube_cli_controller_alias | length > 0 %}
+        alias {{ inventory_kube_cli_controller_alias }}=kubectl
 {% endif %}
-        if [ -r "{{ kube_cli_controller_config_dir }}/kubectl-completion.bash" ]; then
-            . "{{ kube_cli_controller_config_dir }}/kubectl-completion.bash"
-{% if kube_cli_controller_alias | length > 0 %}
-            complete -o default -F __start_kubectl {{ kube_cli_controller_alias }}
+        if [ -r "{{ inventory_kube_cli_controller_config_dir }}/kubectl-completion.bash" ]; then
+            . "{{ inventory_kube_cli_controller_config_dir }}/kubectl-completion.bash"
+{% if inventory_kube_cli_controller_alias | length > 0 %}
+            complete -o default -F __start_kubectl {{ inventory_kube_cli_controller_alias }}
 {% endif %}
         fi
         ;;

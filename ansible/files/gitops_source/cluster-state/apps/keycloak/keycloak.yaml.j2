@@ -86,7 +86,7 @@ metadata:
   namespace: keycloak
 data:
   ca.crt: >-
-    {{ lookup('file', gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+    {{ lookup('file', inventory_gitops_source_domain_ca_file, rstrip=false) | b64encode }}
 ---
 apiVersion: v1
 kind: Service
@@ -140,7 +140,7 @@ spec:
                   name: keycloak-secrets
                   key: db-password
             - name: KC_HOSTNAME
-              value: https://sso.{{ gitops_source_cluster_domain }}
+              value: https://sso.{{ inventory_gitops_source_cluster_domain }}
             - name: KC_HTTP_ENABLED
               value: "true"
             - name: KC_PROXY_HEADERS
@@ -198,10 +198,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - sso.{{ gitops_source_cluster_domain }}
+        - sso.{{ inventory_gitops_source_cluster_domain }}
       secretName: keycloak-tls
   rules:
-    - host: sso.{{ gitops_source_cluster_domain }}
+    - host: sso.{{ inventory_gitops_source_cluster_domain }}
       http:
         paths:
           - path: /

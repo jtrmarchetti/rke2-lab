@@ -80,7 +80,7 @@
 
     - name: flux_files | Write kustomization.yaml
       ansible.builtin.copy:
-        src: "{{ _var_gitops_bootstrap_files_dir }}/flux-system/kustomization.yaml"
+        src: "{{ gitops_bootstrap_files_dir }}/flux-system/kustomization.yaml"
         dest: >-
           {{ gitops_bootstrap_work_dir }}/{{
           _var_gitops_bootstrap_flux_dir }}/kustomization.yaml

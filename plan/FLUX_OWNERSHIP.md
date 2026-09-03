@@ -70,6 +70,10 @@ own. The split:
 the HelmRelease set after the last gitops pass and resets any `Stalled`
 release with the same `flux suspend`/`resume` repair, so the stale
 `MissingRollbackTarget` stall class no longer needs a manual run mid-build.
+The gate is two survey passes of the role around a mid-gate `etcd_rejoin`
+strike window: a non-fatal pass (`flux_ready_fatal: false`) that absorbs a
+slow-convergence or mid-survey etcd wedge without aborting the build, then
+the fatal pass that proves the Ready set on a healthy quorum.
 `flux_unstall` remains as the out-of-band recovery path for a terminal
 `Stalled` HelmRelease surfaced outside the build (e.g. discovered days later),
 which a build gate cannot see.

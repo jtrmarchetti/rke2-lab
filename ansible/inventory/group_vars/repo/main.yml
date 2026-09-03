@@ -9,6 +9,9 @@ inventory_base_host_split_dns_enabled: false
 inventory_split_dns_enabled: true
 inventory_split_dns_upstream_servers:
   - 192.168.1.1
+inventory_split_dns_listen_addresses:
+  - 127.0.0.1
+inventory_split_dns_cache_size: 1000
 inventory_split_dns_forward_zones:
   - domain: dev.lo
     server: 192.168.2.4
@@ -29,7 +32,10 @@ inventory_wireguard_gateway_interface: wg0
 inventory_wireguard_gateway_address: 10.66.66.1/30
 inventory_wireguard_gateway_listen_port: 51820
 
-inventory_wireguard_gateway_private_key: "{{ lookup('env', 'WIREGUARD_REPO_PRIVATE_KEY') }}"
+inventory_wireguard_gateway_private_key: >-
+  {{ lookup('env', 'WIREGUARD_REPO_PRIVATE_KEY') }}
+inventory_wireguard_gateway_template: >-
+  {{ inventory_files_base }}/wireguard_gateway/wg_interface.conf.j2
 
 inventory_wireguard_gateway_controller_host: controller01
 inventory_wireguard_gateway_peer_endpoint: 192.168.1.15:51821
@@ -51,6 +57,8 @@ inventory_socks5_proxy_external_interfaces:
   - eth1
 inventory_socks5_proxy_allowed_client_networks:
   - 192.168.1.0/24
+inventory_socks5_proxy_template: >-
+  {{ inventory_files_base }}/socks5_proxy/danted.conf.j2
 
 inventory_apt_proxy_enabled: true
 inventory_apt_proxy_bind_addresses:
@@ -60,6 +68,12 @@ inventory_apt_proxy_bind_port: 3142
 inventory_apt_proxy_cache_dir: /data1/apt-cacher-ng
 inventory_apt_proxy_expire_days: 7
 inventory_apt_proxy_keep_extra_versions: 1
+inventory_apt_proxy_log_dir: /var/log/apt-cacher-ng
+inventory_apt_proxy_passthrough_pattern: >-
+  ^(archive|security|ports|changelogs)\.ubuntu\.com:443$
+
+inventory_apt_proxy_template: >-
+  {{ inventory_files_base }}/apt_proxy/acng_local.conf.j2
 
 inventory_data_volume_enabled: true
 inventory_data_volume_device: /dev/sdb
@@ -69,7 +83,13 @@ inventory_data_volume_mount_path: /data1
 
 inventory_artifact_host_enabled: true
 inventory_artifact_host_document_root: /data1/artifacts
+inventory_artifact_host_directory_index_enabled: true
+inventory_artifact_host_hardening_template: >-
+  {{ inventory_files_base }}/artifact_host/artifact_host_hardening.conf.j2
+inventory_artifact_host_vhost_template: >-
+  {{ inventory_files_base }}/artifact_host/artifact_host_vhost.conf.j2
 inventory_artifact_host_server_name: repo01.dev.lo
+inventory_artifact_host_listen_port: 80
 inventory_artifact_host_allowed_networks:
   - 192.168.2.0/24
   - 10.66.66.0/30
@@ -96,7 +116,8 @@ inventory_repo_internal_download_policy: repo01_only
 inventory_ipa_service_cert_enabled: true
 inventory_ipa_service_cert_ipa_host: core01
 
-inventory_ipa_service_cert_admin_password: "{{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}"
+inventory_ipa_service_cert_admin_password: >-
+  {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
 inventory_ipa_service_cert_dir: /etc/ssl/dev.lo
 inventory_ipa_service_cert_ca_file: /etc/ssl/dev.lo/dev.lo-ca.crt
 
@@ -112,11 +133,19 @@ inventory_gitlab_external_url: https://gitlab.dev.lo
 inventory_gitlab_registry_external_url: https://registry.gitlab.dev.lo
 inventory_gitlab_https_port: 443
 inventory_gitlab_ssh_port: 2222
+inventory_gitlab_shm_size: 256m
+inventory_gitlab_puma_worker_processes: 2
+inventory_gitlab_sidekiq_concurrency: 10
+inventory_gitlab_monitoring_enabled: false
+inventory_gitlab_kas_enabled: false
+inventory_gitlab_oidc_auto_sign_in: false
+inventory_gitlab_oidc_block_auto_created_users: false
 
 inventory_gitlab_root_password: "{{ lookup('env', 'GITLAB_ROOT_PASSWORD') }}"
 inventory_gitlab_letsencrypt_enabled: false
 inventory_gitlab_ssl_source_dir: /etc/ssl/dev.lo
 
+inventory_gitlab_container_name: gitlab
 inventory_gitlab_container_image: gitlab/gitlab-ce:19.3.0-ce.0
 inventory_gitlab_data_root: /data1/gitlab
 inventory_gitlab_registry_enabled: true
@@ -130,6 +159,10 @@ inventory_gitlab_oidc_client_secret: >-
 inventory_gitlab_oidc_label: dev.lo single sign-on
 
 inventory_gitlab_oidc_ca_source_file: /etc/ssl/dev.lo/dev.lo-ca.crt
+
+inventory_gitlab_env_template: "{{ inventory_files_base }}/gitlab/gitlab.env.j2"
+inventory_gitlab_compose_template: >-
+  {{ inventory_files_base }}/gitlab/docker-compose.gitlab.yml.j2
 
 inventory_rke2_publish_enabled: true
 inventory_rke2_publish_gitlab_url: "{{ inventory_gitlab_external_url }}"
@@ -221,4 +254,5 @@ inventory_gitlab_monitoring_allowed_networks:
 inventory_helm_cli_url: >-
   http://192.168.2.99/charts/helm-v4.2.4-linux-amd64.tar.gz
 
-inventory_ipa_service_cert_trust_ca_path: /usr/local/share/ca-certificates/dev.lo.crt
+inventory_ipa_service_cert_trust_ca_path: >-
+  /usr/local/share/ca-certificates/dev.lo.crt

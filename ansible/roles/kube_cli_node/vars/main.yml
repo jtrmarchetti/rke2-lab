@@ -1,3 +1,0 @@
----
-
-_var_kube_cli_node_files_dir: "{{ role_path | dirname | dirname }}/files/kube_cli_node"

@@ -10,7 +10,7 @@
   notify:
     - Restart controller WireGuard
   ansible.builtin.template:
-    src: "{{ _var_controller_tunnel_files_dir }}/wg_controller.conf.j2"
+    src: "{{ controller_tunnel_wg_template }}"
     dest: "{{ _var_controller_tunnel_config_file }}"
     mode: "0600"
 

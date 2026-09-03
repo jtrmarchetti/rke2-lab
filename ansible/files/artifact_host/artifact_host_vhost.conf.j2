@@ -1,15 +1,15 @@
 {{ ansible_managed | comment }}
 
-<VirtualHost *:{{ artifact_host_listen_port }}>
-    ServerName {{ artifact_host_server_name }}
+<VirtualHost *:{{ inventory_artifact_host_listen_port }}>
+    ServerName {{ inventory_artifact_host_server_name }}
 
-    DocumentRoot {{ artifact_host_document_root }}
+    DocumentRoot {{ inventory_artifact_host_document_root }}
 
     ErrorLog ${APACHE_LOG_DIR}/artifact-host-error.log
     CustomLog ${APACHE_LOG_DIR}/artifact-host-access.log combined
 
-    <Directory {{ artifact_host_document_root }}>
-{% if artifact_host_directory_index_enabled %}
+    <Directory {{ inventory_artifact_host_document_root }}>
+{% if inventory_artifact_host_directory_index_enabled %}
 
         Options Indexes SymLinksIfOwnerMatch
         IndexOptions FancyIndexing HTMLTable NameWidth=* SuppressDescription
@@ -21,7 +21,7 @@
 
         <Limit GET HEAD OPTIONS>
             <RequireAny>
-{% for _item_artifact_host_network in artifact_host_allowed_networks %}
+{% for _item_artifact_host_network in inventory_artifact_host_allowed_networks %}
                 Require ip {{ _item_artifact_host_network }}
 {% endfor %}
             </RequireAny>

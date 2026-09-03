@@ -3,6 +3,8 @@ gitops_bootstrap_enabled: true
 
 gitops_bootstrap_gitlab_url: null
 
+gitops_bootstrap_files_dir: null
+
 gitops_bootstrap_group: platform
 gitops_bootstrap_project: cluster-state
 gitops_bootstrap_branch: main

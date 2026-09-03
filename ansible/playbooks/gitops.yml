@@ -32,19 +32,13 @@
       vars:
         gitops_source_ca_common_name: >-
           {{ inventory_gitops_source_ca_common_name }}
-        gitops_source_cluster_domain: >-
-          {{ inventory_gitops_source_cluster_domain }}
         gitops_source_commit_email: "{{ inventory_gitops_source_commit_email }}"
-        gitops_source_dns_address: "{{ inventory_gitops_source_dns_address }}"
         gitops_source_domain: "{{ inventory_gitops_source_domain }}"
         gitops_source_domain_ca_file: >-
           {{ inventory_gitops_source_domain_ca_file }}
         gitops_source_gitlab_url: "{{ inventory_gitops_source_gitlab_url }}"
-        gitops_source_keycloak_realm: >-
-          {{ inventory_gitops_source_keycloak_realm }}
-        gitops_source_ingress_address: >-
-          {{ inventory_gitops_source_ingress_address }}
-        gitops_source_lb_range: "{{ inventory_gitops_source_lb_range }}"
+        gitops_source_templates_dir: >-
+          {{ inventory_gitops_source_templates_dir }}
         gitops_source_registry_host: "{{ inventory_gitops_source_registry_host }}"
 
         gitops_source_gitlab_host: "{{ groups['repo'] | first }}"
@@ -69,6 +63,7 @@
       vars:
         gitops_bootstrap_domain_ca_file: >-
           {{ inventory_gitops_bootstrap_domain_ca_file }}
+        gitops_bootstrap_files_dir: "{{ inventory_gitops_bootstrap_files_dir }}"
         gitops_bootstrap_gitlab_url: "{{ inventory_gitops_bootstrap_gitlab_url }}"
         gitops_bootstrap_gitlab_host: "{{ groups['repo'] | first }}"
       ansible.builtin.include_role:

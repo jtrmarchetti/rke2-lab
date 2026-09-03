@@ -66,7 +66,7 @@ spec:
             node_id = "openbao-0"
           }
 
-          api_addr = "https://bao.{{ gitops_source_cluster_domain }}"
+          api_addr = "https://bao.{{ inventory_gitops_source_cluster_domain }}"
           cluster_addr = "http://openbao-0.openbao-internal:8201"
       ha:
         enabled: false
@@ -100,11 +100,11 @@ spec:
         enabled: true
         ingressClassName: traefik
         hosts:
-          - host: bao.{{ gitops_source_cluster_domain }}
+          - host: bao.{{ inventory_gitops_source_cluster_domain }}
         tls:
           - secretName: openbao-tls
             hosts:
-              - bao.{{ gitops_source_cluster_domain }}
+              - bao.{{ inventory_gitops_source_cluster_domain }}
         annotations:
           cert-manager.io/cluster-issuer: k8s-ca
     ui:

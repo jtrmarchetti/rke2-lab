@@ -5,59 +5,22 @@ rke2_server_bootstrap: false
 
 rke2_server_api_address: null
 rke2_server_api_name: null
-rke2_server_supervisor_port: 9345
 rke2_server_api_port: 6443
 
 rke2_server_tls_san: []
 
-rke2_server_cni: cilium
-
-rke2_server_disable: []
-
 rke2_server_ingress_controller:
   - traefik
 
-rke2_server_ingress_node_selector: node-role.kubernetes.io/worker
-
-rke2_server_ingress_address: null
-
-rke2_server_node_taints:
-  - CriticalAddonsOnly=true:NoExecute
-
 rke2_server_data_dir: /data1/rancher/rke2
 
-rke2_server_etcd_snapshot_schedule: "0 */6 * * *"
-rke2_server_etcd_snapshot_retention: 10
-
-# etcd is run against the shared PVE LVM, whose slow IO has wedged the
-# leader 6 times (2026-08-24..31): overloaded-leader quorum loss under the
-# alloy/loki/kps read burst. RKE2's generated etcd config has no compaction
-# tuning at all, so the keyspace revision history and the WAL grow without
-# bound, amplifying every read burst into a leader stall. Periodic
-# auto-compaction bounds the history etcd has to serve. No defrag-interval:
-# defrag rewrites the whole ~220M db file on the slowest storage in the
-# topology, and a 30m recurring whole-file rewrite is itself a stall storm
-# (g2_cold3 strike window 00:36:44 sat 4m after defrag #2's ~00:32:40 fire;
-# the WAL stays pinned ~184M by the 6h snapshot schedule anyway, so there
-# is no disk-space pressure that would justify it). The heartbeat/election
-# pair keeps the cluster from mistaking a slow commit for a dead leader.
-rke2_server_etcd_args:
-  - heartbeat-interval=1000
-  - election-timeout=5000
-  - auto-compaction-mode=periodic
-  - auto-compaction-retention=30m
-
-rke2_server_expose_metrics: true
-
 rke2_server_kube_vip_enabled: true
-
-rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.3
-rke2_server_kube_vip_interface: eth0
-rke2_server_kube_vip_lease_duration: 15
-rke2_server_kube_vip_renew_deadline: 10
-rke2_server_kube_vip_retry_period: 2
 
 rke2_server_ready_retries: 90
 rke2_server_ready_delay: 10
 
 rke2_server_kubeconfig_dest: ""
+
+rke2_server_config_template: null
+rke2_server_traefik_template: null
+rke2_server_kube_vip_template: null

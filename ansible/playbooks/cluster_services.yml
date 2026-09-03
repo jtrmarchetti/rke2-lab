@@ -20,11 +20,13 @@
         ipa_sub_ca_admin_password: >-
           {{ lookup('env', 'FREEIPA_ADMIN_PASSWORD') }}
         ipa_sub_ca_common_name: "{{ inventory_ipa_sub_ca_common_name }}"
-        ipa_sub_ca_crl_url: "{{ inventory_ipa_sub_ca_crl_url }}"
 
         ipa_sub_ca_domain_ca_file: "{{ inventory_controller_trust_ca_path }}"
         ipa_sub_ca_ipa_host: "{{ inventory_cluster_services_ipa_host }}"
-        ipa_sub_ca_ocsp_url: "{{ inventory_ipa_sub_ca_ocsp_url }}"
+        ipa_sub_ca_profile_description: >-
+          {{ inventory_ipa_sub_ca_profile_description }}
+        ipa_sub_ca_profile_id: "{{ inventory_ipa_sub_ca_profile_id }}"
+        ipa_sub_ca_profile_template: "{{ inventory_ipa_sub_ca_profile_template }}"
         ipa_sub_ca_publish_dir: "{{ inventory_ipa_sub_ca_publish_dir }}"
         ipa_sub_ca_publish_host: "{{ inventory_ipa_sub_ca_publish_host }}"
       ansible.builtin.include_role:
@@ -130,8 +132,10 @@
         rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
         rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
         rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_inotify_template: "{{ inventory_rke2_node_inotify_template }}"
         rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
-        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registries_template: >-
+          {{ inventory_rke2_node_registries_template }}
         rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
         rke2_node_type: "{{ inventory_rke2_node_type }}"
         rke2_node_version: "{{ inventory_rke2_node_version }}"
@@ -152,6 +156,8 @@
       tags:
         - longhorn_node
       vars:
+        longhorn_node_blacklist_template: >-
+          {{ inventory_longhorn_node_blacklist_template }}
         longhorn_node_data_path: "{{ inventory_kubewk_csi_volume_mount_path }}"
       ansible.builtin.include_role:
         name: longhorn_node
@@ -213,8 +219,10 @@
         rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
         rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
         rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_inotify_template: "{{ inventory_rke2_node_inotify_template }}"
         rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
-        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registries_template: >-
+          {{ inventory_rke2_node_registries_template }}
         rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
         rke2_node_type: "{{ inventory_rke2_node_type }}"
         rke2_node_version: "{{ inventory_rke2_node_version }}"

@@ -1,3 +1,0 @@
----
-
-_var_longhorn_node_files_dir: "{{ role_path | dirname | dirname }}/files/longhorn_node"

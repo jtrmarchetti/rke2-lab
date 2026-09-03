@@ -165,7 +165,7 @@ spec:
           readOnly: true
       grafana.ini:
         server:
-          root_url: https://grafana.{{ gitops_source_cluster_domain }}
+          root_url: https://grafana.{{ inventory_gitops_source_cluster_domain }}
         auth:
           # generic_oauth does not record a user_auth AuthID, so the user-sync
           # hook reconciles a known user by email only when this is set.
@@ -182,10 +182,10 @@ spec:
           client_id: grafana
           client_secret: $__file{/etc/grafana/oidc/client-secret}
           scopes: openid profile email
-          auth_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/auth
-          token_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/token
-          api_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/userinfo
-          signout_redirect_url: https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}/protocol/openid-connect/logout
+          auth_url: https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}/protocol/openid-connect/auth
+          token_url: https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}/protocol/openid-connect/token
+          api_url: https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}/protocol/openid-connect/userinfo
+          signout_redirect_url: https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}/protocol/openid-connect/logout
           tls_client_ca: /etc/grafana/ca/ca.crt
           use_pkce: true
           role_attribute_path: >-
@@ -199,8 +199,8 @@ spec:
         annotations:
           cert-manager.io/cluster-issuer: k8s-ca
         hosts:
-          - grafana.{{ gitops_source_cluster_domain }}
+          - grafana.{{ inventory_gitops_source_cluster_domain }}
         tls:
           - secretName: grafana-tls
             hosts:
-              - grafana.{{ gitops_source_cluster_domain }}
+              - grafana.{{ inventory_gitops_source_cluster_domain }}

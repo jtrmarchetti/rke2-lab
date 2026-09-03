@@ -1,14 +1,79 @@
 ---
 
-# Strike window 3: the gate itself is the longest open window of the
-# build (up to the 50m budget), so a wedge can strike during it. A
-# wedged control plane leaves its releases permanently not-Ready and the
-# gate would time out with nothing left to absorb the wedge, so the
-# gate play is preceded by the self-detecting etcd_rejoin role: a no-op
-# on a healthy cluster, and a 3-minute heal on a strike, before the
-# survey starts. The gate then runs on the controller, which already
-# holds the kubectl and flux CLIs the survey uses.
+# Strike windows 3 and 4: the gate itself is the longest open window of the
+# build (up to the 50m survey budget per pass), so an etcd wedge can strike
+# both before and inside it. A wedged control plane leaves its releases
+# permanently not-Ready and a dead API reads as a not-Ready release, so a
+# wedge with nothing left to absorb it burns the survey budget on a broken
+# API and the gate times out. The gate therefore runs the self-detecting
+# etcd_rejoin role as a strike window on every control plane node twice:
+# once before the survey starts (the install-burst window) and once between
+# the two survey passes (the survey window). Each window is a no-op on a
+# healthy cluster, and a 3-minute heal on a strike; the gate then runs on
+# the controller, which already holds the kubectl and flux CLIs the survey
+# uses.
+#
+# The gate is two survey passes of the flux_ready role around the mid-gate
+# strike window: a non-fatal pass that absorbs the survey window's
+# slow-convergence budget (a wedge striking inside the window is reported
+# but does not abort the build), then the fatal pass that proves the Ready
+# set after the strike window healed it. On a healthy cluster the first
+# poll of each pass already passes, so the gate costs nothing on warm
+# re-runs.
 - name: Resettle the control plane before the Flux readiness gate
+  hosts: kubecp
+  gather_facts: false
+  become: true
+  tasks:
+
+    - name: flux_ready | Heal control plane nodes wedged out of etcd
+      tags:
+        - etcd_rejoin
+      vars:
+        etcd_rejoin_api_port: "{{ inventory_rke2_server_api_port }}"
+        etcd_rejoin_candidate_addresses: >-
+          {{ ([inventory_rke2_server_api_address]
+              + (groups['kubecp']
+                 | map('extract', hostvars, 'inventory_rke2_server_node_ip')
+                 | reject('equalto', inventory_rke2_server_node_ip)
+                 | list)) }}
+        etcd_rejoin_data_dir: "{{ inventory_rke2_server_data_dir }}"
+        etcd_rejoin_kubectl: >-
+          {{ inventory_rke2_server_data_dir }}/bin/kubectl
+          --kubeconfig /etc/rancher/rke2/rke2.yaml
+        etcd_rejoin_supervisor_port: "{{ inventory_rke2_server_supervisor_port }}"
+      ansible.builtin.include_role:
+        name: etcd_rejoin
+        apply:
+          tags:
+            - etcd_rejoin
+
+- name: Absorb the survey window's convergence budget without aborting
+  # Non-fatal survey pass: a control plane wedge that strikes while the
+  # survey is polling a dead API reads as a not-Ready release, so this
+  # pass reports a spent budget instead of failing the build; the strike
+  # window below then heals the wedge.
+  hosts: controller
+  gather_facts: true
+  become: false
+  tasks:
+
+    - name: flux_ready | Survey without aborting on a spent budget
+      tags:
+        - flux_ready
+      vars:
+        flux_ready_fatal: false
+      ansible.builtin.include_role:
+        name: flux_ready
+        apply:
+          tags:
+            - flux_ready
+
+- name: Heal a control plane wedge that struck inside the survey window
+  # Mid-gate strike window: the self-detecting etcd_rejoin role is a no-op
+  # when no wedge struck during the survey; on a strike it re-joins the
+  # wedged node through a surviving control plane peer, so the fatal pass
+  # below runs on a healthy quorum.
   hosts: kubecp
   gather_facts: false
   become: true

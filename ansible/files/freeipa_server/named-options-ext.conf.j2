@@ -9,4 +9,4 @@
 listen-on-v6 { any; };
 
 /* dnssec-enable is obsolete and 'yes' by default */
-dnssec-validation {{ 'yes' if (freeipa_server_dnssec_validation | bool) else 'no' }};
+dnssec-validation {{ 'yes' if (inventory_freeipa_server_dnssec_validation | bool) else 'no' }};

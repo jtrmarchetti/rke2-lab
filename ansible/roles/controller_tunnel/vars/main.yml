@@ -5,9 +5,6 @@ _var_controller_tunnel_packages:
 
 _var_controller_tunnel_config_path: /etc/wireguard
 
-_var_controller_tunnel_files_dir: >-
-  {{ role_path | dirname | dirname }}/files/controller_tunnel
-
 _var_controller_tunnel_config_file: >-
   {{ _var_controller_tunnel_config_path }}/{{ controller_tunnel_interface }}.conf
 

@@ -3,6 +3,9 @@
 inventory_split_dns_enabled: true
 inventory_split_dns_upstream_servers:
   - 192.168.1.1
+inventory_split_dns_listen_addresses:
+  - 127.0.0.1
+inventory_split_dns_cache_size: 1000
 inventory_split_dns_forward_zones:
   - domain: dev.lo
     server: 192.168.2.4
@@ -33,6 +36,14 @@ inventory_controller_wireguard_route_subnets:
 inventory_controller_wireguard_validate_address: 192.168.2.99
 inventory_controller_wireguard_validate_port: 22
 
+inventory_controller_runtime_env_template: >-
+  {{ inventory_files_base }}/controller_runtime/controller-env.sh.j2
+inventory_controller_runtime_venv: /home/claw/.venvs/rke2lab
+inventory_controller_runtime_collections_path: /home/claw/.ansible/collections
+
+inventory_controller_tunnel_wg_template: >-
+  {{ inventory_files_base }}/controller_tunnel/wg_controller.conf.j2
+
 inventory_controller_runtime_pulumi_url: >-
   {{ inventory_controller_artifacts['pulumi-cli']['url'] }}
 inventory_controller_runtime_pulumi_version: >-
@@ -45,7 +56,13 @@ inventory_controller_trust_verify_url: https://gitlab.dev.lo/
 
 inventory_gitops_bootstrap_gitlab_url: https://gitlab.dev.lo
 
-inventory_gitops_bootstrap_domain_ca_file: /usr/local/share/ca-certificates/dev.lo-ca.crt
+inventory_gitops_bootstrap_domain_ca_file: >-
+  /usr/local/share/ca-certificates/dev.lo-ca.crt
+
+inventory_gitops_bootstrap_files_dir: >-
+  {{ inventory_files_base }}/gitops_bootstrap
+
+inventory_gitops_source_templates_dir: "{{ inventory_files_base }}/gitops_source"
 
 inventory_gitops_source_gitlab_url: https://gitlab.dev.lo
 inventory_gitops_source_domain: dev.lo
@@ -54,18 +71,29 @@ inventory_gitops_source_cluster_domain: k8s.dev.lo
 
 inventory_gitops_source_keycloak_realm: dev-lo
 inventory_gitops_source_registry_host: registry.gitlab.dev.lo
+inventory_gitops_source_charts_repo: rke2/charts
 
 inventory_gitops_source_lb_range: 192.168.2.40-192.168.2.52
 inventory_gitops_source_dns_address: 192.168.2.40
 inventory_gitops_source_ingress_address: 192.168.2.41
 
-inventory_gitops_source_domain_ca_file: /usr/local/share/ca-certificates/dev.lo-ca.crt
+inventory_gitops_source_domain_ca_file: >-
+  /usr/local/share/ca-certificates/dev.lo-ca.crt
 inventory_gitops_source_ca_common_name: k8s-ca.dev.lo
 inventory_gitops_source_commit_email: automation@dev.lo
 
 inventory_ipa_sub_ca_common_name: k8s-ca.dev.lo
+inventory_ipa_sub_ca_realm: DEV.LO
+inventory_ipa_sub_ca_validity_days: 1825
 inventory_ipa_sub_ca_ocsp_url: http://ipa-ca.dev.lo/ca/ocsp
 inventory_ipa_sub_ca_crl_url: http://ipa-ca.dev.lo/ipa/crl/MasterCRL.bin
+
+inventory_ipa_sub_ca_profile_id: subCA
+inventory_ipa_sub_ca_profile_description: >-
+  Subordinate CA for the RKE2 cluster, path length 0
+
+inventory_ipa_sub_ca_profile_template: >-
+  {{ inventory_files_base }}/ipa_sub_ca/subca-profile.cfg.j2
 
 inventory_ipa_sub_ca_publish_host: repo01
 inventory_ipa_sub_ca_publish_dir: /data1/artifacts/certs
@@ -150,6 +178,14 @@ inventory_kube_cli_controller_kubeseal_url: >-
   {{ inventory_controller_artifacts['kubeseal']['url'] }}
 inventory_kube_cli_controller_kubeseal_version: >-
   {{ inventory_controller_artifacts['kubeseal']['version'] }}
+
+inventory_kube_cli_controller_alias: k
+inventory_kube_cli_controller_bin_dir: /home/claw/.local/bin
+inventory_kube_cli_controller_config_dir: /home/claw/.config/rke2lab
+inventory_kube_cli_controller_kubeconfig: /home/claw/.kube/dev-lo.config
+
+inventory_kube_cli_controller_shell_template: >-
+  {{ inventory_files_base }}/kube_cli_controller/kube-env.sh.j2
 
 inventory_openbao_config_url: https://bao.k8s.dev.lo
 

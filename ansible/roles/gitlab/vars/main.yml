@@ -11,5 +11,3 @@ _var_gitlab_data_dirs:
 _var_gitlab_container_ssl_dir: /etc/gitlab/ssl
 
 _var_gitlab_trusted_certs_dir: "{{ gitlab_data_root }}/config/trusted-certs"
-
-_var_gitlab_files_dir: "{{ role_path | dirname | dirname }}/files/gitlab"

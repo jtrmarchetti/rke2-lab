@@ -1,6 +1,31 @@
 ---
 inventory_phase1_environment_name: dev_lo
 
+inventory_files_base: "{{ ansible_config_file | dirname }}/files"
+
+inventory_base_host_split_dns_template: >-
+  {{ inventory_files_base }}/base_host/split_dns_netplan.j2
+inventory_base_host_split_dns_interface: ""
+inventory_base_host_split_dns_servers: []
+
+inventory_container_storage_docker_template: >-
+  {{ inventory_files_base }}/container_storage/daemon.json.j2
+inventory_container_storage_containerd_template: >-
+  {{ inventory_files_base }}/container_storage/containerd_config.toml.j2
+inventory_container_storage_docker_root: /data1/docker
+inventory_container_storage_containerd_root: /data1/containerd
+
+inventory_rke2_node_registries_template: >-
+  {{ inventory_files_base }}/rke2_node/registries.yaml.j2
+inventory_rke2_node_inotify_template: >-
+  {{ inventory_files_base }}/rke2_node/inotify_sysctl.conf.j2
+
+inventory_time_sync_makestep: "1.0 3"
+inventory_time_sync_local_stratum: 0
+inventory_time_sync_allow_networks: []
+inventory_time_sync_template: >-
+  {{ inventory_files_base }}/time_sync/chrony.conf.j2
+
 inventory_kubewk_control_host: kubecp01
 
 inventory_cluster_services_ipa_host: core01
@@ -69,3 +94,14 @@ inventory_rke2_node_registry_mirrors:
 # nothing. Overridable in case the topology changes.
 kubecp_serial: 1
 kubewk_serial: 1
+
+# kube_cli_node content values and template paths, shared by kubecp and
+# kubewk which both link the node CLI set.
+inventory_kube_cli_node_alias: k
+inventory_kube_cli_node_containerd_sock: >-
+  unix:///run/k3s/containerd/containerd.sock
+inventory_kube_cli_node_kubeconfig: /etc/rancher/rke2/rke2.yaml
+inventory_kube_cli_node_crictl_template: >-
+  {{ inventory_files_base }}/kube_cli_node/crictl.yaml.j2
+inventory_kube_cli_node_cli_template: >-
+  {{ inventory_files_base }}/kube_cli_node/rke2-cli.sh.j2

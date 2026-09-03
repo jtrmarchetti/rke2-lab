@@ -18,8 +18,13 @@
         base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
         base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
         base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
-        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
         base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_split_dns_interface: >-
+          {{ inventory_base_host_split_dns_interface }}
+        base_host_split_dns_servers: >-
+          {{ inventory_base_host_split_dns_servers }}
+        base_host_split_dns_template: >-
+          {{ inventory_base_host_split_dns_template }}
         base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
       ansible.builtin.include_role:
         name: base_host
@@ -31,11 +36,9 @@
       tags:
         - time_sync
       vars:
-        time_sync_allow_networks: "{{ inventory_time_sync_allow_networks }}"
         time_sync_enabled: "{{ inventory_time_sync_enabled }}"
-        time_sync_local_stratum: "{{ inventory_time_sync_local_stratum }}"
-        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
         time_sync_sources: "{{ inventory_time_sync_sources }}"
+        time_sync_template: "{{ inventory_time_sync_template }}"
       ansible.builtin.include_role:
         name: time_sync
         apply:
@@ -57,6 +60,14 @@
       vars:
         container_storage_graceful_compose_dirs:
           - "{{ inventory_freeipa_server_compose_dir }}"
+        container_storage_containerd_root: >-
+          {{ inventory_container_storage_containerd_root }}
+        container_storage_docker_root: >-
+          {{ inventory_container_storage_docker_root }}
+        container_storage_docker_template: >-
+          {{ inventory_container_storage_docker_template }}
+        container_storage_containerd_template: >-
+          {{ inventory_container_storage_containerd_template }}
       ansible.builtin.include_role:
         name: container_storage
         apply:
@@ -81,8 +92,6 @@
           {{ inventory_freeipa_server_dns_forward_zones }}
         freeipa_server_dns_records: "{{ inventory_freeipa_server_dns_records }}"
         freeipa_server_dns_zones: "{{ inventory_freeipa_server_dns_zones }}"
-        freeipa_server_dnssec_validation: >-
-          {{ inventory_freeipa_server_dnssec_validation }}
         freeipa_server_domain: "{{ inventory_freeipa_server_domain }}"
         freeipa_server_enabled: "{{ inventory_freeipa_server_enabled }}"
         freeipa_server_forwarders_enabled: >-
@@ -93,6 +102,13 @@
         freeipa_server_ip_address: "{{ inventory_freeipa_server_ip_address }}"
         freeipa_server_realm: "{{ inventory_freeipa_server_realm }}"
         freeipa_server_setup_dns: "{{ inventory_freeipa_server_setup_dns }}"
+        freeipa_server_resolv_template: >-
+          {{ inventory_freeipa_server_resolv_template }}
+        freeipa_server_env_template: "{{ inventory_freeipa_server_env_template }}"
+        freeipa_server_compose_template: >-
+          {{ inventory_freeipa_server_compose_template }}
+        freeipa_server_named_options_template: >-
+          {{ inventory_freeipa_server_named_options_template }}
       ansible.builtin.include_role:
         name: freeipa_server
         apply:
@@ -110,8 +126,10 @@
       vars:
         split_dns_enabled: "{{ inventory_split_dns_enabled }}"
         split_dns_forward_zones: "{{ inventory_split_dns_forward_zones }}"
-        split_dns_search_domain: "{{ inventory_split_dns_search_domain }}"
-        split_dns_upstream_servers: "{{ inventory_split_dns_upstream_servers }}"
+        split_dns_config_template: >-
+          {{ inventory_files_base }}/split_dns/split_dns.conf.j2
+        split_dns_resolver_template: >-
+          {{ inventory_files_base }}/split_dns/resolv.conf.j2
       ansible.builtin.include_role:
         name: split_dns
         apply:

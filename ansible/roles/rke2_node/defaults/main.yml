@@ -17,7 +17,9 @@ rke2_node_ca_system_path: null
 rke2_node_ca_rke2_path: null
 
 rke2_node_gitlab_url: null
-rke2_node_registry_host: null
+
+rke2_node_registries_template: null
+rke2_node_inotify_template: null
 
 rke2_node_package_project: rke2/packages
 rke2_node_package_name: rke2

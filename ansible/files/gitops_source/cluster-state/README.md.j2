@@ -1,6 +1,6 @@
 Declarative state for the RKE2 cluster, reconciled by Flux from the internal
 GitLab. Nothing here reaches the internet: every image resolves to
-`{{ gitops_source_registry_host }}` through the containerd rewrite configured
+`{{ inventory_gitops_source_registry_host }}` through the containerd rewrite configured
 on each node, so manifests keep upstream image names and stay portable.
 
 Every file below — including this one — is rendered by the `gitops_source`

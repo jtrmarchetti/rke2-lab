@@ -21,27 +21,16 @@ argument_specs:
         elements: str
         required: false
         description: Subdirectories created under the document root.
-      artifact_host_listen_port:
-        type: int
-        required: false
-        default: 80
-        description: TCP port the artifact vhost answers on.
-      artifact_host_server_name:
+      artifact_host_hardening_template:
+        description: >-
+          Path to the Apache hardening conf template, under the repo files tree.
         type: str
         required: false
-        description: ServerName for the artifact vhost.
-      artifact_host_allowed_networks:
-        type: list
-        elements: str
-        required: false
+      artifact_host_vhost_template:
         description: >-
-          Client networks permitted to read artifacts. Any other source
-          address is refused.
-      artifact_host_directory_index_enabled:
-        type: bool
+          Path to the Apache vhost conf template, under the repo files tree.
+        type: str
         required: false
-        default: true
-        description: Whether browsable directory listings are generated.
       artifact_host_owner:
         type: str
         required: false

@@ -2,7 +2,7 @@
 
 - name: shell | Write the cluster environment
   ansible.builtin.template:
-    src: "{{ _var_kube_cli_controller_files_dir }}/kube-env.sh.j2"
+    src: "{{ kube_cli_controller_shell_template }}"
     dest: "{{ kube_cli_controller_config_dir }}/kube-env.sh"
     mode: "0644"
 

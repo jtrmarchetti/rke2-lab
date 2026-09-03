@@ -46,30 +46,25 @@
       vars:
         gitlab_compose_dir: "{{ inventory_gitlab_compose_dir }}"
         gitlab_container_image: "{{ inventory_gitlab_container_image }}"
+        gitlab_container_name: "{{ inventory_gitlab_container_name }}"
         gitlab_data_root: "{{ inventory_gitlab_data_root }}"
         gitlab_enabled: "{{ inventory_gitlab_enabled }}"
         gitlab_external_hostname: "{{ inventory_gitlab_external_hostname }}"
         gitlab_external_url: "{{ inventory_gitlab_external_url }}"
         gitlab_https_port: "{{ inventory_gitlab_https_port }}"
         gitlab_image_tarball_url: "{{ inventory_gitlab_image_tarball_url }}"
-        gitlab_letsencrypt_enabled: "{{ inventory_gitlab_letsencrypt_enabled }}"
-        gitlab_monitoring_allowed_networks: >-
-          {{ inventory_gitlab_monitoring_allowed_networks }}
+        gitlab_env_template: "{{ inventory_gitlab_env_template }}"
+        gitlab_compose_template: "{{ inventory_gitlab_compose_template }}"
         gitlab_oidc_ca_source_file: >-
           {{ inventory_gitlab_oidc_ca_source_file }}
-        gitlab_oidc_client_id: "{{ inventory_gitlab_oidc_client_id }}"
         gitlab_oidc_client_secret: "{{ inventory_gitlab_oidc_client_secret }}"
         gitlab_oidc_enabled: "{{ inventory_gitlab_oidc_enabled }}"
         gitlab_oidc_issuer: "{{ inventory_gitlab_oidc_issuer }}"
-        gitlab_oidc_label: "{{ inventory_gitlab_oidc_label }}"
-        gitlab_package_registry_enabled: >-
-          {{ inventory_gitlab_package_registry_enabled }}
         gitlab_registry_enabled: "{{ inventory_gitlab_registry_enabled }}"
         gitlab_registry_external_url: >-
           {{ inventory_gitlab_registry_external_url }}
         gitlab_registry_hostname: "{{ inventory_gitlab_registry_hostname }}"
         gitlab_root_password: "{{ inventory_gitlab_root_password }}"
-        gitlab_ssh_port: "{{ inventory_gitlab_ssh_port }}"
         gitlab_ssl_source_dir: "{{ inventory_gitlab_ssl_source_dir }}"
       ansible.builtin.include_role:
         name: gitlab

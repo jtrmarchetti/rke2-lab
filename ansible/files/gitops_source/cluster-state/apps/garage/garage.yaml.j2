@@ -22,11 +22,11 @@ data:
     [s3_api]
     s3_region = "dev-lo"
     api_bind_addr = "[::]:3900"
-    root_domain = ".s3.{{ gitops_source_cluster_domain }}"
+    root_domain = ".s3.{{ inventory_gitops_source_cluster_domain }}"
 
     [s3_web]
     bind_addr = "[::]:3902"
-    root_domain = ".web.{{ gitops_source_cluster_domain }}"
+    root_domain = ".web.{{ inventory_gitops_source_cluster_domain }}"
     index = "index.html"
 
     [admin]
@@ -145,10 +145,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - s3.{{ gitops_source_cluster_domain }}
+        - s3.{{ inventory_gitops_source_cluster_domain }}
       secretName: garage-s3-tls
   rules:
-    - host: s3.{{ gitops_source_cluster_domain }}
+    - host: s3.{{ inventory_gitops_source_cluster_domain }}
       http:
         paths:
           - path: /

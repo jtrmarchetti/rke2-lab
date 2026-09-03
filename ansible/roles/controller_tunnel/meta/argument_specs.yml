@@ -37,15 +37,6 @@ argument_specs:
         required: false
         default: wg0
         description: The WireGuard interface name, and the wg-quick unit instance.
-      controller_tunnel_address:
-        type: str
-        required: false
-        description: This host's address inside the tunnel, in CIDR form.
-      controller_tunnel_listen_port:
-        type: int
-        required: false
-        default: 51821
-        description: The UDP port this end listens on.
       controller_tunnel_private_key:
         type: str
         required: false
@@ -65,29 +56,11 @@ argument_specs:
           The gateway's public key stated directly, for a controller that does
           not hold the gateway's private key. When both are supplied the
           derived value is used and a mismatch is a hard failure.
-      controller_tunnel_peer_endpoint:
+      controller_tunnel_wg_template:
+        description: >-
+          Path to the controller WireGuard interface template, under the repo files tree.
         type: str
         required: false
-        description: The gateway's host and UDP port, as host:port.
-      controller_tunnel_peer_allowed_ips:
-        type: list
-        elements: str
-        required: false
-        description: >-
-          The addresses reached through the gateway. wg-quick routes these,
-          which is what makes the internal network reachable from here.
-      controller_tunnel_peer_persistent_keepalive:
-        type: int
-        required: false
-        default: 25
-        description: Keepalive interval in seconds.
-      controller_tunnel_route_subnets:
-        type: list
-        elements: str
-        required: false
-        description: >-
-          Subnets given an explicit PostUp route down the interface, in
-          addition to those wg-quick derives from the allowed addresses.
       controller_tunnel_validate_address:
         type: str
         required: false

@@ -33,7 +33,7 @@
   register: _reg_longhorn_node_multipath
   notify: Restart multipathd
   ansible.builtin.template:
-    src: "{{ _var_longhorn_node_files_dir }}/longhorn-blacklist.conf.j2"
+    src: "{{ longhorn_node_blacklist_template }}"
     dest: "{{ longhorn_node_multipath_conf }}"
     owner: root
     group: root

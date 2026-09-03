@@ -1,13 +1,13 @@
 network:
   version: 2
   ethernets:
-    {{ base_host_split_dns_interface }}:
+    {{ inventory_base_host_split_dns_interface }}:
       nameservers:
         addresses:
-        {% for _item_base_host_server in base_host_split_dns_servers %}
+        {% for _item_base_host_server in inventory_base_host_split_dns_servers %}
           - {{ _item_base_host_server }}
         {% endfor %}
         search:
-        {% for _item_base_host_domain in base_host_split_dns_domains %}
+        {% for _item_base_host_domain in inventory_base_host_split_dns_domains %}
           - {{ _item_base_host_domain }}
         {% endfor %}

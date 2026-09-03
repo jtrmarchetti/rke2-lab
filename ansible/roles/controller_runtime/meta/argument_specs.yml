@@ -30,8 +30,13 @@ argument_specs:
       controller_runtime_venv:
         type: str
         description:
-          - Path to the Ansible virtual environment. Reads RKE2LAB_VENV, the
-            same variable the bootstrap script honours.
+          - Path to the Ansible virtual environment. The default reads
+            RKE2LAB_VENV, the same variable the bootstrap script honours,
+            but controller_bootstrap.yml passes
+            inventory_controller_runtime_venv, which overrides it. If the
+            bootstrap script is pointed at a different location via
+            RKE2LAB_VENV, the rendered controller-env.sh follows the
+            inventory value, not the env var.
       controller_runtime_venv_command:
         type: str
         default: /usr/bin/python3 -m venv
@@ -92,6 +97,11 @@ argument_specs:
         default: infra/pulumi/requirements.txt
         description:
           - The project's pinned requirements, relative to the repository root.
+      controller_runtime_env_template:
+        description: >-
+          Path to the controller environment shell-script template, under the repo files tree.
+        type: str
+        required: false
       controller_runtime_shell_enabled:
         type: bool
         default: true

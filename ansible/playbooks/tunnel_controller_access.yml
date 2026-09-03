@@ -16,25 +16,16 @@
       tags:
         - controller_tunnel
       vars:
-        controller_tunnel_address: "{{ inventory_controller_wireguard_address }}"
         controller_tunnel_enabled: >-
           {{ inventory_controller_wireguard_enabled }}
         controller_tunnel_interface: >-
           {{ inventory_controller_wireguard_interface }}
-        controller_tunnel_listen_port: >-
-          {{ inventory_controller_wireguard_listen_port }}
-        controller_tunnel_peer_allowed_ips: >-
-          {{ inventory_controller_wireguard_peer_allowed_ips }}
-        controller_tunnel_peer_endpoint: >-
-          {{ inventory_controller_wireguard_peer_endpoint }}
-        controller_tunnel_peer_persistent_keepalive: >-
-          {{ inventory_controller_wireguard_peer_persistent_keepalive }}
         controller_tunnel_peer_private_key: >-
           {{ inventory_controller_wireguard_peer_private_key }}
         controller_tunnel_private_key: >-
           {{ inventory_controller_wireguard_private_key }}
-        controller_tunnel_route_subnets: >-
-          {{ inventory_controller_wireguard_route_subnets }}
+        controller_tunnel_wg_template: >-
+          {{ inventory_controller_tunnel_wg_template }}
 
         controller_tunnel_validate_enabled: false
       ansible.builtin.include_role:
@@ -52,33 +43,16 @@
       tags:
         - wireguard_gateway
       vars:
-        wireguard_gateway_address: "{{ inventory_wireguard_gateway_address }}"
         wireguard_gateway_enabled: "{{ inventory_wireguard_gateway_enabled }}"
         wireguard_gateway_interface: "{{ inventory_wireguard_gateway_interface }}"
-        wireguard_gateway_internal_subnet: >-
-          {{ inventory_wireguard_gateway_internal_subnet }}
         wireguard_gateway_ip_forward_enabled: >-
           {{ inventory_wireguard_gateway_ip_forward_enabled }}
-        wireguard_gateway_listen_port: >-
-          {{ inventory_wireguard_gateway_listen_port }}
-        wireguard_gateway_manage_firewall_nat: >-
-          {{ inventory_wireguard_gateway_manage_firewall_nat }}
-        wireguard_gateway_nat_out_interface: >-
-          {{ inventory_wireguard_gateway_nat_out_interface }}
-        wireguard_gateway_nat_source_cidr: >-
-          {{ inventory_wireguard_gateway_nat_source_cidr }}
-        wireguard_gateway_peer_allowed_ips: >-
-          {{ inventory_wireguard_gateway_peer_allowed_ips }}
-        wireguard_gateway_peer_endpoint: >-
-          {{ inventory_wireguard_gateway_peer_endpoint }}
-        wireguard_gateway_peer_persistent_keepalive: >-
-          {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
-
         wireguard_gateway_peer_public_key: >-
           {{ hostvars[inventory_wireguard_gateway_controller_host]
              ['controller_tunnel_local_public_key'] }}
         wireguard_gateway_private_key: >-
           {{ inventory_wireguard_gateway_private_key }}
+        wireguard_gateway_template: "{{ inventory_wireguard_gateway_template }}"
       ansible.builtin.include_role:
         name: wireguard_gateway
         apply:

@@ -11,6 +11,5 @@ kube_cli_node_binaries:
 
 kube_cli_node_kubeconfig: /etc/rancher/rke2/rke2.yaml
 
-kube_cli_node_containerd_sock: unix:///run/k3s/containerd/containerd.sock
-
-kube_cli_node_alias: k
+kube_cli_node_crictl_template: null
+kube_cli_node_cli_template: null

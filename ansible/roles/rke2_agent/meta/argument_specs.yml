@@ -23,27 +23,9 @@ argument_specs:
         type: str
         required: true
         description: This node's address on the internal network.
-      rke2_agent_server_address:
-        type: str
-        description:
-          - The address the agent registers against, held by kube-vip. Seeds
-            the client-side load balancer and is not depended on afterwards.
-      rke2_agent_supervisor_port:
-        type: int
-        default: 9345
-        description: Port new nodes register against.
-      rke2_agent_data_dir:
-        type: str
-        default: /data1/rancher/rke2
-        description:
-          - Where RKE2 keeps everything, containerd's image store included.
-            Must equal rke2_node_data_dir.
-      rke2_agent_expose_metrics:
-        type: bool
-        default: true
-        description:
-          - Binds kube-proxy's metrics off 127.0.0.1 so the chart's kube-proxy
-            ServiceMonitor has an endpoint on this node.
+      rke2_agent_config_template:
+        type: path
+        description: Path to the config.yaml template, from inventory.
       rke2_agent_control_host:
         type: str
         required: true

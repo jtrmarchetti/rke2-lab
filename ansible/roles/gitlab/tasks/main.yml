@@ -145,7 +145,7 @@
   when: (gitlab_enabled | bool)
   no_log: "{{ gitlab_no_log | bool }}"
   ansible.builtin.template:
-    src: "{{ _var_gitlab_files_dir }}/gitlab.env.j2"
+    src: "{{ gitlab_env_template }}"
     dest: "{{ _var_gitlab_env_file }}"
     owner: root
     group: root
@@ -154,7 +154,7 @@
 - name: main | Ensure the GitLab compose file is present
   when: (gitlab_enabled | bool)
   ansible.builtin.template:
-    src: "{{ _var_gitlab_files_dir }}/docker-compose.gitlab.yml.j2"
+    src: "{{ gitlab_compose_template }}"
     dest: "{{ _var_gitlab_compose_file }}"
     owner: root
     group: root

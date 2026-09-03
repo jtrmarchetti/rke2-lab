@@ -8,7 +8,7 @@
 
 - name: shell | Write the automation environment
   ansible.builtin.template:
-    src: "{{ _var_controller_runtime_files_dir }}/controller-env.sh.j2"
+    src: "{{ controller_runtime_env_template }}"
     dest: "{{ controller_runtime_env_file | trim }}"
     mode: "0644"
 

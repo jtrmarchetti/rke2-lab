@@ -10,6 +10,13 @@ flux_ready_enabled: true
 flux_ready_retries: 100
 flux_ready_delay: 30
 
+# Whether a spent survey budget fails the build. The gate runs the role
+# twice around a mid-gate strike window: a non-fatal pass that absorbs
+# the survey window's slow-convergence budget so a control plane wedge
+# striking inside the window does not abort the build, then the fatal
+# pass that proves the Ready set after the strike window healed it.
+flux_ready_fatal: true
+
 # Per-release wait on the resume inside the gate's reset step. A resume that
 # runs out its wait leaves the reconciliation running in the background and
 # the next poll picks it up, so this only bounds one pass, not the gate.

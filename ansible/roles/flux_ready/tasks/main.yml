@@ -23,6 +23,15 @@
   until: (_reg_flux_ready_survey.rc | default(1)) == 0
   retries: "{{ flux_ready_retries }}"
   delay: "{{ flux_ready_delay }}"
+  # The fatal switch: the gate runs this role twice around a mid-gate
+  # strike window. The first pass runs with flux_ready_fatal=false, so a
+  # spent budget is reported but does not abort the build; the strike
+  # window then heals a control plane wedge that struck inside the survey
+  # window, and the fatal pass proves the Ready set afterwards.
+  # A non-zero rc never marks the pass changed on its own.
+  failed_when: >-
+    ((_reg_flux_ready_survey.rc | default(1)) != 0)
+    and (flux_ready_fatal | bool)
   ansible.builtin.shell:
     executable: /bin/bash
     cmd: |

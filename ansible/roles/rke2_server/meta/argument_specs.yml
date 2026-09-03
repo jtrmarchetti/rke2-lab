@@ -28,10 +28,6 @@ argument_specs:
       rke2_server_api_name:
         type: str
         description: The name resolving to the virtual address.
-      rke2_server_supervisor_port:
-        type: int
-        default: 9345
-        description: Port new nodes register against.
       rke2_server_api_port:
         type: int
         default: 6443
@@ -52,87 +48,20 @@ argument_specs:
         description:
           - Every name and address the API certificate must cover, so adding a
             path later is not a certificate reissue and a rolling restart.
-      rke2_server_cni:
-        type: str
-        default: cilium
-        description: The packaged CNI RKE2 deploys.
-      rke2_server_disable:
-        type: list
-        elements: str
-        description: Packaged components to leave undeployed.
       rke2_server_ingress_controller:
         type: list
         elements: str
         description:
           - Ingress controllers RKE2 deploys. One of none, ingress-nginx or
             traefik; the first value becomes the default ingress class.
-      rke2_server_ingress_node_selector:
-        type: str
-        default: node-role.kubernetes.io/worker
-        description:
-          - Node label key the packaged ingress chart is pinned to, supplied
-            through a HelmChartConfig on the bootstrap server.
-      rke2_server_node_taints:
-        type: list
-        elements: str
-        description:
-          - Taints the kubelet registers with. Applies at first registration
-            only, so this affects a rebuilt node rather than a running one.
       rke2_server_data_dir:
         type: str
         default: /data1/rancher/rke2
         description: RKE2 data directory. Must match rke2_node_data_dir.
-      rke2_server_expose_metrics:
-        type: bool
-        default: true
-        description:
-          - Binds etcd, the scheduler, the controller manager and kube-proxy
-            metrics off 127.0.0.1 so kube-prometheus-stack can scrape them.
-            Left at RKE2's default the chart reports the whole control plane
-            down on a cluster that is healthy.
-      rke2_server_etcd_snapshot_schedule:
-        type: str
-        default: "0 */6 * * *"
-        description: Cron schedule for automatic etcd snapshots.
-      rke2_server_etcd_snapshot_retention:
-        type: int
-        default: 10
-        description: How many automatic snapshots to keep.
-      rke2_server_etcd_args:
-        type: list
-        elements: str
-        description:
-          - Extra arguments passed to etcd, as key=value strings. Used here to
-            raise the heartbeat and election timeouts so etcd tolerates slow
-            storage instead of mistaking a slow commit for a dead leader, and to
-            cap the revision history with periodic auto-compaction so the WAL
-            and keyspace stay bounded on the shared PVE LVM.
       rke2_server_kube_vip_enabled:
         type: bool
         default: true
         description: Whether to deploy kube-vip for the virtual address.
-      rke2_server_kube_vip_image:
-        type: str
-        default: ghcr.io/kube-vip/kube-vip:v1.2.3
-        description:
-          - Upstream image reference. The rewrite to the GitLab path happens
-            inside containerd, so the upstream name is what belongs here.
-      rke2_server_kube_vip_interface:
-        type: str
-        default: eth0
-        description: Interface kube-vip advertises the address on.
-      rke2_server_kube_vip_lease_duration:
-        type: int
-        default: 15
-        description: Leader election lease duration, in seconds.
-      rke2_server_kube_vip_renew_deadline:
-        type: int
-        default: 10
-        description: Leader election renewal deadline, in seconds.
-      rke2_server_kube_vip_retry_period:
-        type: int
-        default: 2
-        description: Leader election retry period, in seconds.
       rke2_server_ready_retries:
         type: int
         default: 90
@@ -147,8 +76,12 @@ argument_specs:
         description:
           - Where to write a kubeconfig on the controller, rewritten to reach
             the cluster through the virtual address. Empty disables the copy.
-      rke2_server_ingress_address:
-        type: str
-        description:
-          - LoadBalancer address requested for the ingress controller. The
-            cluster's DNS answers every ingress hostname with it.
+      rke2_server_config_template:
+        type: path
+        description: Path to the config.yaml template, from inventory.
+      rke2_server_traefik_template:
+        type: path
+        description: Path to the Traefik HelmChartConfig template, from inventory.
+      rke2_server_kube_vip_template:
+        type: path
+        description: Path to the kube-vip manifest template, from inventory.

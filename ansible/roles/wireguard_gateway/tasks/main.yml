@@ -51,7 +51,7 @@
   notify:
     - Restart WireGuard interface
   ansible.builtin.template:
-    src: "{{ _var_wireguard_gateway_files_dir }}/wg_interface.conf.j2"
+    src: "{{ wireguard_gateway_template }}"
     dest: >-
       {{ _var_wireguard_gateway_config_path }}/{{ wireguard_gateway_interface }}.conf
     mode: "0600"

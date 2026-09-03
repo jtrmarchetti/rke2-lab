@@ -2,83 +2,83 @@
 ---
 services:
   gitlab:
-    image: {{ gitlab_container_image }}
-    container_name: {{ gitlab_container_name }}
+    image: {{ inventory_gitlab_container_image }}
+    container_name: {{ inventory_gitlab_container_name }}
     restart: unless-stopped
 
-    hostname: {{ gitlab_external_hostname }}
+    hostname: {{ inventory_gitlab_external_hostname }}
 
     stop_grace_period: 5m
 
-    shm_size: '{{ gitlab_shm_size }}'
+    shm_size: '{{ inventory_gitlab_shm_size }}'
 
     env_file:
       - {{ _var_gitlab_env_file }}
 
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url '{{ gitlab_external_url }}'
-{% if gitlab_registry_enabled | bool %}
-        registry_external_url '{{ gitlab_registry_external_url }}'
+        external_url '{{ inventory_gitlab_external_url }}'
+{% if inventory_gitlab_registry_enabled | bool %}
+        registry_external_url '{{ inventory_gitlab_registry_external_url }}'
         gitlab_rails['registry_enabled'] = true
 {% else %}
         gitlab_rails['registry_enabled'] = false
 {% endif %}
 
-        letsencrypt['enable'] = {{ gitlab_letsencrypt_enabled | bool | lower }}
-        nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.crt"
-        nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_external_hostname }}.key"
-{% if gitlab_registry_enabled | bool %}
-        registry_nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_registry_hostname }}.crt"
-        registry_nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ gitlab_registry_hostname }}.key"
+        letsencrypt['enable'] = {{ inventory_gitlab_letsencrypt_enabled | bool | lower }}
+        nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_external_hostname }}.crt"
+        nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_external_hostname }}.key"
+{% if inventory_gitlab_registry_enabled | bool %}
+        registry_nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_registry_hostname }}.crt"
+        registry_nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_registry_hostname }}.key"
 {% endif %}
 
         nginx['redirect_http_to_https'] = false
         nginx['listen_port'] = 443
         nginx['listen_https'] = true
 
-        gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
+        gitlab_rails['gitlab_shell_ssh_port'] = {{ inventory_gitlab_ssh_port }}
 
         gitlab_rails['gitlab_email_enabled'] = false
 
-        puma['worker_processes'] = {{ gitlab_puma_worker_processes }}
-        sidekiq['concurrency'] = {{ gitlab_sidekiq_concurrency }}
-        prometheus_monitoring['enable'] = {{ gitlab_monitoring_enabled | bool | lower }}
-        gitlab_rails['monitoring_whitelist'] = {{ gitlab_monitoring_allowed_networks | to_json }}
-        gitlab_kas['enable'] = {{ gitlab_kas_enabled | bool | lower }}
+        puma['worker_processes'] = {{ inventory_gitlab_puma_worker_processes }}
+        sidekiq['concurrency'] = {{ inventory_gitlab_sidekiq_concurrency }}
+        prometheus_monitoring['enable'] = {{ inventory_gitlab_monitoring_enabled | bool | lower }}
+        gitlab_rails['monitoring_whitelist'] = {{ inventory_gitlab_monitoring_allowed_networks | to_json }}
+        gitlab_kas['enable'] = {{ inventory_gitlab_kas_enabled | bool | lower }}
         gitlab_rails['env'] = { 'MALLOC_CONF' => 'dirty_decay_ms:1000,muzzy_decay_ms:1000' }
-        gitlab_rails['packages_enabled'] = {{ gitlab_package_registry_enabled | bool | lower }}
+        gitlab_rails['packages_enabled'] = {{ inventory_gitlab_package_registry_enabled | bool | lower }}
 
         gitlab_rails['backup_path'] = '/var/opt/gitlab/backups'
-{% if gitlab_oidc_enabled | bool %}
+{% if inventory_gitlab_oidc_enabled | bool %}
 
         gitlab_rails['omniauth_enabled'] = true
         gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
-        gitlab_rails['omniauth_block_auto_created_users'] = {{ gitlab_oidc_block_auto_created_users | bool | lower }}
+        gitlab_rails['omniauth_block_auto_created_users'] = {{ inventory_gitlab_oidc_block_auto_created_users | bool | lower }}
 
         gitlab_rails['omniauth_auto_link_user'] = ['openid_connect']
-{% if gitlab_oidc_auto_sign_in | bool %}
+{% if inventory_gitlab_oidc_auto_sign_in | bool %}
         gitlab_rails['omniauth_auto_sign_in_with_provider'] = 'openid_connect'
 {% endif %}
         gitlab_rails['omniauth_providers'] = [
           {
             name: 'openid_connect',
-            label: '{{ gitlab_oidc_label }}',
+            label: '{{ inventory_gitlab_oidc_label }}',
             args: {
               name: 'openid_connect',
               scope: ['openid', 'profile', 'email'],
 
               response_type: 'code',
-              issuer: '{{ gitlab_oidc_issuer }}',
+              issuer: '{{ inventory_gitlab_oidc_issuer }}',
               discovery: true,
               client_auth_method: 'basic',
               uid_field: 'preferred_username',
 
               pkce: true,
               client_options: {
-                identifier: '{{ gitlab_oidc_client_id }}',
-                secret: '{{ gitlab_oidc_client_secret }}',
-                redirect_uri: '{{ gitlab_external_url }}/users/auth/openid_connect/callback'
+                identifier: '{{ inventory_gitlab_oidc_client_id }}',
+                secret: '{{ inventory_gitlab_oidc_client_secret }}',
+                redirect_uri: '{{ inventory_gitlab_external_url }}/users/auth/openid_connect/callback'
               }
             }
           }
@@ -89,11 +89,11 @@ services:
 {% endif %}
 
     ports:
-      - "{{ gitlab_https_port }}:443"
-      - "{{ gitlab_ssh_port }}:22"
+      - "{{ inventory_gitlab_https_port }}:443"
+      - "{{ inventory_gitlab_ssh_port }}:22"
 
     volumes:
-      - {{ gitlab_data_root }}/config:/etc/gitlab
-      - {{ gitlab_data_root }}/logs:/var/log/gitlab
-      - {{ gitlab_data_root }}/data:/var/opt/gitlab
-      - {{ gitlab_ssl_source_dir }}:{{ _var_gitlab_container_ssl_dir }}:ro
+      - {{ inventory_gitlab_data_root }}/config:/etc/gitlab
+      - {{ inventory_gitlab_data_root }}/logs:/var/log/gitlab
+      - {{ inventory_gitlab_data_root }}/data:/var/opt/gitlab
+      - {{ inventory_gitlab_ssl_source_dir }}:{{ _var_gitlab_container_ssl_dir }}:ro

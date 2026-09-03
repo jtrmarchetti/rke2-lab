@@ -43,7 +43,7 @@
 - name: main | Configure crictl to find containerd
   when: (kube_cli_node_enabled | bool)
   ansible.builtin.template:
-    src: "{{ _var_kube_cli_node_files_dir }}/crictl.yaml.j2"
+    src: "{{ kube_cli_node_crictl_template }}"
     dest: /etc/crictl.yaml
     owner: root
     group: root
@@ -52,7 +52,7 @@
 - name: main | Install the interactive shell environment
   when: (kube_cli_node_enabled | bool)
   ansible.builtin.template:
-    src: "{{ _var_kube_cli_node_files_dir }}/rke2-cli.sh.j2"
+    src: "{{ kube_cli_node_cli_template }}"
     dest: /etc/profile.d/rke2-cli.sh
     owner: root
     group: root

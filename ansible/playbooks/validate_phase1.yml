@@ -96,7 +96,8 @@
         loop_var: _item_validate_artifact
         label: "{{ _item_validate_artifact['dest'] }}"
       ansible.builtin.stat:
-        path: "{{ inventory_artifact_host_document_root }}/{{ _item_validate_artifact['dest'] }}"
+        path: >-
+          {{ inventory_artifact_host_document_root }}/{{ _item_validate_artifact['dest'] }}
         get_checksum: false
 
     - name: validate_phase1 | Assert every manifest artifact is present
@@ -168,7 +169,7 @@
       failed_when: false
       register: _reg_validate_internal_resolver
       ansible.builtin.wait_for:
-        host: "{{ base_host_split_dns_servers | first }}"
+        host: "{{ inventory_base_host_split_dns_servers | first }}"
         port: 53
         timeout: 5
 
@@ -181,7 +182,7 @@
       register: _reg_validate_internal_dns
       ansible.builtin.command:
         cmd: >-
-          getent hosts {{ base_host_split_dns_domains | first }}
+          getent hosts {{ inventory_base_host_split_dns_domains | first }}
 
 - name: Validate controller tunnel and artifact access
   hosts: controller

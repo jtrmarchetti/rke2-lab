@@ -70,6 +70,39 @@ inventory_rke2_server_node_taints:
 inventory_rke2_server_kube_vip_enabled: true
 inventory_rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.3
 inventory_rke2_server_kube_vip_interface: eth0
+inventory_rke2_server_kube_vip_lease_duration: 15
+inventory_rke2_server_kube_vip_renew_deadline: 10
+inventory_rke2_server_kube_vip_retry_period: 2
+
+inventory_rke2_server_ingress_node_selector: node-role.kubernetes.io/worker
+
+inventory_rke2_server_etcd_snapshot_schedule: "0 */6 * * *"
+inventory_rke2_server_etcd_snapshot_retention: 10
+
+# etcd is run against the shared PVE LVM, whose slow IO has wedged the
+# leader 6 times (2026-08-24..31): overloaded-leader quorum loss under the
+# alloy/loki/kps read burst. RKE2's generated etcd config has no compaction
+# tuning at all, so the keyspace revision history and the WAL grow without
+# bound, amplifying every read burst into a leader stall. Periodic
+# auto-compaction bounds the history etcd has to serve. No defrag-interval:
+# defrag rewrites the whole ~220M db file on the slowest storage in the
+# topology, and a 30m recurring whole-file rewrite is itself a stall storm
+# (g2_cold3 strike window 00:36:44 sat 4m after defrag #2's ~00:32:40 fire;
+# the WAL stays pinned ~184M by the 6h snapshot schedule anyway, so there
+# is no disk-space pressure that would justify it). The heartbeat/election
+# pair keeps the cluster from mistaking a slow commit for a dead leader.
+inventory_rke2_server_etcd_args:
+  - heartbeat-interval=1000
+  - election-timeout=5000
+  - auto-compaction-mode=periodic
+  - auto-compaction-retention=30m
+
+inventory_rke2_server_config_template: >-
+  {{ inventory_files_base }}/rke2_server/config.yaml.j2
+inventory_rke2_server_traefik_template: >-
+  {{ inventory_files_base }}/rke2_server/traefik-config.yaml.j2
+inventory_rke2_server_kube_vip_template: >-
+  {{ inventory_files_base }}/rke2_server/kube-vip.yaml.j2
 
 inventory_base_host_split_dns_domains:
   - dev.lo

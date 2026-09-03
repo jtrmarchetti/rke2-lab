@@ -62,8 +62,8 @@ argument_specs:
         type: list
         elements: str
         required: false
-      base_host_split_dns_domains:
-        description: Domains routed to the internal resolvers.
-        type: list
-        elements: str
+      base_host_split_dns_template:
+        description: >-
+          Path to the split-DNS netplan drop-in template, under the repo files tree.
+        type: str
         required: false

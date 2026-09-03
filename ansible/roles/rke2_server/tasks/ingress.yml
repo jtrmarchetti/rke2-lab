@@ -10,7 +10,7 @@
 
 - name: ingress | Render the Traefik chart configuration
   ansible.builtin.template:
-    src: "{{ _var_rke2_server_files_dir }}/traefik-config.yaml.j2"
+    src: "{{ rke2_server_traefik_template }}"
     dest: "{{ rke2_server_data_dir }}/server/manifests/rke2-traefik-config.yaml"
     owner: root
     group: root

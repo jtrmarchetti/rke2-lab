@@ -54,9 +54,16 @@ argument_specs:
       rke2_node_gitlab_url:
         type: str
         description: Base URL of the GitLab instance.
-      rke2_node_registry_host:
+      rke2_node_registries_template:
+        description: >-
+          Path to the containerd registries.yaml template, under the repo files tree.
         type: str
-        description: Host name of the GitLab container registry.
+        required: false
+      rke2_node_inotify_template:
+        description: >-
+          Path to the inotify sysctl conf template, under the repo files tree.
+        type: str
+        required: false
       rke2_node_package_project:
         type: str
         default: rke2/packages

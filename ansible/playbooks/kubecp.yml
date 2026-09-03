@@ -89,8 +89,13 @@
         base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
         base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
         base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
-        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
         base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_split_dns_interface: >-
+          {{ inventory_base_host_split_dns_interface }}
+        base_host_split_dns_servers: >-
+          {{ inventory_base_host_split_dns_servers }}
+        base_host_split_dns_template: >-
+          {{ inventory_base_host_split_dns_template }}
         base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
       ansible.builtin.include_role:
         name: base_host
@@ -118,8 +123,8 @@
         - time_sync
       vars:
         time_sync_enabled: "{{ inventory_time_sync_enabled }}"
-        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
         time_sync_sources: "{{ inventory_time_sync_sources }}"
+        time_sync_template: "{{ inventory_time_sync_template }}"
       ansible.builtin.include_role:
         name: time_sync
         apply:
@@ -145,8 +150,10 @@
         rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
         rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
         rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_inotify_template: "{{ inventory_rke2_node_inotify_template }}"
         rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
-        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registries_template: >-
+          {{ inventory_rke2_node_registries_template }}
         rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
         rke2_node_registry_username: >-
           {{ (_reg_kubecp_deploy_token['content'] | b64decode
@@ -172,25 +179,20 @@
 
         rke2_server_bootstrap: >-
           {{ inventory_hostname == inventory_kubecp_bootstrap_host }}
-        rke2_server_cni: "{{ inventory_rke2_server_cni }}"
+        rke2_server_config_template: "{{ inventory_rke2_server_config_template }}"
         rke2_server_data_dir: "{{ inventory_rke2_server_data_dir }}"
-        rke2_server_disable: "{{ inventory_rke2_server_disable }}"
         rke2_server_enabled: "{{ inventory_rke2_server_enabled }}"
-        rke2_server_expose_metrics: >-
-          {{ inventory_rke2_server_expose_metrics }}
-        rke2_server_ingress_address: "{{ inventory_rke2_server_ingress_address }}"
         rke2_server_ingress_controller: >-
           {{ inventory_rke2_server_ingress_controller }}
         rke2_server_kube_vip_enabled: >-
           {{ inventory_rke2_server_kube_vip_enabled }}
-        rke2_server_kube_vip_image: "{{ inventory_rke2_server_kube_vip_image }}"
-        rke2_server_kube_vip_interface: >-
-          {{ inventory_rke2_server_kube_vip_interface }}
+        rke2_server_kube_vip_template: >-
+          {{ inventory_rke2_server_kube_vip_template }}
         rke2_server_node_ip: "{{ inventory_rke2_server_node_ip }}"
-        rke2_server_node_taints: "{{ inventory_rke2_server_node_taints }}"
-        rke2_server_supervisor_port: "{{ inventory_rke2_server_supervisor_port }}"
         rke2_server_tls_san: "{{ inventory_rke2_server_tls_san }}"
         rke2_server_token: "{{ inventory_rke2_server_token }}"
+        rke2_server_traefik_template: >-
+          {{ inventory_rke2_server_traefik_template }}
         rke2_server_kubeconfig_dest: >-
           {{ lookup('env', 'HOME') }}/.kube/dev-lo.config
       ansible.builtin.include_role:
@@ -203,7 +205,11 @@
       tags:
         - kube_cli
       vars:
+        kube_cli_node_cli_template: "{{ inventory_kube_cli_node_cli_template }}"
+        kube_cli_node_crictl_template: >-
+          {{ inventory_kube_cli_node_crictl_template }}
         kube_cli_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
+        kube_cli_node_kubeconfig: "{{ inventory_kube_cli_node_kubeconfig }}"
       ansible.builtin.include_role:
         name: kube_cli_node
         apply:

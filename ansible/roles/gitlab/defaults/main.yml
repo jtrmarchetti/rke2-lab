@@ -7,11 +7,9 @@ gitlab_external_url: null
 gitlab_registry_external_url: null
 
 gitlab_https_port: 443
-gitlab_ssh_port: 2222
 
 gitlab_root_password: ""
 
-gitlab_letsencrypt_enabled: false
 gitlab_ssl_source_dir: null
 
 gitlab_container_name: gitlab
@@ -29,27 +27,16 @@ gitlab_runtime_packages:
   - docker.io
   - docker-compose-v2
 
-gitlab_puma_worker_processes: 2
-gitlab_sidekiq_concurrency: 10
-gitlab_monitoring_enabled: false
-gitlab_kas_enabled: false
-
-gitlab_monitoring_allowed_networks: null
-
 gitlab_oidc_enabled: false
 gitlab_oidc_issuer: null
-gitlab_oidc_client_id: gitlab
 gitlab_oidc_client_secret: ""
-gitlab_oidc_label: dev.lo single sign-on
-gitlab_oidc_auto_sign_in: false
-gitlab_oidc_block_auto_created_users: false
 
 gitlab_oidc_ca_source_file: null
 
 gitlab_registry_enabled: true
-gitlab_package_registry_enabled: true
 
-gitlab_shm_size: 256m
+gitlab_env_template: null
+gitlab_compose_template: null
 
 gitlab_ready_retries: 60
 gitlab_ready_delay: 10

@@ -38,6 +38,8 @@ controller_runtime_pulumi_project_dir: infra/pulumi
 controller_runtime_pulumi_project_venv: infra/pulumi/.venv
 controller_runtime_pulumi_project_requirements: infra/pulumi/requirements.txt
 
+controller_runtime_env_template: null
+
 controller_runtime_shell_enabled: true
 controller_runtime_config_dir: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab

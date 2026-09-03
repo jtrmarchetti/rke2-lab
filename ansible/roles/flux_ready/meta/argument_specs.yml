@@ -30,6 +30,14 @@ argument_specs:
         type: int
         default: 30
         description: Seconds between Ready polls.
+      flux_ready_fatal:
+        type: bool
+        default: true
+        description: >-
+          Whether a spent survey budget fails the build. The gate calls the
+          role twice around a mid-gate strike window: a non-fatal pass that
+          absorbs the slow-convergence budget, then the fatal pass that proves
+          the Ready set.
       flux_ready_resume_timeout:
         type: str
         default: 90s

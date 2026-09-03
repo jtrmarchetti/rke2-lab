@@ -3,7 +3,7 @@
 - name: named_options | Render the BIND options customization
   register: _reg_freeipa_server_named_options
   ansible.builtin.template:
-    src: "{{ _var_freeipa_server_files_dir }}/named-options-ext.conf.j2"
+    src: "{{ freeipa_server_named_options_template }}"
     dest: "{{ freeipa_server_named_options_path }}"
     owner: root
     group: "{{ freeipa_server_named_config_group }}"

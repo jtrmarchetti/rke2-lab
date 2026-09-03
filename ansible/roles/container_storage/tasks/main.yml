@@ -49,7 +49,7 @@
   when: (container_storage_enabled | bool)
   register: _reg_container_storage_docker_config_result
   ansible.builtin.template:
-    src: "{{ _var_container_storage_files_dir }}/daemon.json.j2"
+    src: "{{ container_storage_docker_template }}"
     dest: "{{ _var_container_storage_docker_config }}"
     owner: root
     group: root
@@ -59,7 +59,7 @@
   when: (container_storage_enabled | bool)
   register: _reg_container_storage_containerd_config_result
   ansible.builtin.template:
-    src: "{{ _var_container_storage_files_dir }}/containerd_config.toml.j2"
+    src: "{{ container_storage_containerd_template }}"
     dest: "{{ _var_container_storage_containerd_config }}"
     owner: root
     group: root

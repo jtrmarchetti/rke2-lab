@@ -1,6 +1,6 @@
 {{ ansible_managed | comment }}
 
-token: {{ rke2_server_token }}
+token: {{ inventory_rke2_server_token }}
 {# The join-pin marker written by the etcd_rejoin heal pins this node
    into the cluster join path on every re-render: a healed bootstrap
    node keeps the server address, or a wiped store restarts into
@@ -11,60 +11,60 @@ token: {{ rke2_server_token }}
 
 server: {{ _rke2_server_join_pin
           if (_rke2_server_join_pin | length > 0)
-          else ('https://' ~ rke2_server_api_address
-                ~ ':' ~ (rke2_server_supervisor_port | string)) }}
+          else ('https://' ~ inventory_rke2_server_api_address
+                ~ ':' ~ (inventory_rke2_server_supervisor_port | string)) }}
 {% else %}
 
 {% endif %}
 
-node-ip: {{ rke2_server_node_ip }}
+node-ip: {{ inventory_rke2_server_node_ip }}
 
 tls-san:
-{% for _item_rke2_server_san in rke2_server_tls_san %}
+{% for _item_rke2_server_san in inventory_rke2_server_tls_san %}
   - {{ _item_rke2_server_san }}
 {% endfor %}
 
-cni: {{ rke2_server_cni }}
+cni: {{ inventory_rke2_server_cni }}
 
-data-dir: {{ rke2_server_data_dir }}
+data-dir: {{ inventory_rke2_server_data_dir }}
 
-{% if rke2_server_disable | length > 0 %}
+{% if inventory_rke2_server_disable | length > 0 %}
 disable:
-{% for _item_rke2_server_component in rke2_server_disable %}
+{% for _item_rke2_server_component in inventory_rke2_server_disable %}
   - {{ _item_rke2_server_component }}
 {% endfor %}
 {% endif %}
 
-{% if rke2_server_ingress_controller | length > 0 %}
+{% if inventory_rke2_server_ingress_controller | length > 0 %}
 
 ingress-controller:
-{% for _item_rke2_server_controller in rke2_server_ingress_controller %}
+{% for _item_rke2_server_controller in inventory_rke2_server_ingress_controller %}
   - {{ _item_rke2_server_controller }}
 {% endfor %}
 {% endif %}
 
-{% if rke2_server_node_taints | length > 0 %}
+{% if inventory_rke2_server_node_taints | length > 0 %}
 
 node-taint:
-{% for _item_rke2_server_taint in rke2_server_node_taints %}
+{% for _item_rke2_server_taint in inventory_rke2_server_node_taints %}
   - {{ _item_rke2_server_taint }}
 {% endfor %}
 {% endif %}
 
 disable-default-registry-endpoint: true
 
-etcd-snapshot-schedule-cron: "{{ rke2_server_etcd_snapshot_schedule }}"
-etcd-snapshot-retention: {{ rke2_server_etcd_snapshot_retention }}
+etcd-snapshot-schedule-cron: "{{ inventory_rke2_server_etcd_snapshot_schedule }}"
+etcd-snapshot-retention: {{ inventory_rke2_server_etcd_snapshot_retention }}
 
-{% if rke2_server_etcd_args | length > 0 %}
+{% if inventory_rke2_server_etcd_args | length > 0 %}
 
 etcd-arg:
-{% for _item_rke2_server_etcd_arg in rke2_server_etcd_args %}
+{% for _item_rke2_server_etcd_arg in inventory_rke2_server_etcd_args %}
   - {{ _item_rke2_server_etcd_arg }}
 {% endfor %}
 {% endif %}
 
-{% if rke2_server_expose_metrics | bool %}
+{% if inventory_rke2_server_expose_metrics | bool %}
 
 etcd-expose-metrics: true
 

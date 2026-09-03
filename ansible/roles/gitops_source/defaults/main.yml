@@ -3,6 +3,8 @@ gitops_source_enabled: true
 
 gitops_source_gitlab_url: null
 
+gitops_source_templates_dir: null
+
 gitops_source_group: platform
 gitops_source_project: cluster-state
 gitops_source_branch: main
@@ -11,17 +13,7 @@ gitops_source_cluster_path: ./clusters/dev-lo
 
 gitops_source_domain: null
 
-gitops_source_cluster_domain: null
-
-gitops_source_keycloak_realm: null
-
 gitops_source_registry_host: null
-
-gitops_source_charts_repo: rke2/charts
-
-gitops_source_lb_range: null
-gitops_source_dns_address: null
-gitops_source_ingress_address: null
 
 gitops_source_domain_ca_file: null
 

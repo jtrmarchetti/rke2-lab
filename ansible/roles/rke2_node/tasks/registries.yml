@@ -8,7 +8,7 @@
   no_log: true
   register: _reg_rke2_node_registries_would_change
   ansible.builtin.template:
-    src: "{{ _var_rke2_node_files_dir }}/registries.yaml.j2"
+    src: "{{ rke2_node_registries_template }}"
     dest: /etc/rancher/rke2/registries.yaml
     owner: root
     group: root
@@ -21,7 +21,7 @@
   no_log: true
   notify: Restart RKE2
   ansible.builtin.template:
-    src: "{{ _var_rke2_node_files_dir }}/registries.yaml.j2"
+    src: "{{ rke2_node_registries_template }}"
     dest: /etc/rancher/rke2/registries.yaml
     owner: root
     group: root

@@ -30,5 +30,3 @@ _var_artifact_host_modules_disabled:
   - cgid
   - userdir
   - status
-
-_var_artifact_host_files_dir: "{{ role_path | dirname | dirname }}/files/artifact_host"

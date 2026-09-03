@@ -35,13 +35,10 @@ argument_specs:
         description:
           - Kubeconfig exported to interactive shells. Empty on an agent, which
             has none.
-      kube_cli_node_containerd_sock:
-        type: str
-        default: unix:///run/k3s/containerd/containerd.sock
-        description: containerd socket written into /etc/crictl.yaml.
-      kube_cli_node_alias:
-        type: str
-        default: k
-        description:
-          - Alias for kubectl in interactive shells, with completion bound to
-            it. Empty disables the alias.
+      kube_cli_node_crictl_template:
+        type: path
+        description: Path to the crictl.yaml template, from inventory.
+      kube_cli_node_cli_template:
+        type: path
+        description: >-
+          Path to the interactive shell environment template, from inventory.

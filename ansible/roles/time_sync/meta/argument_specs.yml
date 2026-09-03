@@ -17,32 +17,13 @@ argument_specs:
         type: list
         elements: str
         required: false
-      time_sync_source_directive:
-        description: >-
-          pool for a name resolving to several addresses, server for a single
-          address.
+      time_sync_template:
+        description: Path to the chrony.conf template, under the repo files tree.
         type: str
-        required: false
-        choices:
-          - pool
-          - server
-      time_sync_allow_networks:
-        description: Networks permitted to synchronize from this host.
-        type: list
-        elements: str
-        required: false
-      time_sync_local_stratum:
-        description: >-
-          Serve time at this stratum even with no reachable upstream. 0 disables.
-        type: int
         required: false
       time_sync_manage_timesyncd:
         description: Stop and mask systemd-timesyncd, which conflicts with chrony.
         type: bool
-        required: false
-      time_sync_makestep:
-        description: chrony makestep value, as "threshold limit".
-        type: str
         required: false
       time_sync_require_source:
         description: >-

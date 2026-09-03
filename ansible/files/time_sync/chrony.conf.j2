@@ -1,25 +1,25 @@
 {{ ansible_managed | comment }}
 
-{% for _item_time_sync_source in time_sync_sources %}
-{{ time_sync_source_directive }} {{ _item_time_sync_source }}
+{% for _item_time_sync_source in inventory_time_sync_sources %}
+{{ inventory_time_sync_source_directive }} {{ _item_time_sync_source }}
 {% endfor %}
 
 driftfile /var/lib/chrony/chrony.drift
 
-makestep {{ time_sync_makestep }}
+makestep {{ inventory_time_sync_makestep }}
 
 rtcsync
 
-{% if time_sync_allow_networks | length > 0 %}
+{% if inventory_time_sync_allow_networks | length > 0 %}
 
-{% for _item_time_sync_network in time_sync_allow_networks %}
+{% for _item_time_sync_network in inventory_time_sync_allow_networks %}
 allow {{ _item_time_sync_network }}
 {% endfor %}
 {% endif %}
 
-{% if (time_sync_local_stratum | int) > 0 %}
+{% if (inventory_time_sync_local_stratum | int) > 0 %}
 
-local stratum {{ time_sync_local_stratum }}
+local stratum {{ inventory_time_sync_local_stratum }}
 {% endif %}
 
 logdir /var/log/chrony

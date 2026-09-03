@@ -1,22 +1,22 @@
 {{ ansible_managed | comment }}
 
-{% if kube_cli_node_kubeconfig | length > 0 %}
+{% if inventory_kube_cli_node_kubeconfig | length > 0 %}
 
-if [ -r "{{ kube_cli_node_kubeconfig }}" ]; then
-    KUBECONFIG="{{ kube_cli_node_kubeconfig }}"
+if [ -r "{{ inventory_kube_cli_node_kubeconfig }}" ]; then
+    KUBECONFIG="{{ inventory_kube_cli_node_kubeconfig }}"
     export KUBECONFIG
 fi
 {% endif %}
 
 case $- in
     *i*)
-{% if kube_cli_node_alias | length > 0 %}
-        alias {{ kube_cli_node_alias }}=kubectl
+{% if inventory_kube_cli_node_alias | length > 0 %}
+        alias {{ inventory_kube_cli_node_alias }}=kubectl
 {% endif %}
         if [ -r /etc/bash_completion.d/kubectl ]; then
             . /etc/bash_completion.d/kubectl
-{% if kube_cli_node_alias | length > 0 %}
-            complete -o default -F __start_kubectl {{ kube_cli_node_alias }}
+{% if inventory_kube_cli_node_alias | length > 0 %}
+            complete -o default -F __start_kubectl {{ inventory_kube_cli_node_alias }}
 {% endif %}
         fi
         ;;

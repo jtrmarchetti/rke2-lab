@@ -2,8 +2,8 @@
 
 services:
   freeipa-server:
-    image: {{ freeipa_server_container_image }}
-    container_name: {{ freeipa_server_container_name }}
+    image: {{ inventory_freeipa_server_container_image }}
+    container_name: {{ inventory_freeipa_server_container_name }}
     restart: unless-stopped
 
     stop_grace_period: 5m
@@ -14,11 +14,11 @@ services:
       - /run
       - /tmp
     volumes:
-      - {{ freeipa_server_data_dir }}:/data:Z
+      - {{ inventory_freeipa_server_data_dir }}:/data:Z
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
     environment:
-      IPA_SERVER_HOSTNAME: {{ freeipa_server_hostname }}
-      IPA_SERVER_IP: {{ freeipa_server_ip_address }}
+      IPA_SERVER_HOSTNAME: {{ inventory_freeipa_server_hostname }}
+      IPA_SERVER_IP: {{ inventory_freeipa_server_ip_address }}
 
     command:
       - "ipa-server-install"

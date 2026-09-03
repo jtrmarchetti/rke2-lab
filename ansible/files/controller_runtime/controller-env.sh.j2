@@ -2,7 +2,7 @@
 
 for __rke2lab_dir in \
     "{{ _var_controller_runtime_pulumi_bin }}" \
-    "{{ controller_runtime_venv | trim }}/bin" ; do
+    "{{ inventory_controller_runtime_venv | trim }}/bin" ; do
     case ":${PATH}:" in
         *":${__rke2lab_dir}:"*) ;;
         *) PATH="${__rke2lab_dir}:${PATH}" ; export PATH ;;
@@ -10,5 +10,5 @@ for __rke2lab_dir in \
 done
 unset __rke2lab_dir
 
-ANSIBLE_COLLECTIONS_PATH="{{ controller_runtime_collections_path | trim }}"
+ANSIBLE_COLLECTIONS_PATH="{{ inventory_controller_runtime_collections_path | trim }}"
 export ANSIBLE_COLLECTIONS_PATH

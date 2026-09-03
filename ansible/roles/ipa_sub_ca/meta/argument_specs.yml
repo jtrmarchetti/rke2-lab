@@ -46,6 +46,11 @@ argument_specs:
       ipa_sub_ca_profile_description:
         type: str
         description: Description recorded on the profile.
+      ipa_sub_ca_profile_template:
+        description: >-
+          Path to the subordinate CA profile cfg template, under the repo files tree.
+        type: str
+        required: false
       ipa_sub_ca_acl_name:
         type: str
         default: subca-k8s
@@ -54,10 +59,6 @@ argument_specs:
         type: str
         default: ipa
         description: The issuing CA within FreeIPA.
-      ipa_sub_ca_validity_days:
-        type: int
-        default: 1825
-        description: Lifetime of the intermediate.
       ipa_sub_ca_renew_before_days:
         type: int
         default: 90
@@ -75,15 +76,6 @@ argument_specs:
         type: int
         default: 4096
         description: RSA key size of the intermediate.
-      ipa_sub_ca_realm:
-        type: str
-        description: Organisation the profile builds the subject DN with.
-      ipa_sub_ca_ocsp_url:
-        type: str
-        description: OCSP responder recorded in issued certificates.
-      ipa_sub_ca_crl_url:
-        type: str
-        description: CRL distribution point recorded in issued certificates.
       ipa_sub_ca_output_dir:
         type: str
         description: Directory the key, request and certificate are written to.

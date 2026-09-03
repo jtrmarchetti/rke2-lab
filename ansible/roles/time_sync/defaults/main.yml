@@ -3,15 +3,9 @@ time_sync_enabled: true
 
 time_sync_sources: []
 
-time_sync_source_directive: server
-
-time_sync_allow_networks: []
-
-time_sync_local_stratum: 0
+time_sync_template: null
 
 time_sync_manage_timesyncd: true
-
-time_sync_makestep: "1.0 3"
 
 time_sync_require_source: true
 time_sync_ready_retries: 30

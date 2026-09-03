@@ -70,7 +70,7 @@ metadata:
   namespace: cluster-dns
 data:
   Corefile: |
-    {{ gitops_source_cluster_domain }}:5353 {
+    {{ inventory_gitops_source_cluster_domain }}:5353 {
         errors
         health :8080
         ready :8181
@@ -78,14 +78,14 @@ data:
         # but this server answers nothing in cluster.local: the zone above is
         # the only one it is authoritative for.
         kubernetes cluster.local
-        k8s_external {{ gitops_source_cluster_domain }}
-        template IN A {{ gitops_source_cluster_domain }} {
-            match "^[^.]+\.{{ gitops_source_cluster_domain | replace('.', '\\.') }}\.$"
-            answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ gitops_source_ingress_address }}"
+        k8s_external {{ inventory_gitops_source_cluster_domain }}
+        template IN A {{ inventory_gitops_source_cluster_domain }} {
+            match "^[^.]+\.{{ inventory_gitops_source_cluster_domain | replace('.', '\\.') }}\.$"
+            answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ inventory_gitops_source_ingress_address }}"
             fallthrough
         }
-        template IN AAAA {{ gitops_source_cluster_domain }} {
-            match "^[^.]+\.{{ gitops_source_cluster_domain | replace('.', '\\.') }}\.$"
+        template IN AAAA {{ inventory_gitops_source_cluster_domain }} {
+            match "^[^.]+\.{{ inventory_gitops_source_cluster_domain | replace('.', '\\.') }}\.$"
             rcode NOERROR
         }
         cache 30
@@ -175,7 +175,7 @@ metadata:
     # Requested rather than allocated. FreeIPA's forward zone names this
     # address, and a forwarder that has to be edited every time the cluster
     # reschedules a pod is not a forwarder anyone would keep.
-    kube-vip.io/loadbalancerIPs: {{ gitops_source_dns_address }}
+    kube-vip.io/loadbalancerIPs: {{ inventory_gitops_source_dns_address }}
 spec:
   type: LoadBalancer
   # Local, so the answering node is one actually running a replica and the

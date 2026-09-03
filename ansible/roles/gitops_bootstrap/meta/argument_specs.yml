@@ -29,6 +29,10 @@ argument_specs:
         type: bool
         default: true
         description: Whether the role does anything.
+      gitops_bootstrap_files_dir:
+        type: path
+        required: true
+        description: Directory of the role's static files, from inventory.
       gitops_bootstrap_gitlab_url:
         type: str
         description: Base URL of the GitLab instance.

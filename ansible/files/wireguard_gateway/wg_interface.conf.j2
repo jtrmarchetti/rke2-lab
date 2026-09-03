@@ -1,20 +1,20 @@
 [Interface]
-Address = {{ wireguard_gateway_address }}
-ListenPort = {{ wireguard_gateway_listen_port }}
-PrivateKey = {{ wireguard_gateway_private_key }}
-{% if (wireguard_gateway_manage_firewall_nat | bool) and (wireguard_gateway_nat_out_interface | length > 0) %}
-PostUp = iptables -A FORWARD -i {{ wireguard_gateway_interface }} -o {{ wireguard_gateway_nat_out_interface }} -j ACCEPT
-PostUp = iptables -A FORWARD -i {{ wireguard_gateway_nat_out_interface }} -o {{ wireguard_gateway_interface }} -m state --state RELATED,ESTABLISHED -j ACCEPT
-PostUp = iptables -t nat -A POSTROUTING -s {{ wireguard_gateway_nat_source_cidr }} -d {{ wireguard_gateway_internal_subnet }} -o {{ wireguard_gateway_nat_out_interface }} -j MASQUERADE
-PostDown = iptables -D FORWARD -i {{ wireguard_gateway_interface }} -o {{ wireguard_gateway_nat_out_interface }} -j ACCEPT || true
-PostDown = iptables -D FORWARD -i {{ wireguard_gateway_nat_out_interface }} -o {{ wireguard_gateway_interface }} -m state --state RELATED,ESTABLISHED -j ACCEPT || true
-PostDown = iptables -t nat -D POSTROUTING -s {{ wireguard_gateway_nat_source_cidr }} -d {{ wireguard_gateway_internal_subnet }} -o {{ wireguard_gateway_nat_out_interface }} -j MASQUERADE || true
+Address = {{ inventory_wireguard_gateway_address }}
+ListenPort = {{ inventory_wireguard_gateway_listen_port }}
+PrivateKey = {{ inventory_wireguard_gateway_private_key }}
+{% if (inventory_wireguard_gateway_manage_firewall_nat | bool) and (inventory_wireguard_gateway_nat_out_interface | length > 0) %}
+PostUp = iptables -A FORWARD -i {{ inventory_wireguard_gateway_interface }} -o {{ inventory_wireguard_gateway_nat_out_interface }} -j ACCEPT
+PostUp = iptables -A FORWARD -i {{ inventory_wireguard_gateway_nat_out_interface }} -o {{ inventory_wireguard_gateway_interface }} -m state --state RELATED,ESTABLISHED -j ACCEPT
+PostUp = iptables -t nat -A POSTROUTING -s {{ inventory_wireguard_gateway_nat_source_cidr }} -d {{ inventory_wireguard_gateway_internal_subnet }} -o {{ inventory_wireguard_gateway_nat_out_interface }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i {{ inventory_wireguard_gateway_interface }} -o {{ inventory_wireguard_gateway_nat_out_interface }} -j ACCEPT || true
+PostDown = iptables -D FORWARD -i {{ inventory_wireguard_gateway_nat_out_interface }} -o {{ inventory_wireguard_gateway_interface }} -m state --state RELATED,ESTABLISHED -j ACCEPT || true
+PostDown = iptables -t nat -D POSTROUTING -s {{ inventory_wireguard_gateway_nat_source_cidr }} -d {{ inventory_wireguard_gateway_internal_subnet }} -o {{ inventory_wireguard_gateway_nat_out_interface }} -j MASQUERADE || true
 {% endif %}
 
 [Peer]
 PublicKey = {{ wireguard_gateway_peer_public_key }}
-AllowedIPs = {{ wireguard_gateway_peer_allowed_ips | join(',') }}
-{% if wireguard_gateway_peer_endpoint | length > 0 %}
-Endpoint = {{ wireguard_gateway_peer_endpoint }}
+AllowedIPs = {{ inventory_wireguard_gateway_peer_allowed_ips | join(',') }}
+{% if inventory_wireguard_gateway_peer_endpoint | length > 0 %}
+Endpoint = {{ inventory_wireguard_gateway_peer_endpoint }}
 {% endif %}
-PersistentKeepalive = {{ wireguard_gateway_peer_persistent_keepalive }}
+PersistentKeepalive = {{ inventory_wireguard_gateway_peer_persistent_keepalive }}

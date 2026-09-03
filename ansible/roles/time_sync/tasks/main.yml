@@ -29,7 +29,7 @@
   when: (time_sync_enabled | bool)
   notify: Restart chrony
   ansible.builtin.template:
-    src: "{{ _var_time_sync_files_dir }}/chrony.conf.j2"
+    src: "{{ time_sync_template }}"
     dest: "{{ _var_time_sync_config_path }}"
     owner: root
     group: root

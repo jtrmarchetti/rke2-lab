@@ -21,5 +21,3 @@ _var_container_storage_moves:
     src: /var/lib/containerd
     dest: "{{ container_storage_containerd_root }}"
     mode: "{{ container_storage_containerd_mode }}"
-
-_var_container_storage_files_dir: "{{ role_path | dirname | dirname }}/files/container_storage"

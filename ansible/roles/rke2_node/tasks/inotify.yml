@@ -2,7 +2,7 @@
 
 - name: inotify | Ensure the inotify sysctl drop-in is present
   ansible.builtin.template:
-    src: "{{ _var_rke2_node_files_dir }}/inotify_sysctl.conf.j2"
+    src: "{{ rke2_node_inotify_template }}"
     dest: "{{ _var_rke2_node_inotify_conf_path }}"
     owner: root
     group: root

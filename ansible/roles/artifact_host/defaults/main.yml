@@ -11,14 +11,10 @@ artifact_host_directories:
   - rke2
   - charts
 
-artifact_host_listen_port: 80
-artifact_host_server_name: null
-
-artifact_host_allowed_networks: null
-
-artifact_host_directory_index_enabled: true
-
 artifact_host_owner: root
 artifact_host_group: root
 artifact_host_directory_mode: "0755"
 artifact_host_file_mode: "0644"
+
+artifact_host_hardening_template: null
+artifact_host_vhost_template: null

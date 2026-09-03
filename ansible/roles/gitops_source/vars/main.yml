@@ -22,9 +22,7 @@ _var_gitops_source_push_url: >-
                      ~ _var_gitops_source_admin_token['token'] ~ '@')
   }}/{{ gitops_source_group }}/{{ gitops_source_project }}.git
 
-_var_gitops_source_files_dir: "{{ role_path | dirname | dirname }}/files/gitops_source"
-
-_var_gitops_source_template_root: "{{ _var_gitops_source_files_dir }}/cluster-state"
+_var_gitops_source_template_root: "{{ gitops_source_templates_dir }}/cluster-state"
 
 _var_gitops_source_flux_dir: "clusters/dev-lo/flux-system"
 

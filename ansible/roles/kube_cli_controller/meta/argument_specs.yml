@@ -62,10 +62,9 @@ argument_specs:
         type: bool
         default: true
         description: Whether the shell environment is written.
-      kube_cli_controller_alias:
-        type: str
-        default: k
-        description: Alias for kubectl, with completion bound to it.
+      kube_cli_controller_shell_template:
+        type: path
+        description: Path to the kube-env.sh template, from inventory.
       kube_cli_controller_flux_enabled:
         type: bool
         required: false

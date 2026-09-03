@@ -75,6 +75,26 @@ argument_specs:
         description: Seconds between container-settle polls.
         type: int
         required: false
+      freeipa_server_resolv_template:
+        description: >-
+          Path to the /etc/resolv.conf template, under the repo files tree.
+        type: str
+        required: false
+      freeipa_server_env_template:
+        description: >-
+          Path to the FreeIPA environment file template, under the repo files tree.
+        type: str
+        required: false
+      freeipa_server_compose_template:
+        description: >-
+          Path to the FreeIPA docker-compose template, under the repo files tree.
+        type: str
+        required: false
+      freeipa_server_named_options_template:
+        description: >-
+          Path to the named options-ext conf template, under the repo files tree.
+        type: str
+        required: false
       freeipa_server_manage_resolver:
         description: >-
           Stop and mask systemd-resolved and point /etc/resolv.conf at
@@ -141,7 +161,8 @@ argument_specs:
         type: int
         required: false
         default: 3
-        description: Task-level attempts for a failing package install before the task is fatal.
+        description: >-
+          Task-level attempts for a failing package install before the task is fatal.
       freeipa_server_apt_delay:
         type: int
         required: false
@@ -171,12 +192,6 @@ argument_specs:
               "only" makes the delegation total. "first" falls back to this
               server's own resolution, which for a zone it does not hold means
               an upstream lookup for an internal name.
-      freeipa_server_dnssec_validation:
-        type: bool
-        default: true
-        description:
-          - Whether BIND validates DNSSEC. Must be false to delegate a
-            subdomain of a private zone; see tasks/named_options.yml.
       freeipa_server_named_options_path:
         type: str
         description: Path of the BIND options file IPA leaves alone.

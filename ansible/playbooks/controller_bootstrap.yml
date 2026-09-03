@@ -18,8 +18,10 @@
       vars:
         split_dns_enabled: "{{ inventory_split_dns_enabled }}"
         split_dns_forward_zones: "{{ inventory_split_dns_forward_zones }}"
-        split_dns_search_domain: "{{ inventory_split_dns_search_domain }}"
-        split_dns_upstream_servers: "{{ inventory_split_dns_upstream_servers }}"
+        split_dns_config_template: >-
+          {{ inventory_files_base }}/split_dns/split_dns.conf.j2
+        split_dns_resolver_template: >-
+          {{ inventory_files_base }}/split_dns/resolv.conf.j2
         split_dns_verify_zones: "{{ inventory_split_dns_verify_zones }}"
       ansible.builtin.include_role:
         name: split_dns
@@ -43,6 +45,12 @@
           {{ inventory_controller_runtime_pulumi_version }}
 
         controller_runtime_repo_dir: "{{ playbook_dir | dirname | dirname }}"
+        controller_runtime_collections_path: >-
+          {{ inventory_controller_runtime_collections_path }}
+        controller_runtime_env_template: >-
+          {{ inventory_controller_runtime_env_template }}
+        controller_runtime_venv: >-
+          {{ inventory_controller_runtime_venv }}
       ansible.builtin.include_role:
         name: controller_runtime
         apply:

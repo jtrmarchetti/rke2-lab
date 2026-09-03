@@ -1,7 +1,5 @@
 ---
 
-_var_rke2_node_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_node"
-
 _var_rke2_node_inotify_conf_path: /etc/sysctl.d/90-rke2-inotify.conf
 
 _var_rke2_node_inotify_settings:

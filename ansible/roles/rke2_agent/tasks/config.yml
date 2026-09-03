@@ -3,7 +3,7 @@
   no_log: true
   notify: Restart the RKE2 agent
   ansible.builtin.template:
-    src: "{{ _var_rke2_agent_files_dir }}/config.yaml.j2"
+    src: "{{ rke2_agent_config_template }}"
     dest: /etc/rancher/rke2/config.yaml
     owner: root
     group: root

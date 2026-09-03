@@ -1,8 +1,8 @@
 logoutput: syslog
 
-internal: {{ socks5_proxy_listen_address }} port = {{ socks5_proxy_listen_port }}
+internal: {{ inventory_socks5_proxy_listen_address }} port = {{ inventory_socks5_proxy_listen_port }}
 
-{% for _item_socks5_proxy_interface in socks5_proxy_external_interfaces %}
+{% for _item_socks5_proxy_interface in inventory_socks5_proxy_external_interfaces %}
 external: {{ _item_socks5_proxy_interface }}
 {% endfor %}
 external.rotation: route
@@ -12,7 +12,7 @@ clientmethod: none
 user.privileged: root
 user.unprivileged: nobody
 
-{% for _item_socks5_proxy_network in socks5_proxy_allowed_client_networks %}
+{% for _item_socks5_proxy_network in inventory_socks5_proxy_allowed_client_networks %}
 client pass {
   from: {{ _item_socks5_proxy_network }} to: 0.0.0.0/0
   log: connect disconnect error

@@ -39,3 +39,6 @@ argument_specs:
       longhorn_node_multipath_conf:
         type: str
         description: Path of the multipath blacklist drop-in.
+      longhorn_node_blacklist_template:
+        type: path
+        description: Path to the multipath blacklist template, from inventory.
