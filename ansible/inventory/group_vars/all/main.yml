@@ -19,6 +19,8 @@ inventory_rke2_node_registries_template: >-
   {{ inventory_files_base }}/rke2_node/registries.yaml.j2
 inventory_rke2_node_inotify_template: >-
   {{ inventory_files_base }}/rke2_node/inotify_sysctl.conf.j2
+inventory_rke2_node_inotify_max_user_instances: 8192
+inventory_rke2_node_inotify_max_user_watches: 524288
 
 inventory_time_sync_makestep: "1.0 3"
 inventory_time_sync_local_stratum: 0

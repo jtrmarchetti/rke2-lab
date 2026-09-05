@@ -7,9 +7,6 @@ rke2_node_version: 1.36.3+rke2r1
 
 rke2_node_data_dir: /data1/rancher/rke2
 
-rke2_node_inotify_max_user_instances: 8192
-rke2_node_inotify_max_user_watches: 524288
-
 rke2_node_install_dir: /data1/rke2-install
 
 rke2_node_ca_url: null

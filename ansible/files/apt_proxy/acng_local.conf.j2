@@ -1,8 +1,6 @@
 Port: {{ inventory_apt_proxy_bind_port }}
-{% if inventory_apt_proxy_bind_addresses | length > 0 %}
 
 BindAddress: {{ inventory_apt_proxy_bind_addresses | join(' ') }}
-{% endif %}
 
 CacheDir: {{ inventory_apt_proxy_cache_dir }}
 LogDir: {{ inventory_apt_proxy_log_dir }}

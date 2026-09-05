@@ -13,7 +13,7 @@ services:
     shm_size: '{{ inventory_gitlab_shm_size }}'
 
     env_file:
-      - {{ _var_gitlab_env_file }}
+      - {{ inventory_gitlab_compose_dir }}/gitlab.env
 
     environment:
       GITLAB_OMNIBUS_CONFIG: |
@@ -26,11 +26,11 @@ services:
 {% endif %}
 
         letsencrypt['enable'] = {{ inventory_gitlab_letsencrypt_enabled | bool | lower }}
-        nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_external_hostname }}.crt"
-        nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_external_hostname }}.key"
+        nginx['ssl_certificate'] = "/etc/gitlab/ssl/{{ inventory_gitlab_external_hostname }}.crt"
+        nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/{{ inventory_gitlab_external_hostname }}.key"
 {% if inventory_gitlab_registry_enabled | bool %}
-        registry_nginx['ssl_certificate'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_registry_hostname }}.crt"
-        registry_nginx['ssl_certificate_key'] = "{{ _var_gitlab_container_ssl_dir }}/{{ inventory_gitlab_registry_hostname }}.key"
+        registry_nginx['ssl_certificate'] = "/etc/gitlab/ssl/{{ inventory_gitlab_registry_hostname }}.crt"
+        registry_nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/{{ inventory_gitlab_registry_hostname }}.key"
 {% endif %}
 
         nginx['redirect_http_to_https'] = false
@@ -96,4 +96,4 @@ services:
       - {{ inventory_gitlab_data_root }}/config:/etc/gitlab
       - {{ inventory_gitlab_data_root }}/logs:/var/log/gitlab
       - {{ inventory_gitlab_data_root }}/data:/var/opt/gitlab
-      - {{ inventory_gitlab_ssl_source_dir }}:{{ _var_gitlab_container_ssl_dir }}:ro
+      - {{ inventory_gitlab_ssl_source_dir }}:/etc/gitlab/ssl:ro

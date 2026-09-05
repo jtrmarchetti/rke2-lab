@@ -11,30 +11,3 @@ _var_freeipa_server_compose_project: >-
 _var_freeipa_server_compose_file: >-
   {{ freeipa_server_compose_dir }}/docker-compose.yml
 _var_freeipa_server_env_file: "{{ freeipa_server_compose_dir }}/.env"
-
-_var_freeipa_server_install_opts: >-
-  {{
-    (
-      ['-U',
-       '--skip-mem-check',
-       '--realm ' ~ freeipa_server_realm,
-       '--domain ' ~ freeipa_server_domain]
-      + (['--setup-dns'] if freeipa_server_setup_dns else [])
-      + (
-          (freeipa_server_forwarders
-           | map('regex_replace', '^', '--forwarder ') | list)
-          if (freeipa_server_forwarders_enabled
-              and (freeipa_server_forwarders | length > 0))
-          else ['--no-forwarders']
-        )
-      + ([] if freeipa_server_setup_reverse_zone else ['--no-reverse'])
-      + (['--allow-zone-overlap'] if freeipa_server_allow_zone_overlap else [])
-      + (['--no-host-dns'] if freeipa_server_no_host_dns else [])
-      + (
-          (['--setup-ntp'] + (freeipa_server_ntp_servers
-           | map('regex_replace', '^', '--ntp-server ') | list))
-          if freeipa_server_ntp
-          else ['--no-ntp']
-        )
-    ) | join(' ')
-  }}

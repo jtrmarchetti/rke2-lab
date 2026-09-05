@@ -6,7 +6,7 @@ token: {{ inventory_rke2_server_token }}
    node keeps the server address, or a wiped store restarts into
    new-cluster mode and fatals again. Unhealed join nodes render the
    canonical virtual-address line. #}
-{% if (not (rke2_server_bootstrap | bool))
+{% if (inventory_hostname != inventory_kubecp_bootstrap_host)
       or (_rke2_server_join_pin | length > 0) %}
 
 server: {{ _rke2_server_join_pin

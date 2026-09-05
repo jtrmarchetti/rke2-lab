@@ -187,3 +187,20 @@ half a decision.
 - Metrics: Prometheus + kube-prometheus-stack
 - Logging: Loki + Alloy (Grafana Labs)
 - Tracing & Visualization: Grafana + Tempo + OpenTelemetry Collector
+
+---
+
+## Template References That Cannot Be Inventory
+
+Per `plan/ANSIBLE_STANDARDS.md` (Templates), a template may only read
+`inventory_*` variables unless the value is runtime-derived. These are the
+references that legitimately remain on the role interface:
+
+| Template reference | Origin | Consumed by |
+| --- | --- | --- |
+| `_rke2_server_join_pin` (`rke2_server/config.yaml.j2`) | Slurped join-pin marker written by the `etcd_rejoin` heal, read by `rke2_server/tasks/main.yml` | `rke2_server` tasks + template |
+| `rke2_node_registry_username` / `rke2_node_registry_password` (`rke2_node/registries.yaml.j2`) | Registry deploy token slurped by the playbooks (`kubecp`, `kubewk`, `cluster_services`) | `rke2_node` tasks + template |
+| `controller_tunnel_gateway_public_key` (`controller_tunnel/wg_controller.conf.j2`) | Public key derived by `controller_tunnel/tasks/keys.yml` from the controller's private key | `controller_tunnel` tasks + template |
+| `wireguard_gateway_peer_public_key` (`wireguard_gateway/wg_interface.conf.j2`) | Peer public key read from a register / `hostvars` (`repo01.yml`, `tunnel_controller_access.yml`) | `wireguard_gateway` tasks + template |
+
+Any new reference of this kind must be added to this table.

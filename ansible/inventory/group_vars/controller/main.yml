@@ -40,6 +40,7 @@ inventory_controller_runtime_env_template: >-
   {{ inventory_files_base }}/controller_runtime/controller-env.sh.j2
 inventory_controller_runtime_venv: /home/claw/.venvs/rke2lab
 inventory_controller_runtime_collections_path: /home/claw/.ansible/collections
+inventory_controller_runtime_pulumi_bin: /home/claw/.pulumi/bin
 
 inventory_controller_tunnel_wg_template: >-
   {{ inventory_files_base }}/controller_tunnel/wg_controller.conf.j2
@@ -61,6 +62,9 @@ inventory_gitops_bootstrap_domain_ca_file: >-
 
 inventory_gitops_bootstrap_files_dir: >-
   {{ inventory_files_base }}/gitops_bootstrap
+
+inventory_gitops_bootstrap_sealing_key_file: >-
+  {{ lookup('env', 'HOME') }}/.config/rke2lab/sealed-secrets-key.yaml
 
 inventory_gitops_source_templates_dir: "{{ inventory_files_base }}/gitops_source"
 

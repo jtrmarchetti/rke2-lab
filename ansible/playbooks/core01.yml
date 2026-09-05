@@ -94,14 +94,10 @@
         freeipa_server_dns_zones: "{{ inventory_freeipa_server_dns_zones }}"
         freeipa_server_domain: "{{ inventory_freeipa_server_domain }}"
         freeipa_server_enabled: "{{ inventory_freeipa_server_enabled }}"
-        freeipa_server_forwarders_enabled: >-
-          {{ inventory_freeipa_server_forwarders_enabled }}
         freeipa_server_hostname: "{{ inventory_freeipa_server_hostname }}"
         freeipa_server_image_tarball_url: >-
           {{ inventory_freeipa_server_image_tarball_url }}
         freeipa_server_ip_address: "{{ inventory_freeipa_server_ip_address }}"
-        freeipa_server_realm: "{{ inventory_freeipa_server_realm }}"
-        freeipa_server_setup_dns: "{{ inventory_freeipa_server_setup_dns }}"
         freeipa_server_resolv_template: >-
           {{ inventory_freeipa_server_resolv_template }}
         freeipa_server_env_template: "{{ inventory_freeipa_server_env_template }}"

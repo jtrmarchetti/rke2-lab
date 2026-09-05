@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
 
 for __rke2lab_dir in \
-    "{{ _var_controller_runtime_pulumi_bin }}" \
+    "{{ inventory_controller_runtime_pulumi_bin }}" \
     "{{ inventory_controller_runtime_venv | trim }}/bin" ; do
     case ":${PATH}:" in
         *":${__rke2lab_dir}:"*) ;;

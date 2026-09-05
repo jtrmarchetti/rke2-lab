@@ -22,7 +22,37 @@ services:
 
     command:
       - "ipa-server-install"
-{% for _item_freeipa_server_option in (_var_freeipa_server_install_opts | trim).split() %}
+{#
+  Composed argv for ipa-server-install. Every input is an
+  inventory_freeipa_server_* var; the branches are mutually exclusive
+  (--forwarders vs --no-forwarders, --setup-ntp vs --no-ntp) so the
+  list cannot be flattened into a static inventory value. join/split
+  explodes two-word entries (e.g. "--realm dev.lo") into separate argv
+  words.
+#}
+{% set _freeipa_server_install_flags =
+    ['-U',
+     '--skip-mem-check',
+     '--realm ' ~ inventory_freeipa_server_realm,
+     '--domain ' ~ inventory_freeipa_server_domain]
+    + (['--setup-dns'] if inventory_freeipa_server_setup_dns else [])
+    + ((inventory_freeipa_server_forwarders
+        | map('regex_replace', '^', '--forwarder ') | list)
+       if (inventory_freeipa_server_forwarders_enabled
+           and inventory_freeipa_server_forwarders | length > 0)
+       else ['--no-forwarders'])
+    + (['--no-reverse']
+       if not inventory_freeipa_server_setup_reverse_zone else [])
+    + (['--allow-zone-overlap']
+       if inventory_freeipa_server_allow_zone_overlap else [])
+    + (['--no-host-dns']
+       if inventory_freeipa_server_no_host_dns else [])
+    + ((['--setup-ntp']
+        + (inventory_freeipa_server_ntp_servers
+           | map('regex_replace', '^', '--ntp-server ') | list))
+       if inventory_freeipa_server_ntp
+       else ['--no-ntp']) %}
+{% for _item_freeipa_server_option in (_freeipa_server_install_flags | join(' ')).split() %}
       - "{{ _item_freeipa_server_option }}"
 {% endfor %}
       - "--ds-password=${FREEIPA_DIR_MANAGER_PASSWORD:?FREEIPA_DIR_MANAGER_PASSWORD is required}"

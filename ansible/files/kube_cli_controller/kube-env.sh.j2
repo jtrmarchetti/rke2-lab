@@ -10,14 +10,10 @@ esac
 
 case $- in
     *i*)
-{% if inventory_kube_cli_controller_alias | length > 0 %}
         alias {{ inventory_kube_cli_controller_alias }}=kubectl
-{% endif %}
         if [ -r "{{ inventory_kube_cli_controller_config_dir }}/kubectl-completion.bash" ]; then
             . "{{ inventory_kube_cli_controller_config_dir }}/kubectl-completion.bash"
-{% if inventory_kube_cli_controller_alias | length > 0 %}
             complete -o default -F __start_kubectl {{ inventory_kube_cli_controller_alias }}
-{% endif %}
         fi
         ;;
     *) ;;

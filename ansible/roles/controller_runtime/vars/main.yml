@@ -1,3 +1,1 @@
 ---
-
-_var_controller_runtime_pulumi_bin: "{{ controller_runtime_pulumi_home }}/bin"

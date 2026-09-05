@@ -379,6 +379,32 @@ disagrees with ansible-lint's `key-order[task]`, which is disabled in
   need templating.
 - Address templates through the role's `_var_<role>_files_dir`, which is
   defined once in `vars/main.yml` relative to `role_path`.
+- A template may only reference `inventory_*` variables, except for values
+  that are runtime-derived and cannot live in inventory: slurped markers or
+  tokens slurped by a task in the same run (the etcd_rejoin join-pin marker,
+  the registry deploy token), and public keys derived by a task (WireGuard key
+  derivation, peer hostvars reads). Every such reference keeps its parameter
+  on the role interface and is documented here in
+  `plan/CLUSTER_COMPONENTS.md` under its component. A template that needs a
+  constant instead of a parameter (a directory path, a dict of sysctl values,
+  a list of installer flags) inlines the value over `inventory_*` variables;
+  a parameter exists on the role interface only when a task consumes it.
+- In the environment-specific templates under `ansible/files/`, a `{% if
+  X | length > 0 %}` guard whose entire body is a loop over `X` is noise —
+  a loop over an empty list renders nothing, so the guard is dropped and the
+  loop is written bare. Guards that emit a YAML key or section header, are
+  feature switches, or handle value-override cases (for example the
+  `kube_cli_node_kubeconfig` override to empty, or `rke2_server` list
+  sections that would render a null key) are load-bearing and stay.
+- Where an expression is composable from inventory but has mutually exclusive
+  branches that a single static inventory value cannot express (the freeipa
+  installer flags: `--forwarders` vs `--no-forwarders`, `--setup-ntp` vs
+  `--no-ntp`), use a named template-local `{% set %}` composed purely from
+  `inventory_*` variables and document the branches in a template comment
+  (see `files/freeipa_server/docker-compose.freeipa.yml.j2`).
+- Reuse an existing `inventory_*` variable when the value is the same value
+  stored in the inventory for another purpose; do not mint a second variable
+  for the same fact.
 
 ### Compliant
 

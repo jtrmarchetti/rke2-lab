@@ -105,14 +105,3 @@ argument_specs:
         type: int
         default: 600
         description: Bound on a single download, in seconds.
-      rke2_node_inotify_max_user_instances:
-        type: int
-        default: 8192
-        description:
-          - Per-UID inotify instance ceiling. The kernel default of 128 is not
-            enough for a Kubernetes node, where nearly every container runs as
-            UID 0 and shares the allowance.
-      rke2_node_inotify_max_user_watches:
-        type: int
-        default: 524288
-        description: Per-UID inotify watch ceiling.

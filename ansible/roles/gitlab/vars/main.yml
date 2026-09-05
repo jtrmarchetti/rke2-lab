@@ -1,13 +1,10 @@
 ---
 _var_gitlab_compose_file: "{{ gitlab_compose_dir }}/docker-compose.gitlab.yml"
-_var_gitlab_env_file: "{{ gitlab_compose_dir }}/gitlab.env"
 
 _var_gitlab_data_dirs:
   - path: "{{ gitlab_data_root }}/config"
   - path: "{{ gitlab_data_root }}/logs"
   - path: "{{ gitlab_data_root }}/data"
     mode: "0755"
-
-_var_gitlab_container_ssl_dir: /etc/gitlab/ssl
 
 _var_gitlab_trusted_certs_dir: "{{ gitlab_data_root }}/config/trusted-certs"

@@ -4,19 +4,13 @@ no-resolv
 
 domain-needed
 
-{% if inventory_split_dns_upstream_servers | length > 0 %}
-
 {% for _item_split_dns_server in inventory_split_dns_upstream_servers %}
 server={{ _item_split_dns_server }}
 {% endfor %}
-{% endif %}
-
-{% if inventory_split_dns_forward_zones | length > 0 %}
 
 {% for _item_split_dns_zone in inventory_split_dns_forward_zones %}
 server=/{{ _item_split_dns_zone['domain'] }}/{{ _item_split_dns_zone['server'] }}
 {% endfor %}
-{% endif %}
 
 {% for _item_split_dns_address in inventory_split_dns_listen_addresses %}
 listen-address={{ _item_split_dns_address }}

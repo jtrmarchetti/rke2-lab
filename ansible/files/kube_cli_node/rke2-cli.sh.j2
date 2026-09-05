@@ -10,14 +10,10 @@ fi
 
 case $- in
     *i*)
-{% if inventory_kube_cli_node_alias | length > 0 %}
         alias {{ inventory_kube_cli_node_alias }}=kubectl
-{% endif %}
         if [ -r /etc/bash_completion.d/kubectl ]; then
             . /etc/bash_completion.d/kubectl
-{% if inventory_kube_cli_node_alias | length > 0 %}
             complete -o default -F __start_kubectl {{ inventory_kube_cli_node_alias }}
-{% endif %}
         fi
         ;;
     *) ;;

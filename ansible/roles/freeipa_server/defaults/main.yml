@@ -2,24 +2,12 @@
 freeipa_server_enabled: false
 
 freeipa_server_domain: null
-freeipa_server_realm: DEV.LO
 freeipa_server_hostname: null
 freeipa_server_ip_address: null
 freeipa_server_admin_password: ""
 freeipa_server_directory_manager_password: ""
 
-freeipa_server_setup_dns: true
-freeipa_server_forwarders_enabled: false
-freeipa_server_forwarders: []
-freeipa_server_allow_zone_overlap: true
-freeipa_server_setup_reverse_zone: true
-
-freeipa_server_no_host_dns: true
-
 freeipa_server_manage_resolver: true
-
-freeipa_server_ntp: false
-freeipa_server_ntp_servers: []
 
 freeipa_server_container_name: freeipa-server
 # Held at almalinux-8 (FreeIPA 4.9) - see repo memory

@@ -28,9 +28,6 @@ gitops_bootstrap_ca_file: /etc/ssl/certs/ca-certificates.crt
 
 gitops_bootstrap_namespace: flux-system
 
-gitops_bootstrap_sealing_key_file: >-
-  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/sealed-secrets-key.yaml
-
 gitops_bootstrap_sealing_key_label: >-
   sealedsecrets.bitnami.com/sealed-secrets-key=active
 

@@ -31,8 +31,6 @@ controller_runtime_require_managed_venv: true
 controller_runtime_pulumi_enabled: true
 controller_runtime_pulumi_version: null
 controller_runtime_pulumi_url: null
-controller_runtime_pulumi_home: >-
-  {{ ansible_facts['env']['HOME'] }}/.pulumi
 
 controller_runtime_pulumi_project_dir: infra/pulumi
 controller_runtime_pulumi_project_venv: infra/pulumi/.venv

@@ -10,10 +10,6 @@ _var_gitops_bootstrap_admin_token: >-
 _var_gitops_bootstrap_headers:
   PRIVATE-TOKEN: "{{ _var_gitops_bootstrap_admin_token['token'] }}"
 
-_var_gitops_bootstrap_sealing_keys: >-
-  {{ (lookup('file', gitops_bootstrap_sealing_key_file)
-      | from_yaml)['items'] }}
-
 _var_gitops_bootstrap_install: >-
   {{ _reg_gitops_bootstrap_installed['rc'] != 0
      or (gitops_bootstrap_force_install | bool) }}

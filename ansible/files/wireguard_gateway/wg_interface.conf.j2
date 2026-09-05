@@ -14,7 +14,5 @@ PostDown = iptables -t nat -D POSTROUTING -s {{ inventory_wireguard_gateway_nat_
 [Peer]
 PublicKey = {{ wireguard_gateway_peer_public_key }}
 AllowedIPs = {{ inventory_wireguard_gateway_peer_allowed_ips | join(',') }}
-{% if inventory_wireguard_gateway_peer_endpoint | length > 0 %}
 Endpoint = {{ inventory_wireguard_gateway_peer_endpoint }}
-{% endif %}
 PersistentKeepalive = {{ inventory_wireguard_gateway_peer_persistent_keepalive }}

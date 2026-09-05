@@ -80,9 +80,6 @@ argument_specs:
           Release tarball URL for the pinned version. The pin and the TLS
           transport are the integrity control; the download is not verified
           against a recorded checksum.
-      controller_runtime_pulumi_home:
-        type: str
-        description: Pulumi's home directory; binaries land in its bin/.
       controller_runtime_pulumi_project_dir:
         type: str
         default: infra/pulumi

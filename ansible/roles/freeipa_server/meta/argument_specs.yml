@@ -14,9 +14,6 @@ argument_specs:
       freeipa_server_domain:
         type: str
         required: false
-      freeipa_server_realm:
-        type: str
-        required: false
       freeipa_server_hostname:
         type: str
         required: false
@@ -30,9 +27,6 @@ argument_specs:
       freeipa_server_directory_manager_password:
         description: Directory manager password. Sourced from the environment.
         type: str
-        required: false
-      freeipa_server_setup_dns:
-        type: bool
         required: false
       freeipa_server_ready_retries:
         description: Polling attempts for each readiness check.
@@ -101,31 +95,6 @@ argument_specs:
           127.0.0.1, so FreeIPA's named can own port 53 and the host resolves
           through its own domain.
         type: bool
-        required: false
-      freeipa_server_forwarders_enabled:
-        description: Leave false; there is no upstream resolver to forward to.
-        type: bool
-        required: false
-      freeipa_server_forwarders:
-        type: list
-        elements: str
-        required: false
-      freeipa_server_allow_zone_overlap:
-        type: bool
-        required: false
-      freeipa_server_setup_reverse_zone:
-        type: bool
-        required: false
-      freeipa_server_no_host_dns:
-        description: Skip the installer pre-flight DNS check during bootstrap.
-        type: bool
-        required: false
-      freeipa_server_ntp:
-        type: bool
-        required: false
-      freeipa_server_ntp_servers:
-        type: list
-        elements: str
         required: false
       freeipa_server_container_name:
         type: str

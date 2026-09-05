@@ -1,6 +1,4 @@
 {{ ansible_managed | comment }}
 
 nameserver 127.0.0.1
-{% if inventory_split_dns_search_domain | length > 0 %}
 search {{ inventory_split_dns_search_domain }}
-{% endif %}

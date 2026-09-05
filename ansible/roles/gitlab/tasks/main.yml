@@ -146,7 +146,7 @@
   no_log: "{{ gitlab_no_log | bool }}"
   ansible.builtin.template:
     src: "{{ gitlab_env_template }}"
-    dest: "{{ _var_gitlab_env_file }}"
+    dest: "{{ gitlab_compose_dir }}/gitlab.env"
     owner: root
     group: root
     mode: "0600"

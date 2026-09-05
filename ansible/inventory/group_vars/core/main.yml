@@ -42,6 +42,12 @@ inventory_freeipa_server_directory_manager_password: >-
 
 inventory_freeipa_server_setup_dns: true
 inventory_freeipa_server_forwarders_enabled: false
+inventory_freeipa_server_forwarders: []
+inventory_freeipa_server_setup_reverse_zone: true
+inventory_freeipa_server_allow_zone_overlap: true
+inventory_freeipa_server_no_host_dns: true
+inventory_freeipa_server_ntp: false
+inventory_freeipa_server_ntp_servers: []
 
 inventory_freeipa_server_dns_zones:
   - name: 2.168.192.in-addr.arpa

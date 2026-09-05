@@ -100,11 +100,6 @@ argument_specs:
         type: str
         default: flux-system
         description: Namespace Flux is installed into.
-      gitops_bootstrap_sealing_key_file:
-        type: str
-        description:
-          - Backup of the Sealed Secrets key pair, restored before Flux
-            deploys the controller.
       gitops_bootstrap_sealing_key_label:
         type: str
         description:
