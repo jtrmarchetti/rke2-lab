@@ -49,7 +49,8 @@ path and never holds the value.
 Three things are sealed into Git instead, and only three, because each is
 needed before the vault can be reached at all: the registry credential Flux
 pulls charts with, the CA key pair cert-manager issues from — including the
-certificate on the vault's own ingress — and the vault's unseal keys.
+certificate on the vault's own HTTPRoute on the platform Gateway listener —
+and the vault's unseal keys.
 
 Every `SealedSecret` here is generated at play time by `kubeseal`, from
 plaintext held in `~/.config/rke2lab/env.sh` on the controller and from the

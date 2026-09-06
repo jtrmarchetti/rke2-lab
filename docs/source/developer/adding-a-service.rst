@@ -127,22 +127,41 @@ in ``flux-system``. Never a public chart repository.
 **Storage.** ``storageClassName: longhorn`` (two replicas) for anything whose
 loss matters; ``longhorn-single`` only for caches and scratch.
 
-**Ingress.** Traefik plus a certificate, and DNS follows automatically because
-the cluster's CoreDNS answers every single-label name under ``k8s.dev.lo`` with
-the ingress address:
+**HTTPRoute.** Edge exposure is a platform concern, not an app one. A single
+shared ``Gateway`` named ``platform`` (in ``kube-system``, programmed by Traefik)
+carries one HTTPS listener per edge host, each terminating TLS with a
+pre-declared ``<host>-edge-tls`` certificate secret that cert-manager issues
+into it (the shim is driven by the ``cert-manager.io/cluster-issuer``
+annotation on the Gateway). An app only adds an ``HTTPRoute`` in its own
+namespace that attaches to the host's listener and points at its Service. DNS
+follows automatically because the cluster's CoreDNS answers every single-label
+name under ``k8s.dev.lo`` with the ingress address:
 
 .. code-block:: yaml
 
+   apiVersion: gateway.networking.k8s.io/v1
+   kind: HTTPRoute
    metadata:
-     annotations:
-       cert-manager.io/cluster-issuer: k8s-ca
+     name: myapp
+     namespace: myapp
    spec:
-     ingressClassName: traefik
-     tls:
-       - hosts: [myapp.{{ gitops_source_cluster_domain }}]
-         secretName: myapp-tls
+     parentRefs:
+       - name: platform
+         namespace: kube-system
+         sectionName: myapp
+     hostnames:
+       - myapp.{{ gitops_source_cluster_domain }}
      rules:
-       - host: myapp.{{ gitops_source_cluster_domain }}
+       - backendRefs:
+           - name: myapp
+             port: 80
+
+Adding a **new host** is the only part that touches the platform: it gets an
+HTTPS listener on the ``platform`` Gateway in kube-system (a new
+``<host>-edge-tls`` certificate secret that cert-manager issues into it),
+rendered in the same gitops template as the other listeners. Adding a route
+under an already-listed host is a same-namespace ``HTTPRoute`` and nothing
+else.
 
 **Versions stay literal in the manifest.** The rendered tree takes environment
 identity as variables — domain, realm, addresses — and nothing else. A chart

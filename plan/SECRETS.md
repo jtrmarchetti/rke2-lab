@@ -188,7 +188,8 @@ before the vault can be reached at all, which is the test for belonging there:
 - the **registry credential**, which is how Flux pulls the charts that deploy
   OpenBao and ESO in the first place;
 - the **cluster CA key pair**, which cert-manager needs before anything in the
-  cluster has a certificate — including the vault's own ingress;
+  cluster has a certificate — including the vault's own HTTPRoute on the
+  platform Gateway listener;
 - the vault's **unseal keys**, which are what make it readable at all.
 
 Anything else belongs in OpenBao. A secret added to

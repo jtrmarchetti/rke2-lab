@@ -85,11 +85,12 @@ touching the certificates:
 ``Verify return code: 0 (ok)`` means the server side is correct and the fault
 is in that browser's trust store. See :doc:`../access`.
 
-**A ``k8s.dev.lo`` name serves ``CN=TRAEFIK DEFAULT CERT``.** No Ingress claims
-that hostname. The cluster's DNS answers every single-label name under
+**A ``k8s.dev.lo`` name serves ``CN=TRAEFIK DEFAULT CERT``.** No HTTPRoute
+claims that hostname. The cluster's DNS answers every single-label name under
 ``k8s.dev.lo`` with the ingress address, so a typo resolves and connects, then
 gets Traefik's self-signed fallback. No amount of CA installation fixes it —
-check the hostname against ``kubectl get ingress -A``.
+check the hostname against ``kubectl get httproute -A`` and the ``platform``
+Gateway's listener list.
 
 **``curl`` is happy but an Ansible ``uri`` task fails verification.** Ansible's
 Python may verify against a different bundle than
@@ -132,8 +133,8 @@ node it cannot tolerate.
 why. If the log is empty, the failure is before the process started and lives
 in ``describe``.
 
-**Running but not Ready, and its Ingress returns 503.** The readiness probe is
-failing, so the Service has no endpoints. The workload, not Traefik.
+**Running but not Ready, and its HTTPRoute returns 503.** The readiness probe
+is failing, so the Service has no endpoints. The workload, not Traefik.
 
 **"failed to create fsnotify watcher: too many open files".** Not a file
 descriptor limit, despite what it says. The kernel's ``fs.inotify`` limits are

@@ -34,6 +34,14 @@ spec:
   values:
     crds:
       enabled: true
+    # Enable cert-manager's Gateway API shim so it watches the platform
+    # Gateway's inline listeners and issues certs into the pre-declared
+    # tls.certificateRefs secrets (driven by the cert-manager.io/cluster-issuer
+    # annotation on the Gateway). Top-level extraArgs apply to the controller
+    # container only. The ExperimentalGatewayAPISupport gate is Beta and
+    # default-true, so only the flag needs to be set.
+    extraArgs:
+      - --enable-gateway-api
     resources:
       requests:
         cpu: 10m

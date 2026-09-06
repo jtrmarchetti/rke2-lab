@@ -12,6 +12,20 @@ spec:
     nodeSelector:
       {{ inventory_rke2_server_ingress_node_selector }}: "true"
 
+    providers:
+      kubernetesGateway:
+        enabled: true
+
+    # The Gateway API provider matches Gateway listeners to Traefik entrypoints
+    # by port number. The chart's websecure entrypoint defaults to container
+    # port 8443, so the platform Gateway's port-443 listeners would never be
+    # programmed ("no matching entryPoint for port 443"). Move websecure onto
+    # container port 443; the service's named targetPort (websecure) and the
+    # hostPort 443 mapping keep pointing at the same entrypoint.
+    ports:
+      websecure:
+        port: 443
+
     service:
       spec:
         type: LoadBalancer

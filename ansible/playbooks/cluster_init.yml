@@ -76,14 +76,14 @@
              if _openbao_root_token_from_file | length > 0
              else lookup('env', 'OPENBAO_ROOT_TOKEN') }}
 
-    - name: cluster_init | Wait for the ingress to serve the vault's certificate
+    - name: cluster_init | Wait for the gateway to serve the vault's certificate
       tags:
         - openbao_config
 
       when: not ansible_check_mode
-      register: _reg_openbao_ingress_ready
+      register: _reg_openbao_gateway_ready
       until: >-
-        (_reg_openbao_ingress_ready['status'] | default(0))
+        (_reg_openbao_gateway_ready['status'] | default(0))
         in [200, 403, 429, 472, 473, 503]
       retries: 20
       delay: 15
@@ -96,25 +96,26 @@
         ca_path: "{{ inventory_gitops_bootstrap_domain_ca_file }}"
         status_code: [200, 403, 429, 472, 473, 503]
 
-    - name: cluster_init | Report that the ingress certificate does not verify
+    - name: cluster_init | Report that the gateway certificate does not verify
       tags:
         - openbao_config
       when:
-        - not (_reg_openbao_ingress_ready is skipped)
-        - (_reg_openbao_ingress_ready['status'] | default(0))
+        - not (_reg_openbao_gateway_ready is skipped)
+        - (_reg_openbao_gateway_ready['status'] | default(0))
           not in [200, 403, 429, 472, 473, 503]
       ansible.builtin.assert:
         that:
-          - (_reg_openbao_ingress_ready['status'] | default(0))
+          - (_reg_openbao_gateway_ready['status'] | default(0))
             in [200, 403, 429, 472, 473, 503]
         fail_msg: >-
           {{ inventory_openbao_config_url }} still did not verify against
           {{ inventory_gitops_bootstrap_domain_ca_file }} after
           {{ 20 * 15 }}s of waiting. cert-manager has not issued the
-          openbao-tls Secret, or Traefik is still serving its default
+          bao-edge-tls Secret, or Traefik is still serving its default
           certificate, and every vault role in this play fails on TLS until
-          it has. Look at the openbao-tls Secret and Certificate in the
-          openbao namespace, and the k8s-ca Secret in cert-manager.
+          it has. Look at the bao-edge-tls Secret in kube-system (the
+          platform Gateway's listener certificate, shimmed by cert-manager
+          from the Gateway), and the k8s-ca Secret in cert-manager.
         quiet: true
 
     - name: cluster_init | Include the OpenBao configuration role

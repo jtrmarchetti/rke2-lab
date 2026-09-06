@@ -60,6 +60,20 @@ def _ca() -> str:
     return os.environ.get(CA_FILE_ENV, CA_FILE_DEFAULT)
 
 
+def ca_file() -> str:
+    """The domain CA the suite verifies every TLS session against.
+
+    Public so a test can build its own ssl context; a missing file makes
+    the caller fail loudly rather than verify against nothing."""
+    ca = _ca()
+    if not os.path.exists(ca):
+        raise RuntimeError(
+            f"domain CA file {ca} not found; export {CA_FILE_ENV} if it "
+            f"lives elsewhere on this host"
+        )
+    return ca
+
+
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------

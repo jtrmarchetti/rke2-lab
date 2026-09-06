@@ -25,9 +25,11 @@ Endpoints
    * - ``https://s3.k8s.dev.lo``
      - S3 API, path style
    * - ``https://<bucket>.s3.k8s.dev.lo``
-     - S3 API, virtual-host style. The ingress carries the wildcard and DNS is
-       told about the bucket form explicitly, because the cluster's DNS answers
-       single-label names under ``k8s.dev.lo`` and a bucket name makes two
+     - S3 API, virtual-host style. The platform Gateway's ``s3`` listener
+       matches the S3 host exactly — there is no wildcard in the tree. The
+       cluster's DNS answers single-label names under ``k8s.dev.lo`` and a
+       bucket name makes two labels, so per-bucket names are not answered
+       individually: clients use path style on ``s3.k8s.dev.lo``
    * - ``garage.garage.k8s.dev.lo``
      - The Service directly, for in-cluster and admin use
 

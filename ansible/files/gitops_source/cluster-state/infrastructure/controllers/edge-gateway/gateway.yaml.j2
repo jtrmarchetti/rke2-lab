@@ -1,0 +1,86 @@
+{{ ansible_managed | comment }}
+---
+# Shared platform edge Gateway.
+#
+# Traefik (the RKE2 ingress controller) programs this Gateway. The RKE2
+# traefik chart creates the `traefik` GatewayClass when
+# providers.kubernetesGateway.enabled is set; the gateway CRDs are shipped by
+# the rke2-traefik-crd addon, so nothing extra is installed here.
+#
+# One HTTPS listener per edge host. Each listener terminates TLS with a
+# pre-declared "<host>-edge-tls" certificate secret in kube-system that
+# cert-manager issues into it: the cert-manager.io/cluster-issuer annotation
+# on the Gateway makes the cert-manager shim derive a Certificate per listener
+# (TLS self-service — applications only ever point at the pre-declared
+# secret name and let the platform terminate TLS).
+#
+# allowedRoutes.namespaces.from: All on every listener lets the per-app
+# HTTPRoutes (in their own namespaces) attach to this Gateway. That is the
+# route-attachment mechanism; no ReferenceGrant is needed for
+# route -> Gateway attachment, and the certificateRefs are local to this
+# namespace so no ReferenceGrant is needed for TLS either.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform
+  namespace: kube-system
+  annotations:
+    cert-manager.io/cluster-issuer: k8s-ca
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: sso
+      hostname: sso.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: sso-edge-tls
+    - name: grafana
+      hostname: grafana.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grafana-edge-tls
+    - name: longhorn
+      hostname: longhorn.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: longhorn-edge-tls
+    - name: bao
+      hostname: bao.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: bao-edge-tls
+    - name: s3
+      hostname: s3.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: s3-edge-tls
