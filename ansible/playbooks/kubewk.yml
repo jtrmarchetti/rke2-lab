@@ -171,6 +171,8 @@
       --kubeconfig /etc/rancher/rke2/rke2.yaml
     _kubewk_worker_label: node-role.kubernetes.io/worker=true
     _kubewk_control_plane_taint: CriticalAddonsOnly=true:NoExecute
+    _kubewk_domain: >-
+      {{ inventory_base_host_split_dns_domains | first }}
   tasks:
     - name: kubewk | Apply the cluster-level changes from one server
 
@@ -187,7 +189,7 @@
             - node_labels
           ansible.builtin.command:
             cmd: >-
-              {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.dev.lo
+              {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.{{ _kubewk_domain }}
               {{ _kubewk_worker_label }} --overwrite
 
         - name: kubewk | Count the workers that have registered
@@ -245,5 +247,5 @@
             - control_plane_taint
           ansible.builtin.command:
             cmd: >-
-              {{ _kubewk_kubectl }} taint node {{ _item_kubewk_server }}.dev.lo
+              {{ _kubewk_kubectl }} taint node {{ _item_kubewk_server }}.{{ _kubewk_domain }}
               {{ _kubewk_control_plane_taint }}

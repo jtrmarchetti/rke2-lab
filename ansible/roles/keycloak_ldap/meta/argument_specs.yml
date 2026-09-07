@@ -17,7 +17,7 @@ argument_specs:
         description: Whether the role does anything.
       keycloak_ldap_ipa_host:
         type: str
-        default: core01
+        default: null
         description: Inventory name of the identity host.
       keycloak_ldap_ipa_container:
         type: str

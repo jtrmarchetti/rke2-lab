@@ -7,9 +7,7 @@ openbao_config_ca_file: /etc/ssl/certs/ca-certificates.crt
 
 openbao_config_kubernetes_host: https://kubernetes.default.svc:443
 
-openbao_config_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+openbao_config_kubectl: null
 
 openbao_config_kv_path: kv
 

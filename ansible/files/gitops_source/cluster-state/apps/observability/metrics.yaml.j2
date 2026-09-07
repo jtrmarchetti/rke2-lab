@@ -176,7 +176,7 @@ spec:
           enabled: false
         auth.generic_oauth:
           enabled: true
-          name: dev.lo single sign-on
+          name: "{{ inventory_gitops_source_oidc_label }}"
           allow_sign_up: true
           auto_login: false
           client_id: grafana

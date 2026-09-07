@@ -39,6 +39,11 @@ argument_specs:
           kubectl invocation including the kubeconfig, as on this node. The
           server address is overridden per call, so the call reaches a
           surviving control plane while this node's own API is down.
+      etcd_rejoin_node_fqdn:
+        type: str
+        default: ""
+        description: >-
+          FQDN of the node being rejoined, as registered in the API.
       etcd_rejoin_candidate_addresses:
         type: list
         elements: str

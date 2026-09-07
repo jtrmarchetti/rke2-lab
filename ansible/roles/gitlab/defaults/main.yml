@@ -11,6 +11,7 @@ gitlab_https_port: 443
 gitlab_root_password: ""
 
 gitlab_ssl_source_dir: null
+gitlab_ca_cert_name: null
 
 gitlab_container_name: gitlab
 gitlab_container_image: "gitlab/gitlab-ce:19.3.0-ce.0"

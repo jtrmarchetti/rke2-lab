@@ -27,6 +27,8 @@
                  | reject('equalto', inventory_rke2_server_node_ip)
                  | list)) }}
         etcd_rejoin_data_dir: "{{ inventory_rke2_server_data_dir }}"
+        etcd_rejoin_node_fqdn: >-
+          {{ inventory_base_host_target_hostname }}
         etcd_rejoin_kubectl: >-
           {{ inventory_rke2_server_data_dir }}/bin/kubectl
           --kubeconfig /etc/rancher/rke2/rke2.yaml

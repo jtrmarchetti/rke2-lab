@@ -173,7 +173,7 @@
         port: 53
         timeout: 5
 
-    - name: validate_phase1 | Validate a dev.lo name resolves through the internal resolver
+    - name: validate_phase1 | Validate an internal name resolves through the internal resolver
       when:
         - (inventory_base_host_split_dns_enabled | bool)
         - not (_reg_validate_internal_resolver['failed'] | default(true))

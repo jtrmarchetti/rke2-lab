@@ -45,7 +45,7 @@ argument_specs:
           - Seconds between attempts at that wait.
       garage_init_zone:
         type: str
-        default: dev-lo
+        default: null
         description: Failure domain the node is assigned to.
       garage_init_capacity:
         type: str

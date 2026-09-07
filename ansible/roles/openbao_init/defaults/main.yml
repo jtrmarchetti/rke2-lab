@@ -10,9 +10,7 @@ openbao_init_key_threshold: 3
 openbao_init_env_file: >-
   {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/env.sh
 
-openbao_init_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+openbao_init_kubectl: null
 
 # How long to wait for the vault pod to report Ready before the role fails.
 # On a cold build the OpenBao stack still has to be installed by the Flux

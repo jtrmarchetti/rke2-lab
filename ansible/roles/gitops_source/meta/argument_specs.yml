@@ -63,7 +63,7 @@ argument_specs:
             project's default branch when this role creates it.
       gitops_source_cluster_path:
         type: str
-        default: ./clusters/dev-lo
+        default: null
         description:
           - Flux's entry point within the repository, as the Kustomization in
             gotk-sync.yaml reconciles it.

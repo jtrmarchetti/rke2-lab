@@ -24,7 +24,8 @@ _var_gitops_source_push_url: >-
 
 _var_gitops_source_template_root: "{{ gitops_source_templates_dir }}/cluster-state"
 
-_var_gitops_source_flux_dir: "clusters/dev-lo/flux-system"
+_var_gitops_source_flux_dir: >-
+  {{ (gitops_source_cluster_path | trim | replace('./', '')) }}/flux-system
 
 _var_gitops_source_sealing_keys: >-
   {{ (lookup('file', gitops_source_sealing_key_file) | from_yaml)['items']

@@ -109,7 +109,8 @@
       /data1/rancher/rke2/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
     _cluster_services_control_host: "{{ inventory_kubewk_control_host }}"
-    _cluster_services_domain: dev.lo
+    _cluster_services_domain: >-
+      {{ inventory_base_host_split_dns_domains | first }}
     _cluster_services_ready_timeout: 600
     _cluster_services_ready_retries: 30
   tasks:
@@ -196,7 +197,8 @@
       /data1/rancher/rke2/bin/kubectl
       --kubeconfig /etc/rancher/rke2/rke2.yaml
     _cluster_services_control_host: "{{ inventory_kubewk_control_host }}"
-    _cluster_services_domain: dev.lo
+    _cluster_services_domain: >-
+      {{ inventory_base_host_split_dns_domains | first }}
     _cluster_services_ready_timeout: 600
     _cluster_services_ready_retries: 30
   tasks:

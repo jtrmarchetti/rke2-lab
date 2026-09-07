@@ -3,7 +3,7 @@ argument_specs:
   main:
     short_description: Delegate realm administration to a directory group
     description:
-      - Grants the FreeIPA group imported as `keycloak-admins` the
+      - Grants the FreeIPA group named by `keycloak_realm_admins_group` the
         `realm-admin` role on the application realm's `realm-management`
         client, so its members administer that realm as themselves at
         /admin/<realm>/console.
@@ -50,7 +50,7 @@ argument_specs:
             asserts that half.
       keycloak_realm_admins_group:
         type: str
-        default: keycloak-admins
+        default: null
         description:
           - The FreeIPA group whose members administer that realm. Created by
             ipa_sso_groups and imported by keycloak_ldap.

@@ -35,10 +35,6 @@ readburst_gate_release_delay: 30
 # next poll picks it up, so this bounds one pass, not the gate.
 readburst_gate_resume_timeout: 90s
 
-readburst_gate_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+readburst_gate_kubectl: null
 
-readburst_gate_flux: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+readburst_gate_flux: null

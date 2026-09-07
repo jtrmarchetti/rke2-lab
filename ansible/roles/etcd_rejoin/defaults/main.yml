@@ -5,6 +5,8 @@ etcd_rejoin_data_dir: /data1/rancher/rke2
 
 etcd_rejoin_kubectl: ""
 
+etcd_rejoin_node_fqdn: ""
+
 # Ordered probe list for the join port: the API virtual address first,
 # then the peer control plane nodes. A wedged bootstrap node may have
 # taken the virtual address down with it, so a peer must be probeable.

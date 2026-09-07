@@ -24,6 +24,8 @@
         - readburst_gate
       vars:
         readburst_gate_cp_count: "{{ groups['kubecp'] | length }}"
+        readburst_gate_kubectl: "{{ inventory_controller_kubectl_cmd }}"
+        readburst_gate_flux: "{{ inventory_controller_flux_cmd }}"
       ansible.builtin.include_role:
         name: readburst_gate
         apply:

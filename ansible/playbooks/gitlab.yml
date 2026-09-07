@@ -66,6 +66,7 @@
         gitlab_registry_hostname: "{{ inventory_gitlab_registry_hostname }}"
         gitlab_root_password: "{{ inventory_gitlab_root_password }}"
         gitlab_ssl_source_dir: "{{ inventory_gitlab_ssl_source_dir }}"
+        gitlab_ca_cert_name: "{{ inventory_gitlab_ca_cert_name }}"
       ansible.builtin.include_role:
         name: gitlab
         apply:

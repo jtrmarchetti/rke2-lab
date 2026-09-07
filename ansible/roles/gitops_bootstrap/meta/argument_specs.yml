@@ -64,7 +64,7 @@ argument_specs:
             what the cluster pulls is exactly what was pushed.
       gitops_bootstrap_cluster_dir:
         type: str
-        default: clusters/dev-lo
+        default: null
         description:
           - Path within the repository holding this cluster's flux-system
             directory.

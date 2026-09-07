@@ -144,6 +144,7 @@ inventory_gitlab_oidc_block_auto_created_users: false
 inventory_gitlab_root_password: "{{ lookup('env', 'GITLAB_ROOT_PASSWORD') }}"
 inventory_gitlab_letsencrypt_enabled: false
 inventory_gitlab_ssl_source_dir: /etc/ssl/dev.lo
+inventory_gitlab_ca_cert_name: dev.lo-ca.crt
 
 inventory_gitlab_container_name: gitlab
 inventory_gitlab_container_image: gitlab/gitlab-ce:19.3.0-ce.0

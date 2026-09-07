@@ -9,12 +9,11 @@ kube_cli_controller_shell_rc_files:
   - "{{ ansible_facts['env']['HOME'] }}/.bashrc"
   - "{{ ansible_facts['env']['HOME'] }}/.profile"
 
-kube_cli_controller_kubeconfig: >-
-  {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+kube_cli_controller_kubeconfig: null
 
 kube_cli_controller_kubectl_enabled: true
-kube_cli_controller_kubectl_source_host: kubecp01
-kube_cli_controller_kubectl_source_path: /data1/rancher/rke2/bin/kubectl
+kube_cli_controller_kubectl_source_host: null
+kube_cli_controller_kubectl_source_path: null
 
 kube_cli_controller_kubectl_version: 1.36.3
 

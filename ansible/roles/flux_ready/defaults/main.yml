@@ -22,10 +22,6 @@ flux_ready_fatal: true
 # the next poll picks it up, so this only bounds one pass, not the gate.
 flux_ready_resume_timeout: 90s
 
-flux_ready_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+flux_ready_kubectl: null
 
-flux_ready_flux: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+flux_ready_flux: null

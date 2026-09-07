@@ -9,7 +9,7 @@ gitops_source_group: platform
 gitops_source_project: cluster-state
 gitops_source_branch: main
 
-gitops_source_cluster_path: ./clusters/dev-lo
+gitops_source_cluster_path: null
 
 gitops_source_domain: null
 
@@ -35,7 +35,7 @@ gitops_source_push: true
 
 gitops_source_commit_message: >-
   Render cluster state from Ansible
-gitops_source_commit_name: rke2lab automation
+gitops_source_commit_name: null
 gitops_source_commit_email: null
 
 gitops_source_openbao_unseal_keys: ""

@@ -39,6 +39,11 @@ argument_specs:
         type: path
         required: false
         description: Host directory holding the issued certificates and keys.
+      gitlab_ca_cert_name:
+        type: str
+        required: false
+        description: >-
+          File name of the domain CA certificate inside the SSL source dir.
       gitlab_container_name:
         type: str
         required: false

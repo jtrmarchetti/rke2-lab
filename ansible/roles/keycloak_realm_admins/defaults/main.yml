@@ -11,7 +11,7 @@ keycloak_realm_admins_realm: null
 
 keycloak_realm_admins_allow_master_realm: false
 
-keycloak_realm_admins_group: keycloak-admins
+keycloak_realm_admins_group: null
 
 keycloak_realm_admins_client: realm-management
 

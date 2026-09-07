@@ -73,7 +73,7 @@
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - "{{ gitlab_ssl_source_dir }}/dev.lo-ca.crt"
+    - "{{ gitlab_ssl_source_dir }}/{{ gitlab_ca_cert_name }}"
     - /run/docker.pid
 
 - name: main | Restart the container runtime when it predates the domain CA

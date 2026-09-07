@@ -61,7 +61,7 @@
   ansible.builtin.command:
     cmd: >-
       {{ etcd_rejoin_kubectl }} get node
-      {{ inventory_hostname }}.dev.lo
+      {{ etcd_rejoin_node_fqdn }}
       -o jsonpath='{.status.conditions[?(@.type=="EtcdIsVoter")].status}'
 
 - name: etcd_rejoin | Decide whether this node is wedged

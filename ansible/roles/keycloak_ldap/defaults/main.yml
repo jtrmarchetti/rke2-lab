@@ -1,12 +1,12 @@
 ---
 keycloak_ldap_enabled: true
 
-keycloak_ldap_ipa_host: core01
+keycloak_ldap_ipa_host: null
 keycloak_ldap_ipa_container: freeipa-server
-keycloak_ldap_base_dn: dc=dev,dc=lo
-keycloak_ldap_users_dn: cn=users,cn=accounts,dc=dev,dc=lo
+keycloak_ldap_base_dn: null
+keycloak_ldap_users_dn: null
 
-keycloak_ldap_groups_dn: cn=groups,cn=accounts,dc=dev,dc=lo
+keycloak_ldap_groups_dn: null
 keycloak_ldap_bind_user: keycloak
 
 keycloak_ldap_configure_keycloak: true
