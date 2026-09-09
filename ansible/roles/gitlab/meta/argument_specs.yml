@@ -124,7 +124,7 @@ argument_specs:
       gitlab_ready_retries:
         type: int
         required: false
-        default: 60
+        default: 30
         description: Readiness poll attempts.
       gitlab_ready_delay:
         type: int
@@ -134,7 +134,7 @@ argument_specs:
       gitlab_install_timeout:
         type: int
         required: false
-        default: 2400
+        default: 1200
         description: Seconds allowed for the first reconfigure.
       gitlab_no_log:
         type: bool

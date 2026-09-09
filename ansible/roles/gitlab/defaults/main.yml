@@ -36,9 +36,17 @@ gitlab_registry_enabled: true
 
 gitlab_env_template: null
 gitlab_compose_template: null
-
-gitlab_ready_retries: 60
+# Cold-build measured on the current real-disk hardware (2026-09-09):
+# the readiness poll needed ~166s (~17 polls) from listener-up to the
+# readiness endpoint returning 200. 30 x 10s = 5 minutes keeps ~3x that
+# with room for a slow first reconfigure; the earlier 60 x 10s = 10
+# minutes predated the hardware migration.
+gitlab_ready_retries: 30
 gitlab_ready_delay: 10
-gitlab_install_timeout: 2400
+# Caps the container start + HTTPS listener wait. A measured cold start
+# to readiness on the current hardware took ~9 minutes wall clock, so
+# 1200s (20 minutes) is ~2.2x headroom; 2400s was sized for the slow
+# nested-VM I/O era.
+gitlab_install_timeout: 1200
 
 gitlab_no_log: true

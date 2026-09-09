@@ -42,7 +42,11 @@ freeipa_server_dns_forward_zones: []
 
 freeipa_server_no_log: true
 
-freeipa_server_install_timeout: 1800
+# Domain bootstrap cap (also the compose wait_timeout and the derived
+# ipactl poll budget, timeout/30 x 30s). A measured cold bootstrap on the
+# current hardware took ~280s; 900s keeps ~3x headroom. The earlier 1800s
+# predated the hardware migration.
+freeipa_server_install_timeout: 900
 
 freeipa_server_ready_retries: 60
 freeipa_server_ready_delay: 10
