@@ -233,7 +233,9 @@ if [ "${{IFACE:-$1}}" != "{dev}" ] && [ "${{IFACE:-$1}}" != "vlab" ]; then
     exit 0
 fi
 [ -r "{data}" ] || exit 0
-while read -r mac peer _; do
+# ``|| [ -n "$mac" ]`` guards a final line that lacks a trailing newline
+# (a bare ``while read`` would silently drop it, losing that peer's dst).
+while read -r mac peer _ || [ -n "$mac" ]; do
     [ -n "$mac" ] || continue
     case "$mac" in \\#*) continue ;; esac
     [ -n "$peer" ] || continue
@@ -252,8 +254,12 @@ def _install_node(settings: SdnFdbSettings, node: str, macs: dict[str, list[str]
     fdb_lines = _fdb_lines_for(node, settings, macs)
 
     # Stage both files atomically (write to a temp, then move) so a
-    # mid-write crash never leaves a half-installed hook.
-    data_body = "\n".join(fdb_lines)
+    # mid-write crash never leaves a half-installed hook. The file MUST end
+    # with a newline: the hook reads it with ``while read``, which silently
+    # drops a final line that is not newline-terminated. The last line is the
+    # broadcast ``dst`` for the highest-indexed peer, so a missing newline
+    # would deaden the overlay's broadcast route to that peer.
+    data_body = "\n".join(fdb_lines) + "\n"
     hook_body = _hook_script(settings)
     # Base64 the payloads to dodge every layer of shell quoting.
     data_b64 = base64.b64encode(data_body.encode()).decode()
