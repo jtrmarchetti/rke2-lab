@@ -81,11 +81,16 @@
   gather_facts: true
   become: true
 
-  # One control plane node in the heavy fetch/unpack/image-pull/etcd-join
-  # window at a time. A 2-wide join burst saturates repo01's GitLab registry
-  # and the shared PVE LVM, which is what turns a CNI image extract into a
-  # partial write that RKE2's .extracted marker then locks in permanently.
-  # serial:1 keeps the window single-node; the knob stays overridable.
+  # Two control plane nodes in the heavy unpack/image-pull/etcd-join
+  # window at a time (kubecp_serial). The nested-VM era ran 1-wide because
+  # a join burst saturated the shared fetch path and turned a CNI extract
+  # into a partial write the .extracted marker locks in; on dedicated
+  # hardware rke2_publish pre-mirrors the image set, so the join window
+  # only pulls from repo01 and each VM unpacks on its own disk. 2-wide,
+  # not 3: at most two etcd voters may enter the cluster at once, and the
+  # joiner polls the bootstrap's API before becoming a voter. The knob
+  # stays overridable; fall back to 1 if a partial-write symptom ever
+  # recurs.
   serial: "{{ kubecp_serial | default(1) }}"
   force_handlers: true
   tasks:

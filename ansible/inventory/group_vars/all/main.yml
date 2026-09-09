@@ -83,17 +83,22 @@ inventory_rke2_node_registry_mirrors:
     pattern: "^(.*)"
     replacement: rke2/images/$1
 
-# Join concurrency. The kubecp and kubewk join plays each pull the RKE2
-# tarball from repo01's GitLab registry, unpack to the shared PVE LVM,
-# start the RKE2 service, and pull the ~11-node image set (including the
-# hardened CNI plugin set) through the repo01 mirror. A multi-node burst
-# saturates that shared path and is what turns one node's CNI image
-# extract into a partial write that RKE2's .extracted marker then locks in
-# permanently. A 1-wide batch keeps exactly one node in that window at a
-# time; on a warm re-run every role is a no-op, so serial width costs
-# nothing. Overridable in case the topology changes.
-kubecp_serial: 1
-kubewk_serial: 1
+# Join concurrency. The join plays each unpack the RKE2 tarball and pull
+# the image set from repo01's GitLab registry. The nested-VM era ran them
+# 1-wide because a multi-node burst saturated that shared fetch path and
+# turned one node's CNI image extract into a partial write that RKE2's
+# .extracted marker then locks in permanently. On the current dedicated
+# hardware that path no longer applies: rke2_publish pre-mirrors the full
+# image set into the registry before any join starts, so a join only ever
+# pulls from repo01 (never upstream), and each VM unpacks on its own
+# virtual disk, so a burst cannot tear a shared write. Widths: kubecp is
+# 2-wide, not 3, because at most two etcd voters may enter the cluster at
+# once and the joiner's readyz poll already waits out the bootstrap before
+# it becomes a voter; kubewk joins add no etcd membership (kubelet-only),
+# so 3-wide is safe. On a warm re-run every join role no-ops, so the
+# width costs nothing there. Overridable in case the topology changes.
+kubecp_serial: 2
+kubewk_serial: 3
 
 # Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
 # on kubecp/kubewk ride out a slow first-boot sshd before the heavy play's

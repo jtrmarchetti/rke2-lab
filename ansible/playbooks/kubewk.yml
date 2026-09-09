@@ -28,12 +28,16 @@
   gather_facts: true
   become: true
 
-  # One worker in the heavy fetch/unpack/image-pull window at a time. A
-  # 3-way parallel join saturates repo01's GitLab registry and the shared
-  # PVE LVM, which is what turns the CNI image extract on one node into a
-  # partial write (kubewk02 portmap FIPS abort) that RKE2's .extracted
-  # marker then locks in. serial:1 keeps the window single-node; the knob
-  # stays overridable.
+  # All three workers in the heavy unpack/image-pull window at once
+  # (kubewk_serial, group_vars default 3). The nested-VM era ran 1-wide
+  # because a 3-way burst saturated the shared fetch path and turned the
+  # CNI image extract on one node into a partial write (kubewk02 portmap
+  # FIPS abort) that RKE2's .extracted marker locks in; on dedicated
+  # hardware rke2_publish pre-mirrors the image set into repo01's
+  # registry first, so the join window only pulls locally and each VM
+  # unpacks on its own disk. Workers add no etcd membership, so 3-wide
+  # is safe. The knob stays overridable; fall back to 1 if a
+  # partial-write symptom ever recurs.
   serial: "{{ kubewk_serial | default(1) }}"
   force_handlers: true
   tasks:
