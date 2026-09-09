@@ -95,6 +95,13 @@ inventory_rke2_node_registry_mirrors:
 kubecp_serial: 1
 kubewk_serial: 1
 
+# Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
+# on kubecp/kubewk ride out a slow first-boot sshd before the heavy play's
+# Gathering Facts aborts the build. 900s covers a slow-IO first boot; the
+# inline fallback in the play matches these values. Overridable per run.
+kubecp_ssh_wait: 900
+kubewk_ssh_wait: 900
+
 # kube_cli_node content values and template paths, shared by kubecp and
 # kubewk which both link the node CLI set.
 inventory_kube_cli_node_alias: k

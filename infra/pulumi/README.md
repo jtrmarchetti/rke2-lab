@@ -155,6 +155,49 @@ pulumi config set --path 'deployment:selectedVmKeys[1]' core01
 pulumi up
 ```
 
+## SDN vxlan overlay: durable remote-FDB `dst` bindings
+
+The estate's internal network is a PVE SDN vxlan zone (`labvx`) whose vnet
+bridge is `vlab` / `vxlan_vlab`. PVE 9.2 materializes that bridge from the
+generated `/etc/network/interfaces.d/sdn` but has **no runtime daemon** that
+programs the kernel's remote-FDB `dst` bindings from the `vxlan_remoteip`
+lines. Without a static `bridge fdb append <mac> dev vxlan_vlab dst
+<peer-underlay>` entry for each remote VM MAC, cross-node encapsulation is
+impossible and the overlay is dead even though both ends' bridges are UP.
+
+`modules/sdn_fdb.py` makes this durable and repeatable from scratch:
+
+- For each PVE node it reads each SDN VM's **PVE-assigned MAC** from PVE's
+  own config API (`GET /nodes/<n>/qemu/<vmid>/config` → `net<idx> virtio=`).
+  That is the MAC a cold-booted VM carries, not the transient live-tap MAC
+  that drifts after a VM is recreated — so a fresh build routes correctly.
+- It writes a per-node data file to `/etc/sdn-vlab-fdb/sdn-vlab-fdb.txt`
+  (one `<mac> <peer-underlay>` line per remote MAC, plus the VRRP +
+  broadcast `dst` lines) and installs `/etc/network/if-up.d/sdn-vlab-fdb`,
+  an `if-up` hook that re-applies the file on every bring-up of the vxlan.
+  The hook is what heals the FDB after a reboot or a `pve-sdn-commit`.
+
+Two gotchas encoded in the module:
+
+- **The data file must not live in `/etc/pve`.** That tree is
+  cluster-replicated by csync2 on PVE, so a per-node file written there is
+  clobbered to the last node's content cluster-wide. `/etc/sdn-vlab-fdb/` is
+  node-local, which is why the data file goes there.
+- **Verify reachability with ICMP, not TCP/22.** The RKE2/Ubuntu nodes do
+  not expose SSH on the internal overlay; ping an internal IP from an
+  overlay member (or dump `bridge fdb show dev vxlan_vlab` on a peer) to
+  confirm the `dst` entries are present.
+
+The wiring in `__main__.py` runs `ensure_sdn_fdb` after VM creation and
+before the preflight cleanup, skipped on preview/dry-run. It also has a
+standalone entry point for one-off re-application:
+
+```bash
+cd infra/pulumi && source .venv/bin/activate && source ~/.config/rke2lab/env.sh
+python3 -m modules.sdn_fdb        # discover + log only
+python3 -m modules.sdn_fdb --apply  # install the hook and fire the FDB
+```
+
 ## Notes
 
 - VM specs are defined in modules/vm_definitions.py from current plan/TARGETS values.

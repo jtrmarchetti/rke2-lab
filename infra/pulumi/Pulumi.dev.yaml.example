@@ -1,37 +1,81 @@
+# Example configuration for the dev stack, rewritten for the 3-node PVE
+# cluster (dev-cluster). The real Pulumi.dev.yaml carries the encrypted
+# proxmox:password / vmSshPublicKey / vmUserPassword; this file documents the
+# shape and defaults only.
 config:
-  proxmox:endpoint: https://192.168.1.16:8006/
+  # Any node's API endpoint reaches the whole cluster; managementNode is the
+  # one the provider/SSH talks to for node-scoped operations.
+  proxmox:endpoint: https://192.168.1.21:8006/
   proxmox:username: root@pam
   proxmox:insecure: true
 
-  deployment:phaseLimit: 2
-  # Optional: if omitted, the stack downloads and imports Ubuntu 24.04 cloud image.
+  # --- 3-node PVE cluster ---
+  deployment:phaseLimit: 5
+  deployment:nodeNames:
+    - pve01
+    - pve02
+    - pve03
+  deployment:managementNode: pve01
+  # Optional: if omitted, the stack downloads and imports Ubuntu 24.04 cloud
+  # image into each node's `local` import store.
   # deployment:templateVmId: 9000
-  deployment:templateNodeName: proxmox-rke2
-  deployment:imageDatastoreId: dev-lo-directory
-  deployment:datastoreId: dev-lo-data
-  deployment:cloudInitDatastoreId: dev-lo-data
+
+  # Per-node storage (identical names across the cluster). lvmthin holds the
+  # VM disks + cloud-init LVs; the `local` dir store holds the boot image
+  # (PVE 9.2 lvmthin rejects file uploads).
+  deployment:datastoreId: local-lvm
+  deployment:cloudInitDatastoreId: local-lvm
+  deployment:imageDatastoreId: local
   # For lvmthin, leave unset (provider/proxmox defaults), or set to raw if needed.
   # deployment:diskFileFormat: raw
+
+  # External uplink bridge (per-node, identical name on all nodes).
   deployment:externalBridge: vmbr0
-  deployment:internalBridge: vmbr1
-  deployment:manageInternalBridge: true
-  # Leave empty for an isolated internal-only bridge with no uplink ports.
-  # deployment:internalBridgePorts: []
-  # Optional temporary bootstrap override if vmbr1 is not ready yet.
-  # deployment:allowSharedBridge: true
+
+  # Internal LAN is cluster-wide via PVE SDN: a vxlan zone spanning every node
+  # plus one vnet whose bridge name is the VMs' internal attach target. No
+  # per-node vmbr1 and no Pulumi-managed network bridge.
+  deployment:sdnZoneId: labvx
+  deployment:sdnVnetId: vlab
+  deployment:vxlanTag: 42
+  deployment:sdnPeers:
+    - 192.168.1.21
+    - 192.168.1.22
+    - 192.168.1.23
+
   deployment:vmUsername: devops
   deployment:vmDomain: dev.lo
 
   # Optional cloud image override when no templateVmId is set. The stack's
   # default is a pinned dated release with the checksum published beside it;
-  # override the URL and the checksum together or the download will fail, which
-  # is the intended behaviour.
+  # override the URL and the checksum together or the download will fail,
+  # which is the intended behaviour.
   # deployment:baseImageUrl: https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img
   # deployment:baseImageChecksum: 6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733
   # deployment:baseImageFileName: noble-server-cloudimg-amd64.qcow2
 
   # Either set deployment:vmSshPublicKey or VM_SSH_PUBLIC_KEY.
   # deployment:vmSshPublicKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
+
+  # --- Cluster-wide distribution (reasoned SPOF spread, pinned) ---
+  # One control-plane + one worker per host so a host failure loses at most
+  # 1/3 of either set; the two infra VMs split across the hosts that do NOT
+  # host cp01. These pins win over build-time best-fit; any VM not listed
+  # here falls back to best-fit node selection (modules/placement.py) and its
+  # choice is written to the committed placement record so it is stable.
+  # To let the planner place a VM instead of pinning it, drop its key here.
+  deployment:placementOverrides:
+    kubecp01: pve01
+    kubewk01: pve01
+    kubecp02: pve02
+    kubewk02: pve02
+    kubecp03: pve03
+    kubewk03: pve03
+    repo01: pve02
+    core01: pve03
+  # Optional: override the committed placement record path (default
+  # ./.placement.json beside the Pulumi program).
+  # deployment:placementRecordPath: ./placement.json
 
   # Optional explicit selection. If set, this overrides phaseLimit.
   # deployment:selectedVmKeys:

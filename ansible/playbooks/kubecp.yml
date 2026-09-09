@@ -57,6 +57,25 @@
           tags:
             - rke2_publish
 
+- name: Wait for the RKE2 control planes to accept SSH
+  hosts: kubecp
+  gather_facts: false
+  become: false
+  serial: 1
+
+  # Gather facts is not retryable: a cold-VM sshd or a transient vxlan
+  # overlay blip on 192.168.2.x makes the play abort the whole build at
+  # the connection stage. A lightweight wait_for_connection probe (TCP 22
+  # from the control node, no python needed on the target) rides out the
+  # blip before the heavy play starts. Knob stays overridable.
+  tasks:
+    - name: kubecp | Wait for SSH on the control plane node
+      tags:
+        - always
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: "{{ kubecp_ssh_wait | default(900) }}"
+
 - name: Form the RKE2 control plane
   hosts: kubecp
   gather_facts: true

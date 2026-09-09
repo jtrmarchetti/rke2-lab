@@ -6,6 +6,23 @@
     _preflight_required_env:
       - RKE2_TOKEN
 
+- name: Wait for the RKE2 workers to accept SSH
+  hosts: kubewk
+  gather_facts: false
+  become: false
+  serial: 1
+
+  # Same pre-guard as the control-plane play: a cold-VM sshd or a transient
+  # vxlan overlay blip must not kill the worker join at Gathering Facts.
+  # Knob stays overridable.
+  tasks:
+    - name: kubewk | Wait for SSH on the worker node
+      tags:
+        - always
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: "{{ kubewk_ssh_wait | default(900) }}"
+
 - name: Join the RKE2 workers to the cluster
   hosts: kubewk
   gather_facts: true

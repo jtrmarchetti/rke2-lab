@@ -3,3 +3,10 @@ __pycache__/
 modules/__pycache__/
 Pulumi.*.yaml
 !Pulumi.dev.yaml.example
+
+# Local-only working artifacts: never commit these. test_sdn/ + scripts/ are
+# standalone test/probe tooling kept out-of-band (see plan + repo memory);
+# the gate summary is a per-review scoping doc.
+test_sdn/
+scripts/
+.gate_plan_summary.md

@@ -69,10 +69,23 @@ class CleanupSettings:
     endpoint: str
     username: str
     password: str
-    node_name: str
+    # Every node in the cluster is scanned for orphans: a failed qmcreate can
+    # leave a cloudinit-LV on whichever node the VM was being created on, and
+    # the 3-node layout spreads VMs across all of them.
+    node_names: tuple[str, ...]
     datastore_ids: tuple[str, ...]
     insecure: bool = True
     fallback_password_file: str | None = None
+    # Optional node-name -> SSH-host map for the host fallback. The API path is
+    # cluster-wide (one endpoint reaches every node), but the pvesm-free SSH
+    # fallback must reach the specific node; if unset the node name itself is
+    # used (works when node names resolve from the operator host).
+    node_ssh_hosts: dict[str, str] | None = None
+
+    def ssh_host_for(self, node: str) -> str:
+        if self.node_ssh_hosts:
+            return self.node_ssh_hosts.get(node, node)
+        return node
 
 def _read_fallback_password(settings: CleanupSettings) -> str:
     """Read the PVE host root SSH password from the configured fallback file.
@@ -103,17 +116,6 @@ class PveClient:
         if settings.insecure:
             self._ctx.check_hostname = False
             self._ctx.verify_mode = ssl.CERT_NONE
-
-    @property
-    def ssh_host(self) -> str:
-        """SSH target host: the hostname part of settings.endpoint.
-
-        ``urlparse`` strips any trailing slash, so ``https://192.168.1.16:8006/``
-        yields ``192.168.1.16`` (no port: the fallback uses the standard
-        22/SSH port, not the API port).
-        """
-        hostname = urllib.parse.urlparse(self.settings.endpoint).hostname
-        return hostname or self.host
 
     def _try_ticket(self, username: str, password: str) -> tuple[str, str]:
         """POST /access/ticket; returns (ticket, csrf) or raises RuntimeError."""
@@ -173,19 +175,44 @@ class PveClient:
             except (json.JSONDecodeError, ValueError):
                 return exc.code, {"message": body[:400]}
 
-    def node_vmids(self, ticket: str) -> set[int]:
+    def node_vmids(self, ticket: str, node: str) -> set[int]:
         status, payload = self._request(
-            "GET", f"/api2/json/nodes/{self.settings.node_name}/qemu", ticket
+            "GET", f"/api2/json/nodes/{node}/qemu", ticket
         )
         if status != 200:
             raise RuntimeError(f"Failed to list VMs on node: HTTP {status}: {payload}")
         entries = payload.get("data", payload) if isinstance(payload, dict) else payload
         return {v["vmid"] for v in entries if isinstance(v, dict) and "vmid" in v}
 
-    def node_content(self, ticket: str, datastore: str) -> list[dict]:
+    _NET_MAC_RE = re.compile(r"virtio=([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})")
+
+    def node_vm_mac(self, ticket: str, node: str, vmid: int, nic_index: int) -> str:
+        """Return the PVE-assigned MAC of a VM's ``net<nic_index>`` device.
+
+        The PVE VM config is the authoritative, create-time MAC source: it is
+        the MAC the VM carries at steady state after a cold boot, so it is the
+        value a from-scratch build must encode. (The live tap on the hypervisor
+        is runtime-transient and can drift from this until the VM reboots.)
+        Returns "" when the NIC has no MAC configured or the VM/field is absent.
+        """
+        status, payload = self._request(
+            "GET", f"/api2/json/nodes/{node}/qemu/{vmid}/config", ticket
+        )
+        if status != 200:
+            return ""
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return ""
+        net = data.get(f"net{nic_index}")
+        if not isinstance(net, str):
+            return ""
+        m = self._NET_MAC_RE.search(net)
+        return m.group(1).lower() if m else ""
+
+    def node_content(self, ticket: str, datastore: str, node: str) -> list[dict]:
         status, payload = self._request(
             "GET",
-            f"/api2/json/nodes/{self.settings.node_name}/storage/{datastore}/content",
+            f"/api2/json/nodes/{node}/storage/{datastore}/content",
             ticket,
         )
         if status != 200:
@@ -196,12 +223,12 @@ class PveClient:
         return [c for c in entries if c.get("volid", "").startswith(f"{datastore}:")]
 
     def delete_content(
-        self, ticket: str, csrf: str, datastore: str, volume: str
+        self, ticket: str, csrf: str, datastore: str, volume: str, node: str
     ) -> str:
         """Delete a storage volume; returns '' on success, an error string otherwise."""
         status, payload = self._request(
             "DELETE",
-            f"/api2/json/nodes/{self.settings.node_name}/storage/{datastore}/content/{volume}",
+            f"/api2/json/nodes/{node}/storage/{datastore}/content/{volume}",
             ticket,
             csrf,
             {"stopvm": 0},
@@ -211,13 +238,13 @@ class PveClient:
         upid = str(payload.get("data", ""))
         if not upid:
             return "no task UPID returned"
-        outcome = self.wait_task(ticket, upid)
+        outcome = self.wait_task(ticket, upid, node)
         return outcome
 
-    def wait_task(self, ticket: str, upid: str) -> str:
+    def wait_task(self, ticket: str, upid: str, node: str) -> str:
         for _ in range(60):
             status, payload = self._request(
-                "GET", f"/api2/json/nodes/{self.settings.node_name}/tasks/{upid}/status", ticket
+                "GET", f"/api2/json/nodes/{node}/tasks/{upid}/status", ticket
             )
             if status != 200:
                 return f"task poll HTTP {status}: {payload}"
@@ -227,18 +254,22 @@ class PveClient:
                 return "" if exit_status in ("OK", 0, "0") else str(exit_status)
         return "task still running after poll window"
 
-def find_orphans(client: PveClient, ticket: str) -> list[tuple[str, str]]:
-    """Return (datastore, volume_name) pairs of content whose VMID no VM owns.
+def find_orphans(
+    client: PveClient, ticket: str, node: str
+) -> list[tuple[str, str, str]]:
+    """Return (node, datastore, volume_name) of content whose VMID no VM owns.
 
     Only the cloud-init / disk image volumes (``vm-<id>-*``) are considered:
-    they are the only things PVE allocates per VMID on this stack.
+    they are the only things PVE allocates per VMID on this stack. Per-node:
+    the volume exists on a specific node, and the fallback SSH path must free
+    it there.
     """
-    existing = client.node_vmids(ticket)
-    orphans: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
+    existing = client.node_vmids(ticket, node)
+    orphans: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
     for datastore in client.settings.datastore_ids:
         try:
-            content = client.node_content(ticket, datastore)
+            content = client.node_content(ticket, datastore, node)
         except RuntimeError:
             continue
         for entry in content:
@@ -254,7 +285,7 @@ def find_orphans(client: PveClient, ticket: str) -> list[tuple[str, str]]:
             if vmid in existing:
                 continue
             volume = entry.get("volid", "").split(":", 1)[-1]
-            key = (datastore, volume)
+            key = (node, datastore, volume)
             if key not in seen:
                 seen.add(key)
                 orphans.append(key)
@@ -269,8 +300,10 @@ _SSH_CLIENT_OPTS = [
     "-o", "ConnectTimeout=10",
 ]
 
-def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: str) -> str:
-    """Remove ``label`` (``<datastore>:<volume>``) on the PVE host over root
+def _remove_volume_via_ssh(
+    client: PveClient, settings: CleanupSettings, label: str, node: str
+) -> str:
+    """Remove ``label`` (``<datastore>:<volume>``) on node ``node`` over root
     password-SSH: ``pvesm free <label>``. Returns '' on success, an error
     string otherwise.
 
@@ -281,7 +314,7 @@ def _remove_volume_via_ssh(client: PveClient, settings: CleanupSettings, label: 
     import pexpect
 
     password = _read_fallback_password(settings)
-    host = client.ssh_host
+    host = settings.ssh_host_for(node)
     cmd = f"pvesm free {shlex.quote(label)} 2>&1; echo {_SSH_EXIT_MARKER}$?"
     remote = f"bash -lc {shlex.quote(cmd)}"
     child = pexpect.spawn(
@@ -333,44 +366,61 @@ def clean_orphans(settings: CleanupSettings, apply: bool = False) -> list[str]:
     """
     client = PveClient(settings)
     ticket, csrf = client.auth()
-    orphans = find_orphans(client, ticket)
-    lines = [f"Proxmox preflight: {len(orphans)} orphan storage volume(s) found on node '{settings.node_name}'."]
-    if not orphans:
-        return lines
+    lines: list[str] = []
+    total = 0
+    for node in settings.node_names:
+        orphans = find_orphans(client, ticket, node)
+        total += len(orphans)
+        lines.append(
+            f"Proxmox preflight: {len(orphans)} orphan storage volume(s) found on node '{node}'."
+        )
+        if not orphans:
+            continue
 
-    api_errors: dict[str, str] = {}
-    if apply:
-        for datastore, volume in orphans:
-            label = f"{datastore}:{volume}"
-            api_errors[label] = client.delete_content(ticket, csrf, datastore, volume)
-        failed = [label for label, error in api_errors.items() if error]
-        if failed and settings.fallback_password_file:
-            print(
-                f"[pve_cleanup] host fallback: ssh to {client.ssh_host} "
-                f"for {len(failed)} volume(s)"
-            )
-            for label in failed:
-                try:
-                    error = _remove_volume_via_ssh(client, settings, label)
-                except ImportError:
-                    print(
-                        "[pve_cleanup] host fallback unavailable: "
-                        "pexpect is not installed"
-                    )
-                    break
-                if error:
-                    api_errors[label] = f"API: {api_errors[label]}; host fallback: {error}"
-                else:
-                    api_errors[label] = ""
+        api_errors: dict[tuple[str, str], str] = {}
+        if apply:
+            for _node, datastore, volume in orphans:
+                label = f"{datastore}:{volume}"
+                api_errors[(_node, datastore, volume)] = client.delete_content(
+                    ticket, csrf, datastore, volume, _node
+                )
+            failed = [k for k, error in api_errors.items() if error]
+            if failed and settings.fallback_password_file:
+                hosts = {k[0] for k in failed}
+                print(
+                    f"[pve_cleanup] host fallback: ssh to "
+                    f"{', '.join(settings.ssh_host_for(h) for h in sorted(hosts))} "
+                    f"for {len(failed)} volume(s)"
+                )
+                for node_key, datastore, volume in failed:
+                    label = f"{datastore}:{volume}"
+                    try:
+                        error = _remove_volume_via_ssh(
+                            client, settings, label, node_key
+                        )
+                    except ImportError:
+                        print(
+                            "[pve_cleanup] host fallback unavailable: "
+                            "pexpect is not installed"
+                        )
+                        break
+                    if error:
+                        api_errors[(node_key, datastore, volume)] = (
+                            f"API: {api_errors[(node_key, datastore, volume)]}; host fallback: {error}"
+                        )
+                    else:
+                        api_errors[(node_key, datastore, volume)] = ""
 
-    for datastore, volume in orphans:
-        label = f"{datastore}:{volume}"
-        if not apply:
-            lines.append(f"  would remove {label}")
-        elif api_errors[label]:
-            lines.append(f"  could not remove {label}: {api_errors[label]}")
-        else:
-            lines.append(f"  removed {label}")
+        for node_key, datastore, volume in orphans:
+            label = f"{node_key}:{datastore}:{volume}"
+            if not apply:
+                lines.append(f"  would remove {label}")
+            elif api_errors[(node_key, datastore, volume)]:
+                lines.append(
+                    f"  could not remove {label}: {api_errors[(node_key, datastore, volume)]}"
+                )
+            else:
+                lines.append(f"  removed {label}")
     return lines
 
 def run_standalone(argv: list[str]) -> int:
@@ -390,12 +440,22 @@ def run_standalone(argv: list[str]) -> int:
         print("PROXMOX_VE_ENDPOINT and PROXMOX_VE_PASSWORD must be set")
         return 2
     fallback = os.getenv("PROXMOX_HOST_PASSWORD_FILE") or os.path.expanduser("~/.proxmoxpass")
+    node_names = tuple(
+        n.strip() for n in os.getenv(
+            "PROXMOX_VE_NODES", "pve01,pve02,pve03"
+        ).split(",") if n.strip()
+    )
     settings = CleanupSettings(
         endpoint=endpoint,
         username=username,
         password=password,
-        node_name=os.getenv("PROXMOX_VE_NODE", "proxmox-rke2"),
-        datastore_ids=(os.getenv("PROXMOX_VE_DATASTORE", "dev-lo-data"),),
+        node_names=node_names,
+        datastore_ids=(os.getenv("PROXMOX_VE_DATASTORE", "local-lvm"),),
+        node_ssh_hosts={
+            "pve01": "192.168.1.21",
+            "pve02": "192.168.1.22",
+            "pve03": "192.168.1.23",
+        },
         fallback_password_file=fallback,
     )
     try:
