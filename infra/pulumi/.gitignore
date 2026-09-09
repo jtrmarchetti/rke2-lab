@@ -10,3 +10,6 @@ Pulumi.*.yaml
 test_sdn/
 scripts/
 .gate_plan_summary.md
+# Best-fit placement record: written only for VMs placed fresh (not covered by
+# placementOverrides). Machine-local build state, not stack config.
+.placement.json

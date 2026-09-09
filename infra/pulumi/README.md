@@ -188,8 +188,16 @@ Two gotchas encoded in the module:
   overlay member (or dump `bridge fdb show dev vxlan_vlab` on a peer) to
   confirm the `dst` entries are present.
 
-The wiring in `__main__.py` runs `ensure_sdn_fdb` after VM creation and
-before the preflight cleanup, skipped on preview/dry-run. It also has a
+The wiring in `__main__.py` defers both imperative writes — the cluster-wide
+`apply_sdn` reload and `ensure_sdn_fdb` — into a post-creation callback over
+`pulumi.Output.all(sdn_vnet.id, *[v.id for v in vm_resources]).apply(...)`.
+On preview/dry-run the callback still runs but both writers self-gate on
+`is_dry_run()`, so the no-op holds. Registering them at resource-creation
+time would
+make a first-from-scratch up reload an empty SDN config and install FDB
+files with no VM MAC lines; the callback runs only once the zone, vnet, and
+VMs all exist, so the reload sees the real objects and MAC discovery finds
+the PVE-assigned MACs each VM carries at create time. There is also a
 standalone entry point for one-off re-application:
 
 ```bash
@@ -197,6 +205,14 @@ cd infra/pulumi && source .venv/bin/activate && source ~/.config/rke2lab/env.sh
 python3 -m modules.sdn_fdb        # discover + log only
 python3 -m modules.sdn_fdb --apply  # install the hook and fire the FDB
 ```
+
+Proven end to end on the 3-node cluster (2026-09-09): a `pulumi destroy` down
+to zero VMs followed by a cold `pulumi up` installed the FDB data files and
+kernel `dst … self permanent` entries on every node in the first pass (log:
+`sdn-fdb: discovered MACs pve01=2, pve02=3, pve03=3` → `pve01: 10 dst
+line(s); FDB entries now 32`, etc.) with no manual `bridge fdb append` step,
+and the entries survived the subsequent full `site.yml` build and its
+idempotent re-run.
 
 ## Notes
 
