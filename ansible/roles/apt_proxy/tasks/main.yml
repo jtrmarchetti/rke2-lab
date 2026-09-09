@@ -39,10 +39,11 @@
   # is not cached yet (500 + a poisoned InRelease that later fails GPG
   # verification). A warm store is served verbatim with no write path, so a
   # single clean client pass before the lab's multi-client burst makes the
-  # race unreachable. This runs in the repo01 play, before core01/kubecp/
-  # kubewk, so clearing the store on the BADSIG path below cannot race a
-  # live fetch. Assumption: every lab host's apt sources are a subset of
-  # repo01's, so each index is warmed here before the first client hit; a
+  # race unreachable. This runs in the artifact-host play, before any
+  # control-plane or workload host, so clearing the store on the BADSIG path
+  # below cannot race a live fetch. Assumption: every lab host's apt sources
+  # are a subset of the artifact host's, so each index is warmed here before
+  # the first client hit; a
   # repo added to only one VM's lists would still cold-fetch through the
   # cacher and could stall past the tightened base_host cap.
   when:

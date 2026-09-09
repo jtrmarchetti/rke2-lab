@@ -349,11 +349,13 @@
         - keycloak_ldap
       vars:
         keycloak_ldap_base_dn: "{{ inventory_keycloak_ldap_base_dn }}"
+        keycloak_ldap_bind_user: "{{ inventory_keycloak_ldap_bind_user }}"
         keycloak_ldap_connection_url: >-
           {{ inventory_keycloak_ldap_connection_url }}
         keycloak_ldap_dir_manager_password: >-
           {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
         keycloak_ldap_groups_dn: "{{ inventory_keycloak_ldap_groups_dn }}"
+        keycloak_ldap_ipa_container: "{{ inventory_keycloak_ldap_ipa_container }}"
         keycloak_ldap_ipa_host: "{{ inventory_keycloak_ldap_ipa_host }}"
         keycloak_ldap_realm: "{{ inventory_keycloak_realm_name }}"
         keycloak_ldap_url: "{{ inventory_keycloak_ldap_url }}"
@@ -385,9 +387,11 @@
           {{ inventory_keycloak_ldap_connection_url }}
         keycloak_ldap_dir_manager_password: >-
           {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
+        keycloak_ldap_bind_user: "{{ inventory_keycloak_ldap_bind_user }}"
         keycloak_ldap_groups_dn: "{{ inventory_keycloak_ldap_groups_dn }}"
         keycloak_ldap_groups_filter: >-
           {{ inventory_keycloak_admin_groups_filter }}
+        keycloak_ldap_ipa_container: "{{ inventory_keycloak_ldap_ipa_container }}"
         keycloak_ldap_ipa_host: "{{ inventory_keycloak_ldap_ipa_host }}"
         keycloak_ldap_manage_sysaccount: false
         keycloak_ldap_realm: master

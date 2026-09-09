@@ -1,6 +1,4 @@
 ---
-inventory_phase1_environment_name: dev_lo
-
 inventory_files_base: "{{ ansible_config_file | dirname }}/files"
 
 inventory_base_host_split_dns_template: >-

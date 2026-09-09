@@ -10,10 +10,6 @@ argument_specs:
         failure between the two leaves a sealed vault whose keys exist rather
         than an unsealed vault whose keys do not.
     options:
-      openbao_init_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       openbao_init_namespace:
         type: str
         default: openbao

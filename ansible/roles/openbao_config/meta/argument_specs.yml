@@ -9,10 +9,6 @@ argument_specs:
       - Asserts the binding is narrow, because a role bound to every namespace
         lets any schedulable pod read every secret the policy covers.
     options:
-      openbao_config_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       openbao_config_url:
         type: str
         description: The vault's API, through its ingress.

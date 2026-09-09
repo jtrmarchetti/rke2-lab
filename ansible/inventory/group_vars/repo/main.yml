@@ -110,9 +110,6 @@ inventory_artifact_host_directories:
 inventory_artifact_stage_enabled: true
 inventory_artifact_stage_root: /data1/artifacts
 
-inventory_repo_artifact_source: repo01
-inventory_repo_internal_download_policy: repo01_only
-
 inventory_ipa_service_cert_enabled: true
 inventory_ipa_service_cert_ipa_host: core01
 

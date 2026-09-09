@@ -27,7 +27,7 @@ services:
   inventory_freeipa_server_* var; the branches are mutually exclusive
   (--forwarders vs --no-forwarders, --setup-ntp vs --no-ntp) so the
   list cannot be flattened into a static inventory value. join/split
-  explodes two-word entries (e.g. "--realm dev.lo") into separate argv
+  explodes two-word entries (e.g. "--realm <realm>") into separate argv
   words.
 #}
 {% set _freeipa_server_install_flags =

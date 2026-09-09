@@ -10,8 +10,7 @@
       . ':(exclude){{ _var_gitops_source_flux_dir }}'
 
 - name: commit | Stage the ansible-owned tree # noqa: command-instead-of-module
-  changed_when: >-
-    {{ _reg_gitops_source_tree_dirty['stdout'] | length > 0 }}
+  changed_when: _reg_gitops_source_tree_dirty['stdout'] | length > 0
   ansible.builtin.command:
     cmd: >-
       git -C {{ gitops_source_work_dir }} add -A

@@ -4,6 +4,10 @@
   hosts: repo
   gather_facts: true
   become: true
+  vars:
+    _validate_artifact_manifest: >-
+      {{ inventory_artifact_stage_manifest
+         | selectattr('dest', 'defined') | list }}
   tasks:
     - name: validate_phase1 | Gather service facts
       ansible.builtin.service_facts:
@@ -88,30 +92,64 @@
           on the OS disk.
         quiet: true
 
-    - name: validate_phase1 | Validate each manifest artifact is published
-      when: (inventory_artifact_stage_manifest | length > 0)
-      register: _reg_validate_artifacts
-      loop: "{{ inventory_artifact_stage_manifest }}"
+    # Mirror entries proxy images and publish nothing, so they have no
+    # destination path; only entries that carry a dest are checked here.
+    # An entry counts as published when either its body or its source-named
+    # marker exists: bootstrap-retention bodies are kept on disk forever
+    # (no marker is written for them), while transit-retention bodies are
+    # deleted after their consuming phase and only the marker remains, the
+    # same published signal the staging roles use.
+    - name: validate_phase1 | Note each manifest artifact's body
+      when: _validate_artifact_manifest | length > 0
+      register: _reg_validate_artifact_bodies
+      loop: "{{ _validate_artifact_manifest }}"
       loop_control:
         loop_var: _item_validate_artifact
         label: "{{ _item_validate_artifact['dest'] }}"
       ansible.builtin.stat:
         path: >-
-          {{ inventory_artifact_host_document_root }}/{{ _item_validate_artifact['dest'] }}
+          {{ inventory_artifact_host_document_root
+          }}/{{ _item_validate_artifact['dest'] }}
         get_checksum: false
 
-    - name: validate_phase1 | Assert every manifest artifact is present
-      when: (inventory_artifact_stage_manifest | length > 0)
-      loop: "{{ _reg_validate_artifacts['results'] | default([]) }}"
+    - name: validate_phase1 | Note each manifest artifact's published marker
+      when: _validate_artifact_manifest | length > 0
+      register: _reg_validate_artifact_markers
+      loop: "{{ _validate_artifact_manifest }}"
       loop_control:
-        loop_var: _item_validate_result
-        label: "{{ _item_validate_result['_item_validate_artifact']['dest'] }}"
+        loop_var: _item_validate_artifact
+        label: "{{ _item_validate_artifact['dest'] }}"
+      vars:
+        _validate_artifact_marker_source: >-
+          {{ _item_validate_artifact.get('url',
+             _item_validate_artifact.get('image', ''))
+             | regex_replace('[^A-Za-z0-9._~-]', '') }}
+      ansible.builtin.stat:
+        path: >-
+          {{ inventory_artifact_host_document_root }}/{{
+          _item_validate_artifact['dest'] }}.published.{{
+          _validate_artifact_marker_source }}
+        get_checksum: false
+
+    - name: validate_phase1 | Assert every manifest artifact is published
+      when: _validate_artifact_manifest | length > 0
+      vars:
+        _validate_artifact_pairs: >-
+          {{ _reg_validate_artifact_bodies['results'] | zip(
+             _reg_validate_artifact_markers['results'] | default([])) | list }}
+      loop: "{{ _validate_artifact_pairs }}"
+      loop_control:
+        loop_var: _item_validate_artifact_pair
+        label: >-
+          {{ _item_validate_artifact_pair[0]['_item_validate_artifact']['dest'] }}
         extended: true
       ansible.builtin.assert:
         that:
-          - _item_validate_result['stat']['exists']
+          - _item_validate_artifact_pair[0]['stat']['exists']
+            or _item_validate_artifact_pair[1]['stat']['exists']
         fail_msg: >-
-          {{ _item_validate_result['_item_validate_artifact']['name'] }} was not published to
+          {{ _item_validate_artifact_pair[0]['_item_validate_artifact']['name'] }}
+          is not published: neither its body nor its published marker is in
           {{ inventory_artifact_host_document_root }}.
         quiet: true
 
@@ -212,7 +250,8 @@
       ansible.builtin.uri:
         url: >-
           http://{{ _validate_repo_internal_address }}/{{ _validate_artifact['dest'] }}
-        return_content: true
+        # No return_content: the first manifest entry is a multi-hundred-MB
+        # tarball, and registering its body would overflow the task result.
         status_code:
           - 200
 

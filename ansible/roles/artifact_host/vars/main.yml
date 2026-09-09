@@ -4,7 +4,6 @@ _var_artifact_host_packages:
 
 _var_artifact_host_service: apache2
 
-_var_artifact_host_site_name: artifact-host
 _var_artifact_host_site_available: >-
   /etc/apache2/sites-available/artifact-host.conf
 _var_artifact_host_site_enabled: >-

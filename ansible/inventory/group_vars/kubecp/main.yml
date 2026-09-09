@@ -101,6 +101,8 @@ inventory_rke2_server_config_template: >-
   {{ inventory_files_base }}/rke2_server/config.yaml.j2
 inventory_rke2_server_traefik_template: >-
   {{ inventory_files_base }}/rke2_server/traefik-config.yaml.j2
+inventory_rke2_server_cilium_config_template: >-
+  {{ inventory_files_base }}/rke2_server/cilium-config.yaml.j2
 inventory_rke2_server_kube_vip_template: >-
   {{ inventory_files_base }}/rke2_server/kube-vip.yaml.j2
 

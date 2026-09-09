@@ -11,10 +11,6 @@ argument_specs:
       - Asserts that what came back really is a CA at path length zero, rather
         than trusting that the profile applied.
     options:
-      ipa_sub_ca_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       ipa_sub_ca_ipa_host:
         type: str
         required: true

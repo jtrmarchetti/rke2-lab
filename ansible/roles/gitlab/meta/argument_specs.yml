@@ -64,11 +64,6 @@ argument_specs:
         required: false
         default: /data1/gitlab
         description: Root of the persistent data tree on the data disk.
-      gitlab_backup_dir:
-        type: path
-        required: false
-        default: /data1/gitlab/backups
-        description: Directory backups are written to.
       gitlab_image_tarball_url:
         type: str
         required: false

@@ -1,5 +1,4 @@
 ---
-openbao_init_enabled: true
 
 openbao_init_namespace: openbao
 openbao_init_pod: openbao-0

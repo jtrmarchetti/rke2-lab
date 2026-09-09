@@ -1,5 +1,4 @@
 ---
-keycloak_ldap_enabled: true
 
 keycloak_ldap_ipa_host: null
 keycloak_ldap_ipa_container: freeipa-server

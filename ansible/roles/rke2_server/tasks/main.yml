@@ -56,6 +56,12 @@
     - (rke2_server_bootstrap | bool)
   ansible.builtin.include_tasks: ingress.yml
 
+- name: main | Configure the packaged CNI chart
+  when:
+    - (rke2_server_enabled | bool)
+    - (rke2_server_bootstrap | bool)
+  ansible.builtin.include_tasks: cilium.yml
+
 - name: main | Start the RKE2 server and wait for it to be usable
   when: (rke2_server_enabled | bool)
   ansible.builtin.include_tasks: service.yml

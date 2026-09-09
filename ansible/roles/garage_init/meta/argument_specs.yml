@@ -8,10 +8,6 @@ argument_specs:
       - Creates the buckets and the access key, recording the secret key that
         Garage prints exactly once.
     options:
-      garage_init_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       garage_init_namespace:
         type: str
         default: garage

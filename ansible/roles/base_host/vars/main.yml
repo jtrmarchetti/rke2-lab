@@ -1,3 +1,2 @@
 ---
-_var_base_host_apt_cache_valid_time: 3600
 _var_base_host_split_dns_netplan_path: /etc/netplan/99-split-dns.yaml

@@ -46,8 +46,3 @@ argument_specs:
         required: false
         default: "0755"
         description: Permissions on artifact directories.
-      artifact_host_file_mode:
-        type: str
-        required: false
-        default: "0644"
-        description: Permissions on published artifact files.

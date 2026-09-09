@@ -82,6 +82,9 @@ argument_specs:
       rke2_server_traefik_template:
         type: path
         description: Path to the Traefik HelmChartConfig template, from inventory.
+      rke2_server_cilium_config_template:
+        type: path
+        description: Path to the Cilium HelmChartConfig template, from inventory.
       rke2_server_kube_vip_template:
         type: path
         description: Path to the kube-vip manifest template, from inventory.

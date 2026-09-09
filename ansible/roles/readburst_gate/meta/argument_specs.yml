@@ -34,14 +34,6 @@ argument_specs:
         description: >-
           The control plane node count; the quorum census requires every one
           of them to be a live voter.
-      readburst_gate_hold_retries:
-        type: int
-        default: 20
-        description: Polls of the hold phase before the gate fails.
-      readburst_gate_hold_delay:
-        type: int
-        default: 15
-        description: Seconds between hold polls.
       readburst_gate_quorum_retries:
         type: int
         default: 40

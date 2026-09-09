@@ -1,5 +1,4 @@
 ---
-openbao_config_enabled: true
 
 openbao_config_url: null
 

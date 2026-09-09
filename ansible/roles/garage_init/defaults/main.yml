@@ -1,5 +1,4 @@
 ---
-garage_init_enabled: true
 
 garage_init_namespace: garage
 garage_init_pod: garage-0

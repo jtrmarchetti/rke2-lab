@@ -23,4 +23,5 @@ rke2_server_kubeconfig_dest: ""
 
 rke2_server_config_template: null
 rke2_server_traefik_template: null
+rke2_server_cilium_config_template: null
 rke2_server_kube_vip_template: null

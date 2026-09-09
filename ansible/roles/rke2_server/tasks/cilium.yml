@@ -1,0 +1,16 @@
+---
+- name: cilium | Ensure the CNI chart config directory exists
+  ansible.builtin.file:
+    path: "{{ rke2_server_data_dir }}/server/manifests"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: cilium | Render the Cilium HelmChartConfig override
+  ansible.builtin.template:
+    src: "{{ rke2_server_cilium_config_template }}"
+    dest: "{{ rke2_server_data_dir }}/server/manifests/rke2-cilium-config.yaml"
+    owner: root
+    group: root
+    mode: "0600"

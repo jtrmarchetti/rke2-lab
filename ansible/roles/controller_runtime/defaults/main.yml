@@ -32,7 +32,6 @@ controller_runtime_pulumi_enabled: true
 controller_runtime_pulumi_version: null
 controller_runtime_pulumi_url: null
 
-controller_runtime_pulumi_project_dir: infra/pulumi
 controller_runtime_pulumi_project_venv: infra/pulumi/.venv
 controller_runtime_pulumi_project_requirements: infra/pulumi/requirements.txt
 

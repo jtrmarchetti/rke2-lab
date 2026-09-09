@@ -3,8 +3,6 @@ _var_freeipa_server_hosts_entry: >-
   {{ freeipa_server_ip_address }} {{ freeipa_server_hostname }}
   {{ freeipa_server_hostname.split('.') | first }}
 
-_var_freeipa_server_installed_marker: "{{ freeipa_server_data_dir }}/etc/ipa/ca.crt"
-
 _var_freeipa_server_compose_project: >-
   {{ freeipa_server_compose_dir | basename | lower }}
 

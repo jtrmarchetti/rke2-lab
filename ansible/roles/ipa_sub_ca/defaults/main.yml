@@ -1,5 +1,4 @@
 ---
-ipa_sub_ca_enabled: true
 
 ipa_sub_ca_ipa_container: freeipa-server
 ipa_sub_ca_admin_user: admin

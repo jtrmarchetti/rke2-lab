@@ -11,10 +11,6 @@ argument_specs:
       - Configures Keycloak's user federation provider and asks Keycloak to
         test both the connection and the bind.
     options:
-      keycloak_ldap_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       keycloak_ldap_ipa_host:
         type: str
         default: null

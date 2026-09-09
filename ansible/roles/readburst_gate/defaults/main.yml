@@ -23,8 +23,6 @@ readburst_gate_cp_count: 3
 # commit), and the release a converge window that is smaller than flux_ready's
 # because the read-burst tier is the only thing still converging at that
 # point.
-readburst_gate_hold_retries: 20
-readburst_gate_hold_delay: 15
 readburst_gate_quorum_retries: 40
 readburst_gate_quorum_delay: 15
 readburst_gate_release_retries: 100

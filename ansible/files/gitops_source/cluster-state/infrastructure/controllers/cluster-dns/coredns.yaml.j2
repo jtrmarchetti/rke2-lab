@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
 # The cluster's own authoritative DNS, for the cluster's own subdomain.
 #
-# k8s.dev.lo belongs to the cluster. FreeIPA forwards the whole zone here and
+# The cluster's own subdomain belongs to the cluster. FreeIPA forwards the whole zone here and
 # holds no records for anything inside it, which is the point: names under this
 # subdomain are created and destroyed by what is declared in this repository,
 # and a name that GitOps manages should not need a second, manual step in the
@@ -10,8 +10,8 @@
 # Two kinds of name are answered, and the split is what keeps the Corefile
 # short:
 #
-#   <service>.<namespace>.k8s.dev.lo   every LoadBalancer Service, by k8s_external
-#   <anything>.k8s.dev.lo              the ingress address, by template
+#   <service>.<namespace>.<cluster-domain>   every LoadBalancer Service, by k8s_external
+#   <anything>.<cluster-domain>              the ingress address, by template
 #
 # The template's pattern deliberately matches one label only, so it cannot
 # shadow the two-label service names. That ordering matters because CoreDNS

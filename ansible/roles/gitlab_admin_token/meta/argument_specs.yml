@@ -20,10 +20,6 @@ argument_specs:
         has no root password, so a pre-web install of the instance keeps
         working.
     options:
-      gitlab_admin_token_enabled:
-        type: bool
-        default: true
-        description: Whether the role does anything.
       gitlab_admin_token_url:
         type: str
         description:

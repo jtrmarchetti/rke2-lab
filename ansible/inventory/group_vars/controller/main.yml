@@ -211,6 +211,8 @@ inventory_gitops_bootstrap_commit_name: rke2lab automation
 inventory_gitops_bootstrap_commit_email: automation@dev.lo
 
 inventory_keycloak_ldap_ipa_host: core01
+inventory_keycloak_ldap_ipa_container: freeipa-server
+inventory_keycloak_ldap_bind_user: keycloak
 inventory_keycloak_ldap_base_dn: dc=dev,dc=lo
 inventory_keycloak_ldap_users_dn: cn=users,cn=accounts,dc=dev,dc=lo
 
