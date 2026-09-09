@@ -97,10 +97,14 @@ kubewk_serial: 1
 
 # Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
 # on kubecp/kubewk ride out a slow first-boot sshd before the heavy play's
-# Gathering Facts aborts the build. 900s covers a slow-IO first boot; the
-# inline fallback in the play matches these values. Overridable per run.
-kubecp_ssh_wait: 900
-kubewk_ssh_wait: 900
+# Gathering Facts aborts the build. Sized for the current (real-disk)
+# hypervisor: a measured cold cluster-form saw the pre-play clear in ~58s,
+# so 300s holds ~5x headroom for a slow boot or an overlay blip. The 900s
+# value predated the hardware migration and was sized for the slow nested-VM
+# I/O. The inline fallback in the play matches these values. Overridable per
+# run.
+kubecp_ssh_wait: 300
+kubewk_ssh_wait: 300
 
 # kube_cli_node content values and template paths, shared by kubecp and
 # kubewk which both link the node CLI set.

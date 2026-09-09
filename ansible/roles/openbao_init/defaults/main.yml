@@ -16,19 +16,21 @@ openbao_init_kubectl: null
 # cascade before the pod can start. The gate polls `kubectl wait` with
 # retries x delay (the garage_init pattern) because `kubectl wait` returns
 # immediately when the pod does not exist yet: a single wait would see a
-# missing pod, fail at once, and never run its --timeout. Measured on the
-# nested-VM lab: the pod reached Ready ~27 minutes after the gate started on
-# f_cold3, and a single 1800s wait fataled at 0.025s on g1_cold3
-# (2026-08-30) because the whole cascade was still installing; 240 x 15s
-# = 60 minutes of polls covers the longest install chain (longhorn 30m +
-# openbao 15m + scheduling) with headroom for the slower-IO VMs this lab
-# runs on. Each poll bounds its own wait at
+# missing pod, fail at once, and never run its --timeout. History: on the
+# nested-VM lab (slow shared-LVM I/O) the pod reached Ready ~27 minutes
+# after the gate started on f_cold3, and a single 1800s wait fataled at
+# 0.025s on g1_cold3 (2026-08-30) because the whole cascade was still
+# installing, so the budget was 240 x 15s = 60 minutes with headroom for the
+# slower-IO VMs. After the migration to the current real-disk hypervisor a
+# measured cold build (2026-09-09) saw the cascade need ~27 minutes to the
+# pod Ready, so the budget drops to 160 x 15s = 40 minutes: ~1.5x the
+# observed chain, leaving headroom for a slower cascade. The gate passes on
+# the first poll on warm or idempotent runs.
+# Each poll bounds its own wait at
 # `openbao_init_pod_ready_timeout` (60s) so one blocked call adds at most
 # that to a poll; the absolute worst case is retries x (delay + timeout),
-# ~5.2h, which only occurs when every poll stays blocked. On warm or
-# idempotent runs the gate sees an already-Ready pod and passes on the
-# first poll.
-openbao_init_pod_ready_retries: 240
+# ~3.5h, which only occurs when every poll stays blocked.
+openbao_init_pod_ready_retries: 160
 openbao_init_pod_ready_delay: 15
 openbao_init_pod_ready_timeout: 60
 

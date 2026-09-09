@@ -74,7 +74,7 @@
         - always
       ansible.builtin.wait_for_connection:
         delay: 5
-        timeout: "{{ kubecp_ssh_wait | default(900) }}"
+        timeout: "{{ kubecp_ssh_wait | default(300) }}"
 
 - name: Form the RKE2 control plane
   hosts: kubecp

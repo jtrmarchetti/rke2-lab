@@ -21,7 +21,7 @@
         - always
       ansible.builtin.wait_for_connection:
         delay: 5
-        timeout: "{{ kubewk_ssh_wait | default(900) }}"
+        timeout: "{{ kubewk_ssh_wait | default(300) }}"
 
 - name: Join the RKE2 workers to the cluster
   hosts: kubewk
