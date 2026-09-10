@@ -81,21 +81,25 @@
   gather_facts: true
   become: true
 
-  # Two control plane nodes in the heavy unpack/image-pull/etcd-join
-  # window at a time (kubecp_serial). The nested-VM era ran 1-wide because
-  # a join burst saturated the shared fetch path and turned a CNI extract
-  # into a partial write the .extracted marker locks in; on dedicated
-  # hardware rke2_publish pre-mirrors the image set, so the join window
-  # only pulls from repo01 and each VM unpacks on its own disk. 2-wide,
-  # not 3: at most two etcd voters may enter the cluster at once, and the
-  # joiner polls the bootstrap's API before becoming a voter. The default
-  # here is what actually takes effect: ansible-core 2.21.3 templates the
-  # play-level serial: keyword before inventory/play vars enter scope, so
-  # the group_vars kubecp_serial line is documentation only (verified
-  # 2026-09-09); -e kubecp_serial=1 still reaches the keyword, so
-  # falling back to 1-wide if a partial-write symptom recurs is one extra
-  # var away.
-  serial: "{{ kubecp_serial | default(2) }}"
+  # One control plane node in the heavy unpack/image-pull/etcd-join
+  # window at a time (kubecp_serial, group_vars default 1). The nested-VM
+  # era ran 1-wide because a join burst saturated the shared fetch path
+  # and turned a CNI extract into a partial write the .extracted marker
+  # locks in; on dedicated hardware rke2_publish pre-mirrors the image
+  # set, so the join window only pulls from repo01 and each VM unpacks on
+  # its own disk. CP joins must stay one etcd voter at a time: the
+  # joiner's systemd start fires
+  # the etcd-member-add BEFORE the readyz poll that follows it, so a
+  # 2-wide batch (bootstrap + joiner together) races the bootstrap's API
+  # and the joiner's start aborts (observed 2026-09-10 cold build:
+  # kubecp02 "Unable to start service rke2-server"); the cluster later
+  # self-heals but the build aborts on the first fatal. 1-wide keeps the
+  # bootstrap ordering: kubecp01 starts the cluster, kubecp02 joins,
+  # kubecp03 last. The keyword default is what takes effect (the
+  # group_vars kubecp_serial line is documentation only - ansible 2.21.3
+  # templates the play serial: keyword before inventory vars enter scope,
+  # verified 2026-09-09); -e kubecp_serial=N still reaches it.
+  serial: "{{ kubecp_serial | default(1) }}"
   force_handlers: true
   tasks:
 

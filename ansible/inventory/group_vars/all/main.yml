@@ -88,24 +88,29 @@ inventory_rke2_node_registry_mirrors:
 # 1-wide because a multi-node burst saturated that shared fetch path and
 # turned one node's CNI image extract into a partial write that RKE2's
 # .extracted marker then locks in permanently. On the current dedicated
-# hardware that path no longer applies: rke2_publish pre-mirrors the full
-# image set into the registry before any join starts, so a join only ever
-# pulls from repo01 (never upstream), and each VM unpacks on its own
-# virtual disk, so a burst cannot tear a shared write. Widths: kubecp is
-# 2-wide, not 3, because at most two etcd voters may enter the cluster at
-# once and the joiner's readyz poll already waits out the bootstrap before
-# it becomes a voter; kubewk joins add no etcd membership (kubelet-only),
-# so 3-wide is safe. On a warm re-run every join role no-ops, so the
-# width costs nothing there. Overridable in case the topology changes.
+# hardware that I/O path no longer applies: rke2_publish pre-mirrors the
+# full image set into the registry before any join starts, so a join only
+# ever pulls from repo01 (never upstream), and each VM unpacks on its own
+# virtual disk, so a burst cannot tear a shared write. Widths: kubecp
+# stays 1-wide for an I/O-independent reason - the joiner's systemd start
+# fires the etcd-member-add BEFORE the readyz poll that follows it, so a
+# 2-wide batch (bootstrap + joiner together) races the bootstrap's API
+# and the joiner's start aborts (observed 2026-09-10: kubecp02 "Unable
+# to start service rke2-server"); one etcd voter at a time is the
+# control-plane constraint. kubewk joins add no etcd membership
+# (kubelet-only), so 3-wide is safe and was validated on a cold build
+# (2026-09-10: all three workers joined clean in one batch). On a warm
+# re-run every join role no-ops, so the width costs nothing there.
+# Overridable in case the topology changes.
 # Templating trap (verified 2026-09-09, ansible-core 2.21.3): the
 # play-level serial: keyword is templated before inventory and play vars
 # enter scope, so these two lines do NOT drive the join plays by
 # themselves - the effective width is the default(N) fallback written in
-# the plays (serial: "{{ kubecp_serial | default(2) }}" / default(3)).
+# the plays (serial: "{{ kubecp_serial | default(1) }}" / default(3)).
 # These lines are the single source of the documented values; keep the
 # plays' default(N) numerically consistent with them. -e kubecp_serial=N
 # / -e kubewk_serial=N still reach the keyword and override.
-kubecp_serial: 2
+kubecp_serial: 1
 kubewk_serial: 3
 
 # Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
