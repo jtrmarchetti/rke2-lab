@@ -97,21 +97,26 @@ inventory_rke2_node_registry_mirrors:
 # 2-wide batch (bootstrap + joiner together) races the bootstrap's API
 # and the joiner's start aborts (observed 2026-09-10: kubecp02 "Unable
 # to start service rke2-server"); one etcd voter at a time is the
-# control-plane constraint. kubewk joins add no etcd membership
-# (kubelet-only), so 3-wide is safe and was validated on a cold build
-# (2026-09-10: all three workers joined clean in one batch). On a warm
-# re-run every join role no-ops, so the width costs nothing there.
+# control-plane constraint. kubewk joins add no etcd membership, but the
+# 3-wide widening was measured and reverted (2026-09-10): it is SAFE
+# (all three workers joined clean, no partial-write symptom) yet SLOWER -
+# the worker window went 309s serial -> 431s 3-wide (one worker sat on
+# 'Ensure base packages are installed' ~5:25 while the 3-way apt burst
+# contended on repo01's proxy) and the whole cold build went 48m37s ->
+# 51m25s. Serial stays: on dedicated hardware the joins were never the
+# I/O bottleneck the nested-VM era assumed. On a warm re-run every join
+# role no-ops, so the width costs nothing there.
 # Overridable in case the topology changes.
 # Templating trap (verified 2026-09-09, ansible-core 2.21.3): the
 # play-level serial: keyword is templated before inventory and play vars
 # enter scope, so these two lines do NOT drive the join plays by
 # themselves - the effective width is the default(N) fallback written in
-# the plays (serial: "{{ kubecp_serial | default(1) }}" / default(3)).
+# the plays (serial: "{{ kubecp_serial | default(1) }}" / default(1)).
 # These lines are the single source of the documented values; keep the
 # plays' default(N) numerically consistent with them. -e kubecp_serial=N
 # / -e kubewk_serial=N still reach the keyword and override.
 kubecp_serial: 1
-kubewk_serial: 3
+kubewk_serial: 1
 
 # Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
 # on kubecp/kubewk ride out a slow first-boot sshd before the heavy play's

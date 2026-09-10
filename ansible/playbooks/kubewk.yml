@@ -28,22 +28,22 @@
   gather_facts: true
   become: true
 
-  # All three workers in the heavy unpack/image-pull window at once
-  # (kubewk_serial, group_vars default 3). The nested-VM era ran 1-wide
+  # One worker in the heavy unpack/image-pull window at a time
+  # (kubewk_serial, group_vars default 1). The nested-VM era ran 1-wide
   # because a 3-way burst saturated the shared fetch path and turned the
   # CNI image extract on one node into a partial write (kubewk02 portmap
-  # FIPS abort) that RKE2's .extracted marker locks in; on dedicated
-  # hardware rke2_publish pre-mirrors the image set into repo01's
-  # registry first, so the join window only pulls locally and each VM
-  # unpacks on its own disk. Workers add no etcd membership (kubelet-
-  # only), so 3-wide is safe and was validated on a cold build (2026-09-10:
-  # all three workers joined clean in one batch while the control plane ran
-  # separately). The keyword default is what takes effect (the group_vars
-  # kubewk_serial line is documentation only - ansible 2.21.3 templates
-  # the play serial: keyword before inventory vars enter scope, verified
-  # 2026-09-09); -e kubewk_serial=1 still reaches it and is the 1-wide
-  # fallback.
-  serial: "{{ kubewk_serial | default(3) }}"
+  # FIPS abort) that RKE2's .extracted marker locks in. The 2026-09-10
+  # widening attempt measured that this concern is gone on dedicated
+  # hardware (3-wide joined clean, no symptom) but that 3-wide is SLOWER
+  # anyway: the 3-way apt burst left one worker on 'Ensure base packages
+  # are installed' for ~5:25, the worker window went 309s serial ->
+  # 431s one-batch, and the cold build went 48m37s -> 51m25s. Serial is
+  # therefore the faster and the proven choice. The keyword default is
+  # what takes effect (the group_vars kubewk_serial line is documentation
+  # only - ansible 2.21.3 templates the play serial: keyword before
+  # inventory vars enter scope, verified 2026-09-09); -e kubewk_serial=N
+  # still reaches it.
+  serial: "{{ kubewk_serial | default(1) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role
