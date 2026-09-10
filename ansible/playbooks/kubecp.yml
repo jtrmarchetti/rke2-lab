@@ -88,10 +88,14 @@
   # hardware rke2_publish pre-mirrors the image set, so the join window
   # only pulls from repo01 and each VM unpacks on its own disk. 2-wide,
   # not 3: at most two etcd voters may enter the cluster at once, and the
-  # joiner polls the bootstrap's API before becoming a voter. The knob
-  # stays overridable; fall back to 1 if a partial-write symptom ever
-  # recurs.
-  serial: "{{ kubecp_serial | default(1) }}"
+  # joiner polls the bootstrap's API before becoming a voter. The default
+  # here is what actually takes effect: ansible-core 2.21.3 templates the
+  # play-level serial: keyword before inventory/play vars enter scope, so
+  # the group_vars kubecp_serial line is documentation only (verified
+  # 2026-09-09); -e kubecp_serial=1 still reaches the keyword, so
+  # falling back to 1-wide if a partial-write symptom recurs is one extra
+  # var away.
+  serial: "{{ kubecp_serial | default(2) }}"
   force_handlers: true
   tasks:
 

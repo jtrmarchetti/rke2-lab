@@ -36,9 +36,13 @@
   # hardware rke2_publish pre-mirrors the image set into repo01's
   # registry first, so the join window only pulls locally and each VM
   # unpacks on its own disk. Workers add no etcd membership, so 3-wide
-  # is safe. The knob stays overridable; fall back to 1 if a
-  # partial-write symptom ever recurs.
-  serial: "{{ kubewk_serial | default(1) }}"
+  # is safe. The default here is what actually takes effect: ansible-core
+  # 2.21.3 templates the play-level serial: keyword before
+  # inventory/play vars enter scope, so the group_vars kubewk_serial line
+  # is documentation only (verified 2026-09-09); -e kubewk_serial=1
+  # still reaches the keyword, so falling back to 1-wide if a
+  # partial-write symptom recurs is one extra var away.
+  serial: "{{ kubewk_serial | default(3) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role

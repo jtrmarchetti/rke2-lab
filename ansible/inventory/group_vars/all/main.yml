@@ -97,6 +97,14 @@ inventory_rke2_node_registry_mirrors:
 # it becomes a voter; kubewk joins add no etcd membership (kubelet-only),
 # so 3-wide is safe. On a warm re-run every join role no-ops, so the
 # width costs nothing there. Overridable in case the topology changes.
+# Templating trap (verified 2026-09-09, ansible-core 2.21.3): the
+# play-level serial: keyword is templated before inventory and play vars
+# enter scope, so these two lines do NOT drive the join plays by
+# themselves - the effective width is the default(N) fallback written in
+# the plays (serial: "{{ kubecp_serial | default(2) }}" / default(3)).
+# These lines are the single source of the documented values; keep the
+# plays' default(N) numerically consistent with them. -e kubecp_serial=N
+# / -e kubewk_serial=N still reach the keyword and override.
 kubecp_serial: 2
 kubewk_serial: 3
 
