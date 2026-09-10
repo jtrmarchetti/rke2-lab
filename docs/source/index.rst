@@ -98,14 +98,14 @@ design record, and where the two disagree the design record wins:
    * - Document
      - Holds
    * - ``plan/OVERVIEW.md``
-     - Architecture, the artifact model, and the cross-phase rules
+     - Architecture, the artifact model, and the cross-cutting rules
    * - ``plan/TARGETS.md``
      - Per-VM specifications: CPU, RAM, disks, addresses
    * - ``plan/SECRETS.md``
      - Every secret, where it lives, and how to rotate it
    * - ``plan/CLUSTER_COMPONENTS.md``
      - Which component was chosen and why
-   * - ``plan/PHASE<N>_IMPLEMENTATION.md``
-     - What each build phase did, and what it learned by failing
+   * - ``plan/FLUX_OWNERSHIP.md``
+     - What Flux owns, what Ansible covers, and the durable GitOps mechanics
    * - ``plan/ANSIBLE_STANDARDS.md``
      - The conventions all automation follows

@@ -18,42 +18,42 @@ worth deciding whether that is the intent or an accident.
 | --- | --- | --- | --- | --- | --- | --- |
 | `repo01` | `repo01.dev.lo` | 1 | 4 | 10 GiB | `192.168.2.99` | Gateway, proxy, artifact host, GitLab |
 | `core01` | `core.dev.lo` | 2 | 2 | 6 GiB | `192.168.2.4` | FreeIPA identity, DNS, NTP, CA |
-| `kubecp01` | `kubecp01.dev.lo` | 4 | 2 | 6 GiB | `192.168.2.21` | RKE2 control plane |
-| `kubecp02` | `kubecp02.dev.lo` | 4 | 2 | 6 GiB | `192.168.2.22` | RKE2 control plane |
-| `kubecp03` | `kubecp03.dev.lo` | 4 | 2 | 6 GiB | `192.168.2.23` | RKE2 control plane |
+| `kubecp01` | `kubecp01.dev.lo` | 4 | 4 | 6 GiB | `192.168.2.21` | RKE2 control plane |
+| `kubecp02` | `kubecp02.dev.lo` | 4 | 4 | 6 GiB | `192.168.2.22` | RKE2 control plane |
+| `kubecp03` | `kubecp03.dev.lo` | 4 | 4 | 6 GiB | `192.168.2.23` | RKE2 control plane |
 | `kubewk01` | `kubewk01.dev.lo` | 5 | 4 | 10 GiB | `192.168.2.31` | RKE2 worker |
 | `kubewk02` | `kubewk02.dev.lo` | 5 | 4 | 10 GiB | `192.168.2.32` | RKE2 worker |
 | `kubewk03` | `kubewk03.dev.lo` | 5 | 4 | 10 GiB | `192.168.2.33` | RKE2 worker |
 
 ### Memory total, and the headroom this leaves
 
-Every host in the table above carries **2 GiB more than it did**, applied
-uniformly. That takes the eight VMs from 48 GiB allocated to **64 GiB**.
+The eight VMs allocate **64 GiB** of guest RAM in total. Because they are
+pinned one control plane + one worker per host, with the two infra VMs on the
+hosts that do **not** hold `kubecp01`, no node is overcommitted — the busiest
+is `pve02` at 26 GiB of 62.6 GiB:
 
-The Proxmox host has **62.8 GiB** (67.4 GB as the API reports it). 64 GiB
-allocated is therefore **more than the hypervisor physically has**, with
-nothing left for Proxmox itself.
+| Host | VMs on it | Guest RAM |
+| --- | --- | --- |
+| `pve01` | `kubecp01` + `kubewk01` | 16 GiB |
+| `pve02` | `kubecp02` + `kubewk02` + `repo01` | 26 GiB |
+| `pve03` | `kubecp03` + `kubewk03` + `core01` | 22 GiB |
 
-This is survivable only because these are not reservations — Proxmox hands out
-guest memory on demand, and the measured working set has been 41.6-45.0 GiB
-across all eight VMs. But the safety margin is now negative on paper, and the
-lab has already been bitten once by a memory misconfiguration presenting as
-something else: see the TrueNAS ballooning incident in
-`PHASE4_IMPLEMENTATION.md`, which reported maxed-out memory and swap while the
-guests were nowhere near their limits.
+That replaces the first draft's single 62.8 GiB hypervisor, where 64 GiB of
+guests was more than the host physically had and survived only because Proxmox
+hands memory out on demand.
+
+The memory-misconfiguration lesson from that era stands on its own: a host
+reporting maxed-out memory and swap while its guests were nowhere near their
+limits was a minimum-allocation bug in the backing layer, not a guest problem.
+Watch the hypervisor, not the guests.
 
 Two consequences worth stating rather than discovering:
 
-- **Do not enable ballooning or memory reservations on these VMs.** With
-  overcommitment this size, a reservation that cannot be satisfied is a VM that
-  will not start.
-- **Watch swap on the hypervisor, not on the guests.** Zero host swap has been
-  the health signal through every phase so far. If it stops being zero, the
-  uplift is the first thing to reverse — and the 6c observability sizing in
-  `PHASE6_IMPLEMENTATION.md` is what will push it there first.
-
-If the host can be grown, growing it is the correct fix. 64 GiB of guests wants
-a hypervisor with meaningfully more than 64 GiB.
+- **Do not enable ballooning or memory reservations on these VMs.** A
+  reservation that cannot be satisfied is a VM that will not start.
+- **Watch swap on the hosts, not on the guests.** Zero host swap has been the
+  health signal through the build so far; if it stops being zero, the
+  observability sizing is what will push it there first.
 
 ## DNS
 
@@ -77,16 +77,16 @@ The only dual-homed host, and the only host with internet access.
 - **username:** `root`
 - **cpu:** 4
 - **ram:** 10 GiB — sized for GitLab, which is the binding constraint on this
-  host rather than the Phase 1 services. GitLab's published requirements are
-  far higher; 8 GiB was the measured floor that runs it beside Apache,
-  apt-cacher-ng, dnsmasq, and the tunnel without swapping, and the
-  memory-constrained omnibus settings are applied on top of it. 10 GiB is that
-  floor plus the 2 GiB uplift applied to every host in this table.
+  host. GitLab's published requirements are far higher; 8 GiB was the measured
+  floor that runs it beside Apache, apt-cacher-ng, dnsmasq, and the tunnel
+  without swapping, and the memory-constrained omnibus settings are applied on
+  top of it. 10 GiB is that floor with headroom.
 
-  **The VM is created at this size in Phase 1.** Phase 3 discovered the
-  undersizing and resized the running host once; that is history, not a
-  rebuild step. A host built from `vm_definitions.py` today comes up at 10 GiB
-  before GitLab is ever installed.
+  **The VM is created at this size.** An earlier draft sized the GitLab host
+  small and resized the running host after the undersizing was discovered;
+  that is history, not a rebuild step. A host built from `vm_definitions.py`
+  today comes up at 10 GiB before GitLab is ever installed. Do not build this
+  host small and grow it later.
 - **storage:**
   - 32 GB — OS
   - 100 GB — apps and artifacts, mounted at `/data1`
@@ -101,7 +101,7 @@ The only dual-homed host, and the only host with internet access.
   - Apache artifact host serving `/data1/artifacts` over HTTP to internal nodes
   - Staging point for every artifact in every phase, downloaded and checksummed here
     first
-  - GitLab server for container image, package, and raw artifact hosting (Phase 3)
+  - GitLab server for container image, package, and raw artifact hosting
 
 ## core01
 
@@ -122,7 +122,7 @@ The only dual-homed host, and the only host with internet access.
 
 - **hostname:** `kubecp01.dev.lo`
 - **username:** `root`
-- **cpu:** 2
+- **cpu:** 4
 - **ram:** 6 GiB
 - **storage:**
   - 32 GB — OS
@@ -135,7 +135,7 @@ The only dual-homed host, and the only host with internet access.
 
 - **hostname:** `kubecp02.dev.lo`
 - **username:** `root`
-- **cpu:** 2
+- **cpu:** 4
 - **ram:** 6 GiB
 - **storage:**
   - 32 GB — OS
@@ -148,7 +148,7 @@ The only dual-homed host, and the only host with internet access.
 
 - **hostname:** `kubecp03.dev.lo`
 - **username:** `root`
-- **cpu:** 2
+- **cpu:** 4
 - **ram:** 6 GiB
 - **storage:**
   - 32 GB — OS
@@ -166,7 +166,7 @@ The only dual-homed host, and the only host with internet access.
 - **storage:**
   - 32 GB — OS
   - 100 GB — apps, mounted at `/data1`
-  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn` (Phase 5)
+  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn`
 - **nics:**
   - `192.168.2.31/24` — gateway `192.168.2.99`, dns `192.168.2.4` — internal network
 - **role:** RKE2 worker
@@ -180,7 +180,7 @@ The only dual-homed host, and the only host with internet access.
 - **storage:**
   - 32 GB — OS
   - 100 GB — apps, mounted at `/data1`
-  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn` (Phase 5)
+  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn`
 - **nics:**
   - `192.168.2.32/24` — gateway `192.168.2.99`, dns `192.168.2.4` — internal network
 - **role:** RKE2 worker
@@ -194,7 +194,7 @@ The only dual-homed host, and the only host with internet access.
 - **storage:**
   - 32 GB — OS
   - 100 GB — apps, mounted at `/data1`
-  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn` (Phase 5)
+  - 100 GB — CSI, ext4, mounted at `/var/lib/longhorn`
 - **nics:**
   - `192.168.2.33/24` — gateway `192.168.2.99`, dns `192.168.2.4` — internal network
 - **role:** RKE2 worker
@@ -205,7 +205,7 @@ The only dual-homed host, and the only host with internet access.
 
 Every VM is root-only. Automation connects as `root`, services run as root or as
 whatever user their container declares, and no host carries the `devops` account
-this document described for its first four phases.
+this document described when it first wrote.
 
 That is worth a decision rather than a correction, and it is deliberately not
 made here:

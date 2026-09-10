@@ -21,8 +21,8 @@ The design record
      - Per-VM CPU, RAM, disks, addresses
    * - ``plan/CLUSTER_COMPONENTS.md``
      - Which component was chosen for each job, and why
-   * - ``plan/PHASE<N>_IMPLEMENTATION.md``
-     - What each build phase did and what it learned by failing
+   * - ``plan/FLUX_OWNERSHIP.md``
+     - What Flux owns, what Ansible covers, and the durable GitOps mechanics
 
 :doc:`../orientation` is the operator's summary of the same ground: the eight
 VMs, the three networks, the two DNS zones, the certificate chain.

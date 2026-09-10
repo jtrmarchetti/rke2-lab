@@ -11,7 +11,8 @@ argument_specs:
       - Installs the RKE2 binary using the release installer, both fetched from
         the GitLab generic package registry.
       - Deliberately does not place an air-gap image tarball on the node; see
-        plan/PHASE4_IMPLEMENTATION.md for why that would hide a broken mirror.
+        plan/OVERVIEW.md (Artifact Distribution Model) for why that would
+        hide a broken mirror.
     options:
       rke2_node_enabled:
         type: bool

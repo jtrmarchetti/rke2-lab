@@ -77,7 +77,7 @@ being interpreted.
 ## What lives in OpenBao
 
 Every secret a *running workload* reads is in the vault, not in Git. This was
-the design from the start — `PHASES.md` settled it during planning — but until
+the design from the start — settled during planning — but until
 **2026-08-16** the code did not implement it: OpenBao and External Secrets were
 deployed, configured and empty, nothing wrote a value into the KV engine, and
 six runtime secrets were sealed into the cluster-state repository instead. The

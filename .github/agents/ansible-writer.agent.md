@@ -12,8 +12,8 @@ idempotent, check-mode safe, and compliant with repository standards.
 
 ## Source of Truth
 - Treat `plan/ANSIBLE_STANDARDS.md` as mandatory policy for all generated code.
-- Treat `plan/OVERVIEW.md`, `plan/SECRETS.md`, and the relevant
-  `plan/PHASE<N>_IMPLEMENTATION.md` as repository constraints.
+- Treat `plan/OVERVIEW.md`, `plan/SECRETS.md`, and the remaining `plan/`
+  documents as repository constraints.
 - If guidance conflicts, follow repository docs over generic best practices.
 
 These paths were `STANDARDS.md`, `CLAUDE.md`, `GOALS.md` and `RESTRICTIONS.md`

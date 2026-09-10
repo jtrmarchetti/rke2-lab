@@ -66,7 +66,7 @@ half a decision.
 
   A one-replica class exists alongside it for data that is genuinely
   reconstructible — caches, scratch — and is not used for anything whose loss
-  matters. See `PHASE6_IMPLEMENTATION.md`.
+  matters.
 - Load Balancing: **kube-vip**, not Cilium LB-IPAM. Corrected 2026-08-17 —
   the plan named Cilium and 6b chose otherwise, for two reasons that still
   hold: Cilium's L2 announcements require kube-proxy replacement, which this
@@ -75,7 +75,7 @@ half a decision.
   two-second renew deadline — a steady stream of etcd writes on storage
   measured at 32-50 fsync/s. kube-vip was already here holding the API VIP;
   the LoadBalancer half is a second DaemonSet of the same image plus a cloud
-  provider handing out `192.168.2.40-52`. See `PHASE6_IMPLEMENTATION.md`.
+  provider handing out `192.168.2.40-52`.
 - Object Storage: Garage
 - Secrets Management: **OpenBao + External Secrets Operator**, with **Sealed
   Secrets** retained for bootstrap material only. Settled in Phase 6.
@@ -120,7 +120,7 @@ half a decision.
   stored somewhere. Cloud KMS is the first, rented. With no HSM this design
   takes the third knowingly, and keeps the first reachable: **SoftHSM via
   PKCS#11 is the documented next step and a hardware HSM an upgrade from it**,
-  with seven implementation requirements in `PHASE6_IMPLEMENTATION.md` that keep
+  with seven implementation requirements that keep
   both migrations to a config change rather than a redesign. PKCS#11 in open
   source is now the strongest reason to prefer OpenBao over Vault, which gates
   HSM seals behind Enterprise.
@@ -137,8 +137,7 @@ half a decision.
   fastest storage here and the vault is the thing most bothered by slow
   storage, but one replica means a single node loss destroys every runtime
   secret in the cluster. OpenBao is on the two-replica `longhorn` class, which
-  is what the manifests, the storage class's own comment and
-  `PHASE6_IMPLEMENTATION.md`'s risk gate all say.
+  is what the manifests and the storage class's own comment all say.
 - Service Mesh: Cilium (sidecarless)
 - SSO: **Keycloak**, federated to FreeIPA and now the front door to every
   service that has one. Applied and verified on 2026-08-17.

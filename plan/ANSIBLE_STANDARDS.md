@@ -15,7 +15,7 @@ Validation basis for this document:
 - Red Hat CoP Good Practices for Ansible:
   `https://redhat-cop.github.io/automation-good-practices/`
 - Repository-specific constraints in `plan/OVERVIEW.md`, `plan/SECRETS.md`,
-  and the `plan/PHASE*_IMPLEMENTATION.md` documents
+  and the remaining `plan/` documents
 
 When repository rules are stricter than CoP guidance, repository rules win.
 

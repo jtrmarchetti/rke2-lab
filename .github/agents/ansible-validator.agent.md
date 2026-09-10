@@ -12,8 +12,8 @@ are ready to merge.
 
 ## Source of Truth
 - `plan/ANSIBLE_STANDARDS.md` is mandatory policy.
-- `plan/OVERVIEW.md`, `plan/SECRETS.md`, and the relevant
-  `plan/PHASE<N>_IMPLEMENTATION.md` are mandatory repository constraints.
+- `plan/OVERVIEW.md`, `plan/SECRETS.md`, and the remaining `plan/` documents
+  are mandatory repository constraints.
 - When policy conflicts exist, repository policy wins.
 
 These paths were `STANDARDS.md`, `CLAUDE.md`, `GOALS.md` and `RESTRICTIONS.md`

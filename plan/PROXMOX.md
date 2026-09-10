@@ -1,246 +1,151 @@
 # Proxmox Environment
 
-Proxmox is running as a single node as a VM on a physical linux server using default ports.
-
-## Storage characteristics
-
-Because Proxmox is itself a virtual machine, its only disk is a virtio device
-(`/dev/vda`) and every guest write crosses two hypervisors before reaching real
-hardware. Throughput is fine; **fsync latency is not**.
-
-Measured from an idle guest on `local-lvm`, with `cache=writeback`, using
-`dd if=/dev/zero of=/data1/.ft bs=4k count=500 oflag=dsync`:
-
-| Measure | Value |
-| --- | --- |
-| Sequential throughput | 63 MB/s |
-| 4 KB fsync latency | 20-31 ms, i.e. ~32-50 fsync/s |
-
-The spread is real and depends on how long the host has been up — the lower
-figure came from a settled host, the higher from one that had been running for
-under an hour with a cold ARC. Neither is good.
-
-### Memory: check the TrueNAS minimum, not just the maximum
-
-The Proxmox VM is configured with 64 GB, but TrueNAS separately holds a
-**minimum** allocation, and it was left at 8 GB. The result was a hypervisor
-that ballooned itself down and reported maxed-out memory and active swap while
-the guests running on it together came nowhere near 64 GB. Raising the minimum
-fixed it: the host now sits at 14-29% of 67 GB with zero swap.
-
-Worth knowing for two reasons. The reported memory pressure was real but its
-cause was not where it appeared to be, and fixing it did **not** improve fsync
-latency — which is how we know the storage constraint and the memory constraint
-were independent problems.
-
-This matters for anything whose write path is a serialised fsync per commit —
-etcd above all, and to a lesser degree PostgreSQL under GitLab. etcd's own
-guidance is a 50 IOPS floor for a light cluster and 500 for a busy one, so this
-environment sits exactly at the floor. Phase 4 handles it by raising etcd's
-heartbeat and election timeouts so a slow commit is not mistaken for a dead
-leader; see `PHASE4_IMPLEMENTATION.md`.
-
-`cache=writeback` is set on every VM disk by the Pulumi VM factory. It helps
-less than it appears to: the host page cache acknowledges writes, but explicit
-flushes are still passed through, and etcd flushes on every commit. `cache=unsafe`
-would discard flushes and be dramatically faster, at the price of a corrupted
-filesystem after any host crash — deliberately not used.
-
-Faster backing storage for the Proxmox VM is the only real fix, and it is the
-thing to change first if the lab grows beyond the six nodes planned here.
-
-### The thin pool is overcommitted
-
-All eight VMs now exist. `local-lvm` is an 884.9 GiB thin pool holding **1356
-GiB of provisioned disk** — 153% — of which about 110 GiB is actually allocated.
-
-**Units, before anyone rechecks this.** The figures above are GiB; the Proxmox
-API reports the same pool as 950.2 GB total, 1456 GB provisioned, 118.4 GB
-allocated. Both give 153%. Nothing has drifted between them.
-
-That is normal for thin provisioning and is fine at this size. A thin pool that
-fills does not degrade gracefully: every guest with a write in flight stops at
-once, and that includes the control plane. Watch the pool, not the guests' free
-space — a VM can report plenty free while the pool underneath it has none.
-
-#### Longhorn cannot fill it — measured in Phase 6
-
-Phases 4 and 5 both flagged the pool forward as the Phase 6 gate, on the
-reasoning that Longhorn's three-replica default turns every gigabyte of volume
-into three of pool. That reasoning is correct and the conclusion drawn from it
-was wrong, for a reason worth recording.
-
-Longhorn writes into `/var/lib/longhorn`, which is a **fixed 107.4 GB virtual
-disk** on each worker. Three of them cap Longhorn's total contribution to the
-pool at **322 GB**, however many volumes and replicas are created. Added to
-today's allocation the pool reaches ~440 GB of 950 GB at Longhorn's absolute
-maximum. The amplification is real; it is bounded by a disk size that was fixed
-in Phase 5.
-
-What the replica count actually costs is **usable capacity**, and the default is
-the wrong setting on a three-node cluster. Raw capacity is 3 × 97.9 = 293.7 GB:
-
-| Replicas | Usable | fsync per write | Survives 1 node loss | Spare node to rebuild onto |
-| --- | --- | --- | --- | --- |
-| 1 | 293.7 GB | 1 | no | n/a |
-| **2** | **146.9 GB** | **2** | **yes** | **yes** |
-| 3 | 97.9 GB | 3 | yes | **none — degraded until repair** |
-
-Three replicas on exactly three nodes puts a copy on every node, which leaves
-Longhorn nowhere to rebuild when one fails. Two replicas tolerates the same
-single node loss, keeps a spare to rebuild onto automatically, yields 50% more
-usable space, and issues one fewer fsync per write on storage measured at 32-50
-fsync/s. **Two is the default here**, and it is better than three rather than
-cheaper than it.
-
-The pool can still be overrun, but only by the OS and `/data1` volumes filling
-together, which is a slower and more visible failure. The acute storage gate for
-Phase 6 turned out to be somewhere else entirely: `repo01`'s 30 GB root disk,
-which had been quietly absorbing `/var/lib/docker` since Phase 3.
-
-### Do not benchmark all guests at once
-
-A `dd ... oflag=dsync` run against all three cluster nodes simultaneously
-issues around 1500 synchronous writes at a layer that sustains roughly 40 per
-second. The entire Proxmox VM became unresponsive during exactly that window
-and had to be restarted from TrueNAS.
-
-It was not possible to pin the outage on the benchmark: all three guests
-stopped logging within 12 seconds of each other with no I/O errors, no hung
-tasks and no filesystem errors, which is what a frozen hypervisor looks like
-from inside a guest and is indistinguishable from the hypervisor being halted.
-The answer would be in TrueNAS's own logs.
-
-Either way, saturating storage that is already at its limit is not a safe thing
-to do against a live cluster. Measure one guest, once.
+Proxmox Virtual Environment **9.2** runs as a **three-node cluster on dedicated
+hardware**: `pve01`, `pve02`, `pve03`. The internal LAN the lab VMs live on is
+a cluster-wide overlay, not a per-node bridge.
 
 ## Nodes
-- proxmox-kube
-    - datacenter: Datacenter
-    - ip: 192.168.1.16
-    - cpu: 12
-    - ram: 64 GB
+
+| Node | IP | CPU | RAM | Disk |
+| --- | --- | --- | --- | --- |
+| `pve01` | `192.168.1.21` | i7-9700T (8c / 16t) | 62.6 GiB | NVMe lvmthin `local-lvm` |
+| `pve02` | `192.168.1.22` | i7-9700T (8c / 16t) | 62.6 GiB | NVMe lvmthin `local-lvm` |
+| `pve03` | `192.168.1.23` | i7-9700T (8c / 16t) | 62.6 GiB | NVMe lvmthin `local-lvm` |
+
+All three are identical by design. The dedicated hardware replaces the first
+draft's single hypervisor that was itself a VM on a TrueNAS-backed server —
+that document recorded an fsync-latency constraint (a virtio disk crossing two
+hypervisor layers, 20–31 ms fsync, a thin pool overcommitted to 153%) that
+**no longer applies**. Each node's pool is NVMe-backed lvmthin with real
+headroom (the `pve/data` thin pool reports ~816 GB at 0% used). What still
+carries over from that
+era: a thin pool that fills does not degrade gracefully — every guest with a
+write in flight stops at once, including the control plane. Watch the pool, not
+the guests' free space.
+
+Per-node storage layout (identical names on every node):
+
+- `local-lvm` — lvmthin: VM disks and cloud-init LVs. VM disks use
+  `cache=writeback`.
+- `local` — dir store: the boot image. **PVE 9.2's lvmthin rejects file
+  uploads**, so the image cannot live there; the Pulumi stack imports each
+  node's template from the dir store instead.
+
+## Internal network: PVE SDN, not per-node bridges
+
+The internal `192.168.2.0/24` crosses all three nodes via PVE's SDN
+subsystem, configured by Pulumi:
+
+- **vxlan zone `labvx`** spanning `192.168.1.21–23`, tag **42**.
+- **vnet `vlab`** attached to the zone — its bridge is the attach target every
+  VM's internal NIC uses.
+
+There is no per-node `vmbr1` and no Pulumi-managed L2 bridge. If SDN state
+ever looks wrong, the failure class is the vxlan zone, the vnet, or the
+remote-FDB entries — not a bridge that does not exist on a node.
+
+### The SDN overlay is not self-programming
+
+PVE 9.2 materializes the `vlab` bridge and the `vxlan_vlab` device from the
+generated `/etc/network/interfaces.d/sdn`, but it has **no runtime daemon**
+that programs the kernel's remote-FDB `dst` bindings from those lines.
+Without a static `bridge fdb append <mac> dev vxlan_vlab dst <peer-underlay>`
+entry per remote VM MAC, cross-node encap is structurally impossible and the
+overlay is dead until the FDB is applied by hand — and a manual apply is
+runtime-only, wiped on reboot *and* on every `pve-sdn-commit` (which re-runs
+`ifreload`).
+
+So the build cannot rely on a one-time manual apply. `modules/sdn_fdb.py`
+makes it repeatable: on every node it intersects the live VMID set with the
+estate's SDN NIC map, reads each tap's live MAC, writes a per-node
+`/etc/sdn-vlab-fdb/sdn-vlab-fdb.txt`, and installs an `if-up.d` hook that
+re-applies those `dst` entries every time `vxlan_vlab` comes up. Deliberately
+kept out of `/etc/pve` (csync2 replicates that tree cluster-wide, so a
+per-node data file there clobbers the others). If a node's overlay is down
+after a commit or reboot, that hook is the thing to check.
+
+## VM placement
+
+One control plane and one worker per node, so a node loss loses at most a
+third of each set; the two infra VMs sit on the nodes that do **not** host
+`kubecp01` (the API host's node). This is pinned in the stack config via
+`deployment:placementOverrides` (`infra/pulumi/Pulumi.dev.yaml.example`); a VM
+not listed there falls back to best-fit and its choice is written to the
+committed placement record (`.placement.json`), which is what makes a
+rebuild's placement stable.
+
+| VMs | Node | Spec (from `vm_definitions.py`) |
+| --- | --- | --- |
+| `kubecp01`, `kubewk01` | `pve01` | CP: 4 vCPU / 6 GiB; worker: 4 vCPU / 10 GiB |
+| `kubecp02`, `kubewk02` | `pve02` | as above |
+| `kubecp03`, `kubewk03` | `pve03` | as above |
+| `repo01` | `pve02` | 4 vCPU / 10 GiB |
+| `core01` | `pve03` | 2 vCPU / 6 GiB |
+
+The control-plane spec is **4 vCPU**: 2 vCPU starves etcd commit latency under
+read bursts (the observed `DeadlineExceeded` wedge class). Because storage is
+now NVMe, the remaining etcd tuning is burst safety, not latency hiding —
+heartbeat 1000 ms / election timeout 5000 ms in
+`ansible/inventory/group_vars/kubecp/`, so a slow commit is not mistaken for a
+dead leader.
+
+## VM CPU model: `host`, not `x86-64-v2-AES`
+
+The Pulumi VM factory (`modules/vm_factory.py`) presents `cpu_type: "host"` to
+every guest, which is a deliberate move **off** `x86-64-v2-AES`. The original
+default was `x86-64-v2-AES` (the oldest model that satisfies the x86-64-v2
+requirement, chosen so a guest stayed migratable to any future host). It was
+changed because the lab's guests run JVMs — FreeIPA's PKI Tomcat and friends,
+on OpenJDK 8u502 — and that JIT **hard-crashes** (SIGSEGV in `StringTable`
+during the post-config PKI restart) when the presented CPU is feature-limited
+to v2 (no AVX). A working CA was worth more than a theoretical cross-host
+migration property, so the default is now `host`.
+
+Two facts to carry forward:
+
+- This was met on `core01`'s FreeIPA bootstrap; the crash-loop is the symptom
+  and the presented CPU model is the cause.
+- **Changing `cpu_type` on an existing VM needs a full power cycle.** A reboot
+  from inside the guest keeps the running QEMU process and the CPU it is
+  presenting. Plan a cold-boot window for it.
 
 ## Credentials
-```
-username: root
-password: stored in ~/.proxmoxpass
-```
 
-## IaC Viability Assessment
+- **Proxmox API**: user `root@pam`, password in `~/.proxmoxpass` (redacted
+  here; never in git). The stack config uses `proxmox:insecure: true` for the
+  self-signed API cert.
+- **Lab VMs**: log in as `root`; the VM password is supplied to Ansible as
+  `VM_USER_PASSWORD` from `env.sh`. No SSH keys are installed on the lab VMs
+  for this project's access — automation authenticates with the password, via
+  `sshpass -f ~/.proxmoxpass` for the PVE nodes themselves.
 
-### Pulumi (Python) viability
-- Viable for this project.
-- Pulumi ProxmoxVE package is available for Python and tracks the bpg Proxmox provider.
-- Provider supports required capabilities for Phase 1 VM provisioning and configuration handoff.
+## Boot image pinning
 
-Constraints to account for:
-- Pulumi package behavior follows upstream Terraform provider changes; major upgrades can require state/resource token migration.
-- Some provider features requiring nested/advanced configuration may require explicit Provider instance usage.
-- For operations that require SSH in upstream provider behavior, provider SSH settings must be explicit.
+The Ubuntu 24.04 cloud image the templates import from is **pinned to a dated
+release directory and verified against its published SHA256** in
+`infra/pulumi/__main__.py`. Changing the URL means changing the checksum
+beside it; the two are deliberately coupled so a half-finished edit fails the
+download rather than silently widening what is accepted. (The first draft
+fetched from `noble/current/` with no checksum, which made rebuilds a
+fortnight apart produce different base images from identical source.)
 
-### Terraform fallback viability
-- Strong fallback option with high ecosystem usage and clear operational guidance.
-- bpg/proxmox provider is active and broadly used.
-- If Pulumi wrapper limitations block progress, fallback is to keep resource model and migrate to Terraform HCL.
+## Do not benchmark all guests at once
 
-### Recommendation
-- Proceed with Pulumi + Python for Phase 1.
-- Keep a Terraform parity plan for only core resources in Phase 1 (provider config, template image, repo01 VM, network, disk).
-- Freeze provider versions during Phase 1 execution to reduce churn.
+A synchronous-write `dd` benchmark run against every node at once issues far
+more sustained fsync than the storage tier can carry — in the nested era the
+whole hypervisor froze under exactly that load and had to be restarted from
+out of band. The rule carries over: measure one guest, once, and keep it off a
+live quorum.
 
-## Authentication and Security Approach
+## Automation notes
 
-- Start with username/password auth from local secure environment variables for initial bootstrap.
-- Move to API token auth once minimum required privileges are validated.
-- Never commit credentials; load from shell environment or local secret files excluded from git.
-
-Suggested environment variables:
-- PROXMOX_VE_ENDPOINT
-- PROXMOX_VE_USERNAME
-- PROXMOX_VE_PASSWORD
-- PROXMOX_VE_INSECURE
-
-## Phase 1 Technical Approach
-
-1. Build or import Ubuntu 24.04 cloud image/template in Proxmox. **Pinned to a
-   dated release directory and verified against its published SHA256 since
-   2026-08-17.** It was fetched from `noble/current/` with no checksum, which
-   made two rebuilds a fortnight apart produce different base images from
-   identical source — and made the disk every VM here is imported from the only
-   artifact in the environment that nothing verified. Changing the URL means
-   changing the checksum beside it in `infra/pulumi/__main__.py`; the two are
-   deliberately coupled so that a half-finished edit fails the download rather
-   than silently widening what is accepted.
-
-   Note for the first `pulumi up` after that change: the image resource is
-   **replaced**, so the file is deleted from the datastore and re-downloaded
-   with verification. The existing VMs are updated, not replaced — they imported
-   their disks at creation and do not re-read the image.
-2. Create Pulumi project using Python and pinned provider version.
-3. Define explicit Proxmox provider resource and use it for all VM resources.
-4. Provision repo01 VM from template with:
-     - CPU, memory, disk from target definition
-     - dual NIC setup (external + internal)
-     - cloud-init user, SSH key, static addressing
-5. Configure controller-to-internal tunnel path:
-    - deploy WireGuard endpoint on `repo01`
-    - configure WireGuard peer on automation controller
-    - enable IPv4 forwarding on `repo01`
-    - apply SNAT/masquerade on `repo01` for tunnel subnet to `192.168.2.0/24`
-    - add controller static route for `192.168.2.0/24` via WireGuard interface
-6. Export required connection outputs (IP/FQDN) for Ansible inventory generation.
-7. Run Ansible in stages:
-    - base host prep
-    - WireGuard tunnel gateway
-    - SOCKS5
-    - apt proxy
-    - GitLab
-8. Execute smoke tests and capture evidence in runbook.
-
-## Controller Tunnel Reference Design (Phase 1)
-
-Recommended minimal setup: WireGuard point-to-point tunnel.
-
-Proposed tunnel subnet:
-- `10.66.66.0/30`
-- controller WG IP: `10.66.66.1/30`
-- `repo01` WG IP: `10.66.66.2/30`
-
-Routing behavior:
-- controller route: `192.168.2.0/24` via `wg0`
-- `repo01` forwards between `wg0` and internal NIC
-- `repo01` applies SNAT for source `10.66.66.0/30` toward `192.168.2.0/24`
-
-Why SNAT first:
-- avoids immediate dependency on adding return routes to internal network gateways
-- keeps initial rollout simple and reversible
-
-Future optimization (optional):
-- remove SNAT and add explicit return route on internal gateway (`192.168.2.20`) for `10.66.66.0/30` via `192.168.2.99`
-- preserves original source IP visibility from controller
-
-## Known Risks and Mitigations
-
-- Risk: Provider upgrade introduces breaking resource token or schema changes.
-    - Mitigation: Pin Pulumi and provider versions in Phase 1; defer upgrades until phase completion.
-
-- Risk: Proxmox API auth mode differences block some operations.
-    - Mitigation: Keep bootstrap on known-good auth method; test token auth in isolated change set.
-
-- Risk: Multi-step VM customization creates drift between IaC and Ansible.
-    - Mitigation: Keep VM creation in IaC only, host software/config only in Ansible.
-
-- Risk: GitLab footprint exceeds VM sizing under load.
-    - Mitigation: Begin with conservative single-node settings and capture resource telemetry early.
-
-- Risk: Tunnel or forwarding misconfiguration blocks controller access to internal nodes.
-    - Mitigation: Add explicit tunnel validation tasks (`ping`, TCP/22 checks, Ansible ad-hoc command) before running service roles.
-    - **Implemented 2026-08-17**, five phases after it was written, by the third
-      play of `playbooks/tunnel_controller_access.yml`. Three checks, each a
-      different question: the interface is up and the gateway is a peer of it;
-      a handshake has completed, which is what a wrong key breaks; and a TCP
-      port inside `192.168.2.0/24` answers through the tunnel. Until then the
-      failure this mitigation names surfaced as every later playbook timing out
-      against an internal host, with an error naming the host and saying
-      nothing about the path to it.
+- Pulumi + Python is the IaC interface; the `pulumi_proxmoxve` package tracks
+  the bpg provider. Provider behaviour changes with upstream releases — pin
+  versions and read release notes before upgrading.
+- Any provider operation that needs node-scoped access (SSH, template
+  import, the `pve_cleanup` orphan-LV sweep) goes through
+  `deployment:managementNode` (`pve01`); any node's API endpoint reaches the
+  cluster for most reads.
+- VMs are **only** created by Pulumi; host software and configuration is
+  Ansible's. Do not hand-create or hand-edit VMs in the PVE UI — the next
+  `pulumi up` will reconcile against the program.

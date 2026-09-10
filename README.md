@@ -74,9 +74,8 @@ same rule the plan documents live under. See
 ## Where to read next
 
 Start with [`plan/OVERVIEW.md`](plan/OVERVIEW.md) for the architecture and the
-cross-phase rules, [`plan/CONTROLLER.md`](plan/CONTROLLER.md) for the
-controller's dependency manifest and cold start, and
-[`plan/PHASES.md`](plan/PHASES.md) for the build order.
+cross-cutting rules, and [`plan/CONTROLLER.md`](plan/CONTROLLER.md) for the
+controller's dependency manifest and cold start.
 
 ## Two rules that explain most of the design
 

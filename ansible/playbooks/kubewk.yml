@@ -256,8 +256,8 @@
               Not every worker is Ready, so the control plane must not be tainted.
               CriticalAddonsOnly is NoExecute: applying it now would evict CoreDNS
               and metrics-server with nowhere to reschedule, and cluster DNS would
-              stop. Fix the workers first — see the runbook in
-              plan/PHASE5_IMPLEMENTATION.md.
+              stop. Fix the workers first — see the taint/eviction notes in
+              docs/source/kubernetes-basics.
             quiet: true
 
         - name: kubewk | Taint the control plane CriticalAddonsOnly

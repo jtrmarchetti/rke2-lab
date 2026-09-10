@@ -135,8 +135,9 @@ Where the pattern record lives
 ==============================
 
 The durable ownership record is ``plan/FLUX_OWNERSHIP.md`` (the split and
-the garage gate); the failure histories are in the ``plan/PHASE<N>``
-documents' "what the run taught" sections. When a pattern here is updated,
+the garage gate, plus the durable GitOps mechanics); the failure histories
+that a pattern row names live in the ``plan/`` documents. When a pattern
+here is updated,
 the trigger table in :doc:`../reference/maintaining-this-guide` — the rows
 for Ansible role/playbook changes and for Ansible pattern changes — says
 which of this page's sections the new fact belongs in, alongside the

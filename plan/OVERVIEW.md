@@ -8,20 +8,20 @@ configuration as code.
 
 | Document | Purpose |
 | --- | --- |
-| `OVERVIEW.md` | Architecture, ground rules, and cross-phase constraints (this file) |
-| `PHASES.md` | The six phases and the work flow inside each one |
+| `OVERVIEW.md` | Architecture, ground rules, and cross-cutting constraints (this file) |
 | `TARGETS.md` | Per-VM specifications: CPU, RAM, disk, NICs, DNS, roles |
 | `SECRETS.md` | Where secrets live and how automation reads them |
 | `CONTROLLER.md` | The automation controller's dependency manifest and cold start |
-| `PROXMOX.md` | Hypervisor and template preparation notes |
+| `PROXMOX.md` | Hypervisor (three-node PVE cluster) and template preparation notes |
 | `CLUSTER_COMPONENTS.md` | Cluster software stack selections |
+| `FLUX_OWNERSHIP.md` | The Flux/Ansible ownership boundary and GitOps mechanics |
 | `ANSIBLE_STANDARDS.md` | Role/playbook conventions all automation must follow |
-| `PHASE<N>_IMPLEMENTATION.md` | Detailed execution plan for a single phase |
 | `../docs/` | The environment guide (sysadmin + developer sections) — how the built
   environment is operated and extended |
 
-`PROXMOX.md` also records the hypervisor's storage characteristics, which
-constrain etcd and are the reason the Phase 4 control plane needs tuning.
+`PROXMOX.md` records the PVE cluster's storage characteristics, which constrain
+etcd and are the reason the control plane's heartbeat/election timeouts are set
+where they are.
 
 ## Operating System
 
@@ -284,7 +284,7 @@ GitLab in Phase 3 and to anything containerized after it.
   FreeIPA's upstream states that privileged mode "is not supported and will not
   work", how install options must be passed, and which flags a cgroup v2 host needs.
   Every one of those was discovered by failure first and confirmed in the docs after.
-  This is the Research step of the phase methodology, and skipping it is not faster.
+  This is the Research step of the change methodology, and skipping it is not faster.
 - **Give stateful containers a stop grace period.** Docker's default is 10 seconds.
   A database that is `SIGKILL`ed mid-write comes back corrupt, and the service
   manager inside the container will often still report it healthy. Every `docker
@@ -345,6 +345,17 @@ GitLab in Phase 3 and to anything containerized after it.
   stays NXDOMAIN for the zone's negative TTL — an hour here — on every resolver that
   asked early. Verify against the authority with `dig @<server>` before believing a
   resolution failure.
+- **Install the domain CA into the trust store before the container runtime
+  starts.** `rke2_node` fetches the CA, then `flush_handlers` to rebuild the
+  system trust store *before* the registry config is written — a registry that
+  signs with the domain CA is unreachable to a runtime whose trust pool does
+  not yet contain it, and `certs.d/<host>/ca.crt` alone does not cover the
+  JWT auth path. Ordering, not content, is the failure.
+- **Registry mirrors keep their upstream names.** `rke2` is configured with
+  `disable-default-registry-endpoint: true` and a mirror whose `replacement`
+  is the GitLab registry, while every image in the tree keeps its upstream
+  name. Do not bake the mirror's hostname into image references — the mirror
+  must stay a transparent redirect, not a rename.
 
 ## Secrets
 
@@ -385,26 +396,26 @@ python3 -m venv ~/.venvs/rke2lab-docs
 make -C docs html
 ```
 
-## Phase Methodology
+## Change Methodology
 
-Every phase in `PHASES.md` runs the same five-step flow. A phase is not complete until
-all five steps are done.
+Every change to the environment runs the same five-step flow. A change is not
+complete until all five steps are done.
 
-1. **Review** — Re-read the plan for this phase and confirm the previous phase's exit
-   criteria still hold. Verify the current state of the environment and the repo
-   against what the plan assumes. Record anything that has drifted.
-2. **Research** — Resolve the phase's open questions before writing code: version
-   selection, artifact sources and checksums, provider or role behavior, and any
-   decision the implementation depends on. Write down the decisions and their
-   rationale.
-3. **Implement** — Build the IaC and Ansible changes in the order the plan specifies.
-   Stage every required artifact on `repo01` before the consuming host needs it.
-4. **Test** — Run the phase's validation checklist, confirm idempotency on a second
-   run, and confirm the exit criteria. Capture evidence.
-5. **Document** — Correct every plan document the phase invalidated, including
-   earlier phases' "Status" and "Still open" sections, and update the
-   documentation site in `docs/` for anything the phase changed about
+1. **Review** — Re-read the plan this change serves and confirm the prior
+   exit criteria still hold. Verify the current state of the environment and
+   the repo against what the change assumes. Record anything that has drifted.
+2. **Research** — Resolve the change's open questions before writing code:
+   version selection, artifact sources and checksums, provider or role
+   behavior, and any decision the implementation depends on. Write down the
+   decisions and their rationale.
+3. **Implement** — Build the IaC and Ansible changes in the order the plan
+   specifies. Stage every required artifact on `repo01` before the consuming
+   host needs it.
+4. **Test** — Run the change's validation checklist, confirm idempotency on a
+   second run, and confirm the exit criteria. Capture evidence.
+5. **Document** — Correct every plan document the change invalidated, and
+   update the documentation site in `docs/` for anything the change did about
    operating or extending the environment: a new service, a new credential, a
    new URL, a new version, a design decision, or a fault worth adding to the
-   troubleshooting page. A phase that changed how the environment is run and
+   troubleshooting page. A change that altered how the environment is run and
    did not touch `docs/` has skipped a step.
