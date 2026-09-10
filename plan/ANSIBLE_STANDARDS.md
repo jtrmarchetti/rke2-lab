@@ -14,8 +14,8 @@ Validation basis for this document:
 
 - Red Hat CoP Good Practices for Ansible:
   `https://redhat-cop.github.io/automation-good-practices/`
-- Repository-specific constraints in `CLAUDE.md`, `GOALS.md`, and
-  `RESTRICTIONS.md`
+- Repository-specific constraints in `plan/OVERVIEW.md`, `plan/SECRETS.md`,
+  and the `plan/PHASE*_IMPLEMENTATION.md` documents
 
 When repository rules are stricter than CoP guidance, repository rules win.
 
@@ -82,16 +82,36 @@ without opening twenty roles first. The cost is that a role is no longer a
 self-contained unit you can copy elsewhere, which is a trade this repository
 accepts because these roles are not published.
 
-Each role declares the directory once, in `vars/main.yml`, and refers to it
-from every `template` task:
+Every path into that tree is an inventory variable. `inventory_files_base`
+(computed in `inventory/group_vars/all/main.yml` as
+`"{{ ansible_config_file | dirname }}/files"`) anchors the per-file and
+per-folder path variables that each play passes into its roles:
 
 ```yaml
-# roles/time_sync/vars/main.yml
-_var_time_sync_files_dir: "{{ role_path }}/../../files/time_sync"
+# inventory/group_vars/repo/main.yml
+inventory_apt_proxy_template: >-
+  {{ inventory_files_base }}/apt_proxy/apt-cacher-ng.conf.j2
 ```
 
 ```yaml
-src: "{{ _var_time_sync_files_dir }}/chrony.conf.j2"
+- name: repo01 | Include the apt proxy role
+  ansible.builtin.include_role:
+    name: apt_proxy
+  vars:
+    apt_proxy_template: "{{ inventory_apt_proxy_template }}"
+```
+
+The path keys are ordinary role parameters: the role declares them in
+`defaults/main.yml` set to `null` (documenting the interface) and validates
+them in `meta/argument_specs.yml`, exactly like any other input. For
+folder-based consumers (gitops_source, gitops_bootstrap) the inventory
+variable holds the folder, not the file. A template task then reads its
+path from its own parameter:
+
+```yaml
+ansible.builtin.template:
+  src: "{{ time_sync_template }}"
+  dest: /etc/chrony/chrony.conf
 ```
 
 Always render with `template` unless the file is truly static.
@@ -125,6 +145,16 @@ Always render with `template` unless the file is truly static.
   exceptional overrides only.
 - Keep variable scope as small as practical; avoid broad-scope variable
   injection when task or block scope is sufficient.
+- Never write self-referential passthroughs into role arguments or
+  `import_playbook vars:`. `>- "{{ gitops_source_unseal_keys_only | default(
+  false) }}"` where the key on the left already names the same variable
+  recurses into itself at template time (`import_playbook vars:` puts the
+  value at playbook scope; a task that templates the very variable it
+  defined fails at template time with a `Recursive loop detected in
+  template` error — which is exactly what a cold build hit when one was
+  written. The role's own default covers the absent case, and an override
+  reaches the role through normal variable precedence without any
+  passthrough.
 
 ### Compliant
 
@@ -158,6 +188,28 @@ Always render with `template` unless the file is truly static.
     - name: Format disk
       ansible.builtin.command: mkfs.ext4 /dev/sdb
 ```
+
+### The `serial:` Keyword
+
+The play-level `serial:` keyword is templated **before** inventory
+`group_vars` and even play-level `vars:` enter variable scope. A knob that
+lives in `group_vars` — `serial: "{{ kubecp_serial | default(2) }}"` where
+`kubecp_serial` is set in `group_vars/all` — silently degrades to the
+default; the inventory value never reaches the keyword. Only a literal and
+an extra var (`-e kubecp_serial=1`) do. Task-context resolution of the same
+variable works fine, which is what makes the trap easy to miss.
+
+- Put the effective width in the keyword's own default:
+  `serial: "{{ kubecp_serial | default(1) }}"`. The `group_vars` line stays
+  as the documented value and keeps the default numerically consistent with
+  it; `-e` remains the override path. The join plays
+  (`kubecp.yml`, `kubewk.yml`) carry a comment to this effect at the
+  keyword.
+- Probe batch behavior with a no-op playbook: `hosts: <group>`, the
+  `serial` under test, one `debug` task — one `PLAY [` banner per batch.
+- Never write `serial: all` on this estate. ansible-core 2.21 rejects the
+  word at batch computation (`pct_to_int` crashes on a non-numeric string);
+  one batch of every host is `serial: 100%`.
 
 ---
 
@@ -267,6 +319,10 @@ the caller's scope by accident.
 - Use `>-` for folded multiline strings.
 - Use `true` and `false` only. Never use `yes`, `no`, `on`, `off`, or title
   case booleans.
+- In `command`/`shell` tasks, keep apostrophes out of the `cmd` body and any
+  trailing comment: a stray `'` in a trailing comment once broke argument
+  parsing on the next cold build (the base_host `flock` task). Read back the
+  exact command a shell task will run, not just the exit code of a dry-run.
 
 ### Task Parameter Order
 
@@ -294,8 +350,8 @@ that consumes them; and that the module and its arguments stay together as one
 unbroken block at the foot of the task rather than being split by keywords.
 
 This is a consistency convention, not an Ansible semantic requirement. It
-disagrees with ansible-lint's `key-order[task]`, which is disabled in
-`.ansible-lint` for that reason.
+disagrees with ansible-lint's `key-order[task]`, which is skipped in
+`ansible/.ansible-lint` for that reason.
 
 ### Compliant
 
@@ -347,6 +403,27 @@ disagrees with ansible-lint's `key-order[task]`, which is disabled in
 - Never loop over package installation one item at a time when the module can
   take a list.
 
+### Retry and Wait Budgets
+
+- `until`/`retries`/`delay` loops are the standard way to wait for
+  readiness. A loop is acceptable while every condition in it is true: the
+  `until` expression is accurate and becomes true the moment the thing is
+  actually ready (no polling past the state), `delay` stays short, and
+  `retries × delay` stays proportional to the real worst case.
+- Prefer a fast probe that detects the state change itself over a long
+  blind poll. `kubectl wait --for=condition=Ready` with a bounded
+  `--timeout` plus a short confirm loop replaces a long loop of
+  `kubectl exec` probes (`openbao_init` uses this shape).
+- No static `sleep` settle steps. A bare `sleep N` between two operations
+  is a blind wait; the follow-up operation's own timeout and confirm loop
+  carry the settle requirement (`flux_unstall` dropped its sleep the same
+  way).
+- Prune budgets against measured evidence, not intuition. The timing
+  callbacks in `ansible/ansible.cfg` (`profile_tasks`, `profile_roles`,
+  `timer`) log per-task durations to `ansible/ansible.log`; when hardware or
+  the build shape changes, re-measure and cut `retries`/`delay` accordingly,
+  and delete the dead budgets.
+
 ### Module Selection
 
 - Use the most specific module available.
@@ -377,8 +454,12 @@ disagrees with ansible-lint's `key-order[task]`, which is disabled in
 - Use `template` for configuration files, even if the file is static today.
 - Use `copy` only for binary files, remote artifacts, or files that will never
   need templating.
-- Address templates through the role's `_var_<role>_files_dir`, which is
-  defined once in `vars/main.yml` relative to `role_path`.
+- Address templates through their path parameter, which the caller passes
+  from inventory: `{{ role }}_<what>_template` for a file, or the role's
+  folder parameter (the gitops roles render from a directory passed in the
+  same way). The values are the `inventory_files_base`-anchored variables
+  described in the Inventory section, and each path key is a validated role
+  parameter set to `null` in `defaults/main.yml`.
 - A template may only reference `inventory_*` variables, except for values
   that are runtime-derived and cannot live in inventory: slurped markers or
   tokens slurped by a task in the same run (the etcd_rejoin join-pin marker,
@@ -409,7 +490,9 @@ disagrees with ansible-lint's `key-order[task]`, which is disabled in
 ### Compliant
 
 ```yaml
-src: "{{ _var_apt_proxy_files_dir }}/{{ config_file }}.j2"
+ansible.builtin.template:
+  src: "{{ apt_proxy_template }}"
+  dest: /etc/apt-cacher-ng/acng.conf
 ```
 
 ---
@@ -435,7 +518,13 @@ no_log: "{{ no_log_override | default(true) }}"
 ## Inventory
 
 - Use a structured inventory directory.
-- Use `group_vars/<group>/` subdirectories rather than flat `group_vars/<group>.yml` files.
+- Use `group_vars/<group>/` subdirectories rather than flat
+  `group_vars/<group>.yml` files.
+- Template paths live in inventory, not in roles. `inventory_files_base`
+  resolves to `ansible/files/` from the ansible config file's directory,
+  and every per-file path variable (one per template a role renders) and
+  every folder variable (the gitops roles' source directories) builds on
+  it. Roles receive those paths as ordinary, validated parameters.
 - Store environment-specific values in `group_vars` and `host_vars`.
 - Keep roles free of environment-specific data. A role default that names this
   lab's domain, addresses or artifact host is a value in the wrong file.
@@ -478,12 +567,19 @@ no_log: "{{ no_log_override | default(true) }}"
 
 ```bash
 yamllint .
-ansible-lint
+ansible-lint            # config: ansible/.ansible-lint
 ansible-playbook -i inventory/hosts.yml playbooks/site.yml --syntax-check
 ```
 
 - Add role-specific `--check` coverage when a change affects behavior.
 - Fix idempotency problems before widening scope.
+- Lint skips are argued in `ansible/.ansible-lint` with a comment per rule
+  (`key-order[task]`, `name[casing]`, `var-naming[no-role-prefix]`,
+  `yaml[line-length]` + `line-length`); read that file before disabling or
+  re-enabling anything. The timing callbacks enabled in
+  `ansible/ansible.cfg` (`ansible.posix.profile_tasks`, `profile_roles`,
+  `timer`) feed `ansible/ansible.log` and are the evidence base for any
+  wait-budget or parallelism change.
 
 CoP references used during validation:
 
@@ -523,6 +619,11 @@ A verification log records, per claim, the command or file that grounds it —
 the standing rule is that a command or number is not written into `docs/` or
 `plan/` as fact until it has a live check or a read of the file it names,
 recorded there.
+
+Performance claims get their evidence from the timing callbacks in
+`ansible/ansible.cfg`, not from watch timings: `ansible/ansible.log`
+captures per-task durations for every run, and a wait-budget or
+parallelism change is argued from those numbers.
 
 ## Decision Rules
 
