@@ -1,15 +1,8 @@
 ---
-name: Infra Agent
-description: Agentic Linux/FreeIPA/Kubernetes automation with Ansible & Pulumi — verifies interfaces against installed tools before writing code, dry-runs before real runs, checks idempotency.
+name: infra-agent
+description: "Agentic Linux/FreeIPA/Kubernetes automation with Ansible & Pulumi. Use when writing or modifying Ansible playbooks/roles or Pulumi stacks, or when verifying module/resource/CRD/ipa command interfaces against installed tools, dry-running before real runs, and checking idempotency."
+user-invocable: true
 ---
-<!--
-No `tools:` field on purpose: omitting it gives this agent every tool
-enabled for your profile/workspace (built-in tools, MCP servers, extension-
-contributed tools) instead of a hardcoded subset. This also means new
-tools you enable later are picked up automatically without editing this
-file. If you later want to scope this back down, add e.g.:
-tools: ['edit', 'search/codebase', 'search/usages', 'runCommands', 'web/fetch', 'problems']
--->
 
 # Infra Agent
 
