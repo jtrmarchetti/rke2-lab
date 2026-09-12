@@ -53,7 +53,7 @@ A playbook is one phase
 
 One non-obvious thing about that order:
 
-* **``gitops`` appears twice.** The first push creates the GitOps tree; the
+* ``gitops`` **appears twice.** The first push creates the GitOps tree; the
   vault it deploys (OpenBao) does not exist yet, so the unseal keys cannot be
   sealed yet. ``cluster_init`` creates the vault; the second ``gitops`` run
   seals the keys into a tree that already exists.
@@ -109,8 +109,8 @@ it is spelled, so its origin is readable at the point of use:
      - ``_<ns>_<noun>``
      - ``_gitops_env_sh_text``
 
-The load-bearing rule: **an ``inventory_*`` value reaches a role only through
-a playbook line that names it.**
+The load-bearing rule: an ``inventory_*`` value reaches a role only through
+a playbook line that names it.
 
 .. code-block:: yaml
 
@@ -144,7 +144,7 @@ is not a testing nicety, it is what makes every run safe and makes the
 controller's whole "re-run until green" loop meaningful. The mechanisms that
 serve it:
 
-* **Declarative modules over ``command``/``shell``** — the module knows the
+* Declarative modules over ``command``/``shell`` — the module knows the
   target state and reports ``ok`` when it is already reached. Where
   ``command`` is unavoidable, ``changed_when`` is written down.
 * **Handlers for restarts** — a task *notifies* a handler; the handler runs

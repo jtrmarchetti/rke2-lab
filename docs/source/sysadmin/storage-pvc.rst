@@ -28,7 +28,7 @@ works — but the *durable* change is in Git, not in the cluster.
 
 .. important::
 
-   **A StatefulSet's ``volumeClaimTemplates`` are immutable.** Editing the size
+   A StatefulSet's ``volumeClaimTemplates`` are immutable. Editing the size
    there does not resize existing claims, and Flux's apply will fail on the
    StatefulSet with a validation error. The working order is: patch the live
    PVCs first, then change the template so *future* replicas match.

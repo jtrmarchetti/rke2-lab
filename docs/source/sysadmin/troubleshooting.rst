@@ -48,7 +48,7 @@ A name queried before it existed stays NXDOMAIN for the zone's negative TTL —
 an hour here — on every resolver that asked early. If the authority answers and
 your resolver does not, flush your resolver and wait it out.
 
-**Nothing under ``k8s.dev.lo`` resolves.** FreeIPA forwards that whole zone to
+**Nothing under** ``k8s.dev.lo`` **resolves.** FreeIPA forwards that whole zone to
 the cluster's CoreDNS on ``192.168.2.40`` and holds no records for it, so this
 is a cluster problem wearing a DNS problem's clothes:
 ``kubectl -n cluster-dns get pods,svc``.
@@ -65,10 +65,10 @@ internal network. Only ``repo01`` and the controller resolve both.
 Certificates
 ============
 
-**``x509: certificate signed by unknown authority``.** The FreeIPA CA is not in
+``x509: certificate signed by unknown authority``. The FreeIPA CA is not in
 that client's trust store. See :doc:`../access`.
 
-**A browser warns on a ``k8s.dev.lo`` name but not on ``gitlab.dev.lo``.**
+A browser warns on a ``k8s.dev.lo`` name but not on ``gitlab.dev.lo``.
 Almost always the working name is a stored exception rather than real CA trust
 — clicking through a warning once is permanent, and it is listed under the
 Servers tab of the browser's certificate dialog. The root CA alone validates
@@ -85,26 +85,26 @@ touching the certificates:
 ``Verify return code: 0 (ok)`` means the server side is correct and the fault
 is in that browser's trust store. See :doc:`../access`.
 
-**A ``k8s.dev.lo`` name serves ``CN=TRAEFIK DEFAULT CERT``.** No HTTPRoute
+A ``k8s.dev.lo`` name serves ``CN=TRAEFIK DEFAULT CERT``. No HTTPRoute
 claims that hostname. The cluster's DNS answers every single-label name under
 ``k8s.dev.lo`` with the ingress address, so a typo resolves and connects, then
 gets Traefik's self-signed fallback. No amount of CA installation fixes it —
 check the hostname against ``kubectl get httproute -A`` and the ``platform``
 Gateway's listener list.
 
-**``curl`` is happy but an Ansible ``uri`` task fails verification.** Ansible's
+``curl`` is happy but an Ansible ``uri`` task fails verification. Ansible's
 Python may verify against a different bundle than
 ``update-ca-certificates`` writes. Roles pass
 ``/etc/ssl/certs/ca-certificates.crt`` explicitly for this reason.
 
-**A ``Certificate`` sits ``False``.** ``kubectl describe certificate`` and then
+A ``Certificate`` sits ``False``. ``kubectl describe certificate`` and then
 ``certificaterequest``. Nearly always the ``k8s-ca`` issuer being unhealthy
 rather than the workload.
 
 Images and pulls
 ================
 
-**``ImagePullBackOff`` on a new service.** In this cluster, three causes, in
+``ImagePullBackOff`` on a new service. In this cluster, three causes, in
 order of likelihood:
 
 #. No mirror rule rewrites that upstream namespace — check
@@ -118,18 +118,18 @@ order of likelihood:
 single-platform. Copy with ``--all --preserve-digests``: charts that pin by
 digest cannot resolve a rewritten manifest.
 
-**A bare ``postgres:17.11-alpine`` will not pull.** Docker Hub official images
+**A bare** ``postgres:17.11-alpine`` **will not pull.** Docker Hub official images
 resolve to ``docker.io/library/*``; the ``^library/`` rule is what covers them.
 
 Pods
 ====
 
-**``Pending`` forever.** ``kubectl describe pod``. Either no node has room
+``Pending`` **forever.** ``kubectl describe pod``. Either no node has room
 (check ``kubectl top nodes`` — worker memory is the scarce resource here), or
 its PVC has not bound (:doc:`storage-pvc`), or it landed on a control plane
 node it cannot tolerate.
 
-**``CrashLoopBackOff``.** ``kubectl logs --previous`` is the one that shows
+``CrashLoopBackOff``. ``kubectl logs --previous`` is the one that shows
 why. If the log is empty, the failure is before the process started and lives
 in ``describe``.
 
@@ -190,7 +190,7 @@ clear.
 Usually nothing has written that path yet — ``openbao_secrets`` runs in
 ``cluster_init.yml``.
 
-**A value written to ``env.sh`` during a run is invisible to that run.**
+**A value written to** ``env.sh`` **during a run is invisible to that run.**
 Structural: ``lookup('env')`` reads the environment the process started with.
 Re-source ``env.sh`` and run again. Garage's S3 keys are always a run late for
 this reason.
@@ -231,13 +231,13 @@ login. Sign out and back in.
 **Grafana refuses a user with no role.** ``role_attribute_strict``, working as
 designed. Put them in ``grafana-users``.
 
-**GitLab ignores ``gitlab-admins``.** Group-to-admin mapping is a GitLab
+**GitLab ignores** ``gitlab-admins``. Group-to-admin mapping is a GitLab
 Enterprise feature. Administrator rights are granted in GitLab by ``root``.
 
 Cluster and storage
 ===================
 
-**etcd leader elections, API latency, ``request timed out``.** Storage, not
+**etcd leader elections, API latency,** ``request timed out``. Storage, not
 etcd. The PVE nodes' NVMe storage is still tuned for etcd's write pattern.
 Benchmark one host at a time — a synthetic fsync test on all six at once is a
 denial of service against storage already at its limit.

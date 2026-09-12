@@ -83,7 +83,7 @@ Reading a pod's state
 What is different about this cluster
 ====================================
 
-**You do not ``kubectl apply``.** Flux reconciles every workload from Git. A
+**You do not** ``kubectl apply``. Flux reconciles every workload from Git. A
 resource you create by hand is not deleted, but a resource you *edit* is
 reverted the next time Flux reconciles — typically within minutes. Changes go
 through :doc:`developer/adding-a-service`.

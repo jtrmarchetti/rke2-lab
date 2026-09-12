@@ -53,10 +53,10 @@ What to do with each result
   ``kubectl logs --previous``; :doc:`troubleshooting` orders the pod symptoms.
 * **A volume degraded** — one of three workers is down, or its
   ``/var/lib/longhorn`` did not mount: :doc:`storage-longhorn`.
-* **A certificate not ``Issued``** — ``kubectl describe certificate`` and then
+* **A certificate not** ``Issued`` — ``kubectl describe certificate`` and then
   the ``certificaterequest``; nearly always the ``k8s-ca`` issuer rather than
   the workload.
-* **An ExternalSecret not ``Synced``** — it names the vault path it cannot
+* **An ExternalSecret not** ``Synced`` — it names the vault path it cannot
   read, and the usual cause is that nothing has written that path yet.
 
 .. note::

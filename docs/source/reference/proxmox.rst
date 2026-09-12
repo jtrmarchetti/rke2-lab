@@ -58,8 +58,8 @@ Internal network: PVE SDN
 The internal ``192.168.2.0/24`` crosses all three nodes via PVE's SDN
 subsystem, configured by Pulumi:
 
-- **vxlan zone ``labvx``** spanning ``192.168.1.21-23``, tag **42**.
-- **vnet ``vlab``** attached to the zone — its bridge is the attach target
+- **vxlan zone** ``labvx`` spanning ``192.168.1.21-23``, tag **42**.
+- **vnet** ``vlab`` attached to the zone — its bridge is the attach target
   every VM's internal NIC uses.
 
 There is no per-node ``vmbr1`` and no Pulumi-managed L2 bridge. If SDN state
@@ -160,7 +160,7 @@ busiest is ``pve02`` at 26 GiB of 62.6 GiB:
 Per-VM specifications
 =====================
 
-All hosts run Ubuntu 24.04. The login user is **``root``**, set by
+All hosts run Ubuntu 24.04. The login user is ``root``, set by
 ``deployment:vmUsername`` in the Pulumi stack config and supplied to Ansible
 as ``VM_USERNAME``. Every VM is root-only; there is no unprivileged account
 anywhere.
@@ -230,7 +230,7 @@ mounted at ``/var/lib/longhorn`` for the CSI disks.
 
 Notes on the sizes that are load-bearing:
 
-- **``repo01`` is 10 GiB.** GitLab is the binding constraint on this host;
+- ``repo01`` is 10 GiB — GitLab is the binding constraint on this host;
   8 GiB was the measured floor that runs it beside Apache, apt-cacher-ng,
   dnsmasq and the tunnel without swapping, and 10 GiB is that floor with
   headroom. The VM is created at this size — do not build it small and grow
@@ -255,7 +255,7 @@ theoretical cross-host migration property.
 
 .. important::
 
-   **Changing ``cpu_type`` on an existing VM needs a full power cycle.** A
+   Changing ``cpu_type`` on an existing VM needs a full power cycle.
    reboot from inside the guest keeps the running QEMU process and the CPU it
    is presenting. Plan a cold-boot window for it.
 

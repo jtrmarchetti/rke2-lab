@@ -158,20 +158,20 @@ section::
 
 What each step owns:
 
-1. **``bootstrap/controller-bootstrap.sh``** installs the system packages,
+1. ``bootstrap/controller-bootstrap.sh`` installs the system packages,
    creates ``~/.venvs/rke2lab`` from ``bootstrap/requirements-controller.txt``,
    and installs the pinned collections into ``~/.ansible/collections``. Its
    scope is one chicken-and-egg problem: *Ansible cannot install Ansible.*
 2. **Secrets** restore ``~/.config/rke2lab/`` — ``env.sh`` at mode 0600, with
    ``sealed-secrets-key.yaml`` and ``k8s-ca/`` beside it.
-3. **``playbooks/controller_bootstrap.yml``** does the rest, in this order:
+3. ``playbooks/controller_bootstrap.yml`` does the rest, in this order:
    split DNS (nothing that resolves a ``dev.lo`` name works before this),
    then the pinned runtimes via the ``controller_runtime`` role, then the
    WireGuard tunnel last — because the tunnel is what reaches the internal
    network, it precedes every Ansible run against an internal host, but the
    play that configures it reaches ``repo01`` on ``192.168.1.20``, so
    configuring the tunnel never depends on the tunnel.
-4. **``playbooks/site.yml``** builds the environment, and imports step 3 as
+4. ``playbooks/site.yml`` builds the environment, and imports step 3 as
    its own first play.
 
 Two things are *not* in this list because they cannot be: **SSH host keys**

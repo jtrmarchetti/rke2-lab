@@ -20,11 +20,11 @@ object and has no ordering dependency on those gaps belongs in the tree.
 That split is not a preference; it is what Flux *can do*. The available
 primitives were probed on the installed CRDs, not recalled:
 
-* **Kustomization ``dependsOn``** blocks the apply of a KZ until the named
+* **Kustomization** ``dependsOn`` blocks the apply of a KZ until the named
   KZs are Ready — build ordering.
-* **Kustomization ``healthChecks``** holds a KZ not-Ready while a named
+* **Kustomization** ``healthChecks`` holds a KZ not-Ready while a named
   in-cluster object is absent; it retries forever and never goes terminal.
-* **HelmRelease ``driftDetection``** in ``warn`` mode on all eight releases:
+* **HelmRelease** ``driftDetection`` in ``warn`` mode on all eight releases:
   observational only, never blocks or mutates.
 
 What the CRDs **cannot** do drives the other patterns. A Kustomization's
@@ -87,12 +87,12 @@ The design decisions inside that, each one bought with a failure:
   the source changes, the marker no longer matches, and the refetch
   happens. A destination-only marker would have kept serving the old version
   forever.
-* **``force: true`` on marker-gated downloads.** ``get_url``'s default
+* ``force: true`` **on marker-gated downloads.** ``get_url``'s default
   Last-Modified heuristic kept a stale local file whenever its mtime beat
   the remote's. It actually happened: a bumped RKE2 version left the old
   image list in place, the new images never published, and the control
   plane crash-looped on ``MANIFEST_UNKNOWN``.
-* **Marker files are written with ``copy: content: "" force: false``**, not
+* **Marker files are written with** ``copy: content: "" force: false``, not
   ``file: state: touch`` — a touch bumps the mtime and reports ``changed``
   every run, which breaks the idempotency rule the scheme exists to serve.
 * **Three writers, byte-identical markers.** ``artifact_stage`` writes the
@@ -141,8 +141,8 @@ The durable GitOps mechanics
   committed blob when it still matches what the source renders; otherwise it
   re-seals and pushes. A drifted secret is healed by converging on the
   rendered value, never by a hand edit in GitLab surviving a pass.
-- **``site.yml`` runs ``gitops.yml`` twice, and that is load-bearing, not
-  redundant.** The OpenBao unseal keys cannot predate the vault that holds
+- ``site.yml`` runs ``gitops.yml`` twice, and that is load-bearing, not
+  redundant. The OpenBao unseal keys cannot predate the vault that holds
   their threshold, so the first pass seals them and the second reconciles
   once the vault can serve them.
 - **Render the chart and read what it actually asks for.** A chart's
