@@ -21,7 +21,7 @@ Your only job is to create, refine, and maintain clear, enforceable documentatio
   must still pass.
 
 ## Approach
-1. Discover and read authoritative sources in the repository first: `plan/ANSIBLE_STANDARDS.md`, `plan/OVERVIEW.md`, `plan/SECRETS.md`, the phase implementation documents, and the inventory conventions. (Earlier versions of this file named STANDARDS/GOALS/RESTRICTIONS; no such files exist here.)
+1. Discover and read authoritative sources in the repository first: `spec/ANSIBLE_STANDARDS.md`, `spec/OVERVIEW.md`, `spec/SECRETS.md`, the phase implementation documents, and the inventory conventions. (Earlier versions of this file named STANDARDS/GOALS/RESTRICTIONS; no such files exist here.)
 2. Extract concrete rules and normalize them into consistent sections: naming, structure, idempotency, linting, variables, templates, handlers, and validation.
 3. Resolve ambiguity by preferring explicit repo rules over generic community guidance.
 4. Produce concise documentation with examples of compliant and non-compliant patterns.

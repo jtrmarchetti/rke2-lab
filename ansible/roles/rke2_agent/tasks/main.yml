@@ -9,7 +9,7 @@
     fail_msg: >-
       rke2_agent needs the cluster token, this node's address, and the name of a
       control plane host to ask about readiness. The token comes from RKE2_TOKEN
-      in ~/.config/rke2lab/env.sh; see plan/SECRETS.md. The control host is
+      in ~/.config/rke2lab/env.sh; see spec/SECRETS.md. The control host is
       needed because an agent has no kubeconfig of its own.
     quiet: true
 

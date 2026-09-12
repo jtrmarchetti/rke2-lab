@@ -29,7 +29,7 @@ argument_specs:
         required: true
         description:
           - Password for that principal. Comes from FREEIPA_ADMIN_PASSWORD in
-            the environment; see plan/SECRETS.md.
+            the environment; see spec/SECRETS.md.
       ipa_sub_ca_common_name:
         type: str
         description:

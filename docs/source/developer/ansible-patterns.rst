@@ -10,7 +10,7 @@ the code today. Each pattern below names the problem it was built for.
 The Flux / Ansible ownership split
 ==================================
 
-The standing decision, owned by ``plan/FLUX_OWNERSHIP.md``: **Flux owns every
+The standing decision, owned by ``spec/FLUX_OWNERSHIP.md``: **Flux owns every
 in-cluster object it can reach through the GitOps tree; Ansible covers the
 gaps** — bootstrap before GitOps exists, provisioning into external systems
 (OpenBao, Keycloak, FreeIPA, Garage), host-level configuration, and
@@ -134,9 +134,9 @@ enough, and read what actually runs before believing the tag.
 Where the pattern record lives
 ==============================
 
-The durable ownership record is ``plan/FLUX_OWNERSHIP.md`` (the split and
+The durable ownership record is ``spec/FLUX_OWNERSHIP.md`` (the split and
 the garage gate, plus the durable GitOps mechanics); the failure histories
-that a pattern row names live in the ``plan/`` documents. When a pattern
+that a pattern row names live in the ``spec/`` documents. When a pattern
 here is updated,
 the trigger table in :doc:`../reference/maintaining-this-guide` — the rows
 for Ansible role/playbook changes and for Ansible pattern changes — says

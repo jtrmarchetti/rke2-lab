@@ -378,7 +378,7 @@ path that does not depend on the tunnel itself.
 
 ## Rules
 
-- Never write a secret into `ansible/`, `infra/`, or `plan/`.
+- Never write a secret into `ansible/`, `infra/`, or `spec/`.
 - Tasks that consume a secret set `no_log: true`.
 - The repo `.gitignore` blocks common secret filenames as a backstop, not as the
   primary control — the primary control is that secrets are never in the tree.

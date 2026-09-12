@@ -5,7 +5,7 @@
 # what talks to the hypervisor every VM in the lab lives on.
 #
 # The controller_runtime role reconciles this environment from this file on
-# every run; plan/CONTROLLER.md records the versions as installed.
+# every run; spec/CONTROLLER.md records the versions as installed.
 #
 # The proxmoxve provider plugin is not listed here and cannot be. The Pulumi
 # CLI downloads it into its own plugin cache on first use, which is the only

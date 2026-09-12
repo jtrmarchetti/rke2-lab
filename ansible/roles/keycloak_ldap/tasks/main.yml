@@ -14,7 +14,7 @@
     fail_msg: >-
       keycloak_ldap needs the identity host, the Directory Manager password
       (FREEIPA_DIR_MANAGER_PASSWORD), and a bind password for the system
-      account. All come from ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
+      account. All come from ~/.config/rke2lab/env.sh; see spec/SECRETS.md.
       When it is configuring Keycloak it also needs the realm, which must not
       be master unless keycloak_ldap_allow_master_realm is set — that realm
       administers every other realm and holds Keycloak's own break-glass

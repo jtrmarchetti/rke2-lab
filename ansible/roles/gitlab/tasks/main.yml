@@ -24,7 +24,7 @@
       (OIDC_CLIENT_SECRET_GITLAB from ~/.config/rke2lab/env.sh), and the domain
       CA to verify Keycloak's certificate with. An empty client secret produces
       a sign-in button that fails at the token exchange, long after this run
-      has reported success. See plan/SECRETS.md.
+      has reported success. See spec/SECRETS.md.
     quiet: true
 
 - name: main | Check the service certificates are present

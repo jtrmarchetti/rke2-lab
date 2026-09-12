@@ -47,7 +47,7 @@ not surface as an unexplained failure in the next.
 | `infra/pulumi/` | Every VM in the environment, as Python |
 | `ansible/` | Every host's configuration: roles, playbooks, and the inventory that drives them |
 | `ansible/inventory/group_vars/repo/artifacts.yml` | The artifact manifest — every binary, image and archive the lab consumes, with checksums |
-| `plan/` | Architecture, per-phase implementation records, and the standards all automation follows |
+| `spec/` | Architecture, per-phase implementation records, and the standards all automation follows |
 | `docs/` | The sysadmin guide: how the built environment is operated, as a Sphinx site |
 
 ## Operate it
@@ -73,8 +73,8 @@ same rule the plan documents live under. See
 
 ## Where to read next
 
-Start with [`plan/OVERVIEW.md`](plan/OVERVIEW.md) for the architecture and the
-cross-cutting rules, and [`plan/CONTROLLER.md`](plan/CONTROLLER.md) for the
+Start with [`spec/OVERVIEW.md`](spec/OVERVIEW.md) for the architecture and the
+cross-cutting rules, and [`spec/CONTROLLER.md`](spec/CONTROLLER.md) for the
 controller's dependency manifest and cold start.
 
 ## Two rules that explain most of the design
@@ -87,4 +87,4 @@ The flow is always `internet → repo01 → GitLab → internal nodes`.
 **No secret is in this repository.** Everything sensitive lives in
 `~/.config/rke2lab/` and is read from the environment at run time; every
 playbook asserts what it needs is present before it starts. See
-[`plan/SECRETS.md`](plan/SECRETS.md).
+[`spec/SECRETS.md`](spec/SECRETS.md).

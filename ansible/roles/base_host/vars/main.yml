@@ -1,2 +1,2 @@
 ---
-_var_base_host_split_dns_netplan_path: /etc/netplan/99-split-dns.yaml
+_var_base_host_split_dns_netplan_path: /etc/netspec/99-split-dns.yaml

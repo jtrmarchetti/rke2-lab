@@ -1,7 +1,7 @@
 ---
 # ansible-lint configuration for this repository.
 #
-# plan/ANSIBLE_STANDARDS.md is the source of truth for Ansible content here,
+# spec/ANSIBLE_STANDARDS.md is the source of truth for Ansible content here,
 # and it states that repository rules win where they differ from Red Hat CoP
 # guidance.
 

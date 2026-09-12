@@ -14,8 +14,8 @@ Validation basis for this document:
 
 - Red Hat CoP Good Practices for Ansible:
   `https://redhat-cop.github.io/automation-good-practices/`
-- Repository-specific constraints in `plan/OVERVIEW.md`, `plan/SECRETS.md`,
-  and the remaining `plan/` documents
+- Repository-specific constraints in `spec/OVERVIEW.md`, `spec/SECRETS.md`,
+  and the remaining `spec/` documents
 
 When repository rules are stricter than CoP guidance, repository rules win.
 
@@ -466,7 +466,7 @@ disagrees with ansible-lint's `key-order[task]`, which is skipped in
   the registry deploy token), and public keys derived by a task (WireGuard key
   derivation, peer hostvars reads). Every such reference keeps its parameter
   on the role interface and is documented here in
-  `plan/CLUSTER_COMPONENTS.md` under its component. A template that needs a
+  `spec/CLUSTER_COMPONENTS.md` under its component. A template that needs a
   constant instead of a parameter (a directory path, a dict of sysctl values,
   a list of installer flags) inlines the value over `inventory_*` variables;
   a parameter exists on the role interface only when a task consumes it.
@@ -595,7 +595,7 @@ CoP references used during validation:
 A change is not complete when the automation is correct. Two documents follow
 every change that has an operational effect:
 
-- **The relevant `plan/` document**, corrected for anything the change
+- **The relevant `spec/` document**, corrected for anything the change
   invalidated — including "Status" and "Still open" sections in earlier phase
   documents, which describe the present and go stale even though the phase is
   finished.
@@ -617,7 +617,7 @@ Multi-step agentic work keeps a scratch pad and a verification log in
 `agent_plans/` (git-ignored: they are working state, not a source of truth).
 A verification log records, per claim, the command or file that grounds it —
 the standing rule is that a command or number is not written into `docs/` or
-`plan/` as fact until it has a live check or a read of the file it names,
+`spec/` as fact until it has a live check or a read of the file it names,
 recorded there.
 
 Performance claims get their evidence from the timing callbacks in

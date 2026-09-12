@@ -9,7 +9,7 @@ skip_list:
   # This repository orders task keys name -> controls -> module -> vars, so the
   # module and its arguments stay one unbroken block and a reader sees whether
   # a task runs before reading what it does. ansible-lint prescribes a
-  # different order. See plan/ANSIBLE_STANDARDS.md.
+  # different order. See spec/ANSIBLE_STANDARDS.md.
   - key-order[task]
 
   # Task names are prefixed with the file they live in — `main | Ensure ...` —
@@ -21,7 +21,7 @@ skip_list:
   # role rather than by the role name alone, so where a value comes from is
   # readable at the point of use. This rule expects the role name first. The
   # role's public parameters — the ones this rule exists to protect — do carry
-  # the role prefix. See plan/ANSIBLE_STANDARDS.md.
+  # the role prefix. See spec/ANSIBLE_STANDARDS.md.
   - var-naming[no-role-prefix]
 
   # The naming scheme above makes some expressions unavoidably wide — a task

@@ -191,7 +191,7 @@ half a decision.
 
 ## Template References That Cannot Be Inventory
 
-Per `plan/ANSIBLE_STANDARDS.md` (Templates), a template may only read
+Per `spec/ANSIBLE_STANDARDS.md` (Templates), a template may only read
 `inventory_*` variables unless the value is runtime-derived. These are the
 references that legitimately remain on the role interface:
 

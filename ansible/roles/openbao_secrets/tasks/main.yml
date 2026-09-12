@@ -21,7 +21,7 @@
       openbao_secrets needs the root token and every runtime secret it writes
       into the vault. They come from ~/.config/rke2lab/env.sh — the token is
       written there by openbao_init, the rest by hand — so run
-      `source ~/.config/rke2lab/env.sh` first. See plan/SECRETS.md.
+      `source ~/.config/rke2lab/env.sh` first. See spec/SECRETS.md.
     quiet: true
 
 - name: main | Write every runtime secret into the vault

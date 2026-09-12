@@ -58,6 +58,6 @@
     fail_msg: >-
       {{ longhorn_node_data_path }} is not on a separate filesystem — findmnt
       reports '{{ _reg_longhorn_node_mount['stdout'] | trim }}'. Longhorn would
-      write replicas onto the OS disk, which is the failure plan/OVERVIEW.md
+      write replicas onto the OS disk, which is the failure spec/OVERVIEW.md
       states as a rule: the OS disk is for the OS.
     quiet: true

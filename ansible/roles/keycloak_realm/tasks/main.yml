@@ -10,7 +10,7 @@
     fail_msg: >-
       keycloak_realm needs Keycloak's URL, the realm name, and the admin
       password (KEYCLOAK_ADMIN_PASSWORD from ~/.config/rke2lab/env.sh, and in
-      the vault at kv/keycloak). See plan/SECRETS.md.
+      the vault at kv/keycloak). See spec/SECRETS.md.
     quiet: true
 
 - name: main | Create or update the application realm

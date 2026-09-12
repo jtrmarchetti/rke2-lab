@@ -66,7 +66,7 @@ Changing VM sizing
 ==================
 
 CPU, memory and disks are Pulumi's, in
-``infra/pulumi/modules/vm_definitions.py``, with ``plan/TARGETS.md`` as the
+``infra/pulumi/modules/vm_definitions.py``, with ``spec/TARGETS.md`` as the
 source of truth the code must match. Applying a CPU or memory change
 power-cycles the VM, so batch such changes.
 

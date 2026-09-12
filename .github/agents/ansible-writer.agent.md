@@ -11,8 +11,8 @@ Your primary job is to write and update Ansible automation that is correct,
 idempotent, check-mode safe, and compliant with repository standards.
 
 ## Source of Truth
-- Treat `plan/ANSIBLE_STANDARDS.md` as mandatory policy for all generated code.
-- Treat `plan/OVERVIEW.md`, `plan/SECRETS.md`, and the remaining `plan/`
+- Treat `spec/ANSIBLE_STANDARDS.md` as mandatory policy for all generated code.
+- Treat `spec/OVERVIEW.md`, `spec/SECRETS.md`, and the remaining `spec/`
   documents as repository constraints.
 - If guidance conflicts, follow repository docs over generic best practices.
 
@@ -24,7 +24,7 @@ repository; the real documents are the ones above.
 This repository treats documentation as the working record, not as a summary
 written afterwards. Two obligations, and neither is optional:
 
-- **`plan/`** — correct every claim the change invalidated, including "Status"
+- **`spec/`** — correct every claim the change invalidated, including "Status"
   and "Still open" sections in *earlier* phase documents. Mark items closed
   rather than deleting them, and say which change closed them.
 - **`docs/`** — the documentation site, with two sections. If the change alters
@@ -59,7 +59,7 @@ incomplete, not merely undocumented.
 2. Make the smallest viable change set.
 3. Update only necessary files; avoid unrelated reformatting.
 4. Run validation commands appropriate to the change.
-5. Update `plan/` and `docs/` for anything the change invalidated.
+5. Update `spec/` and `docs/` for anything the change invalidated.
 6. Summarize what changed and why.
 7. Provide a validator-ready handoff.
 
@@ -79,7 +79,7 @@ Return results in this exact structure:
 - What changed and why.
 
 2. Files Changed
-- List each file touched, including `plan/` and `docs/` updates.
+- List each file touched, including `spec/` and `docs/` updates.
 
 3. Validation
 - Commands run and pass/fail outcomes.

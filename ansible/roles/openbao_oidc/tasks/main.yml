@@ -17,7 +17,7 @@
       without that last one the configuration write fails with
       `error checking oidc discovery URL`, which names the URL and says nothing
       about certificates. Run `source ~/.config/rke2lab/env.sh` first; see
-      plan/SECRETS.md.
+      spec/SECRETS.md.
     quiet: true
 
 - name: main | Add an OIDC path into the vault beside the root token

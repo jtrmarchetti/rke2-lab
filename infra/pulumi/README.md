@@ -13,7 +13,7 @@ The last one is not a manual step any more, and neither is anything else on the
 controller. `bootstrap/controller-bootstrap.sh` followed by
 `ansible-playbook playbooks/controller_bootstrap.yml` installs the pinned CLI
 into `~/.pulumi/bin` and builds `infra/pulumi/.venv` from
-`requirements.txt` — see `plan/CONTROLLER.md`.
+`requirements.txt` — see `spec/CONTROLLER.md`.
 
 **No prepared Ubuntu template is required.** If `deployment:templateVmId` is
 unset, the stack downloads the Ubuntu 24.04 cloud image and imports it for the
@@ -41,7 +41,7 @@ source ~/.config/rke2lab/env.sh
 That file holds `PROXMOX_VE_ENDPOINT`, `PROXMOX_VE_USERNAME`,
 `PROXMOX_VE_PASSWORD`, `PROXMOX_VE_INSECURE`, `VM_SSH_PUBLIC_KEY` and
 `PULUMI_CONFIG_PASSPHRASE`. `bootstrap/env.sh.example` is the template with
-every name and no values; `plan/SECRETS.md` is the inventory. Do not put
+every name and no values; `spec/SECRETS.md` is the inventory. Do not put
 credentials in a shell history or a file beside this one.
 
 To set password login credentials via cloud-init (optional):
@@ -121,7 +121,7 @@ pulumi preview --non-interactive
 The environment file is intentionally not stored in the repo. It lives at
 `~/.config/rke2lab/env.sh` (mode 0600) and holds every secret this project needs —
 Proxmox credentials, the Pulumi passphrase, VM access, WireGuard private keys, and
-service passwords. See `plan/SECRETS.md` for the full inventory and rotation steps.
+service passwords. See `spec/SECRETS.md` for the full inventory and rotation steps.
 
 If you need to restore it in a fresh shell, add this to your local bash profile:
 
@@ -216,7 +216,7 @@ idempotent re-run.
 
 ## Notes
 
-- VM specs are defined in modules/vm_definitions.py from current plan/TARGETS values.
+- VM specs are defined in modules/vm_definitions.py from current spec/TARGETS values.
 - Bridge names are environment-specific and must match your Proxmox node configuration.
 - The image bootstrap uses the non-legacy download resource (`proxmox_download_file` path).
 - Static IPs are assigned through cloud-init initialization.

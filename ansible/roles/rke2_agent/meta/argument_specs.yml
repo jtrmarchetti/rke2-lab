@@ -18,7 +18,7 @@ argument_specs:
         required: true
         description:
           - The cluster join secret, shared with the servers. Sourced from
-            RKE2_TOKEN; see plan/SECRETS.md.
+            RKE2_TOKEN; see spec/SECRETS.md.
       rke2_agent_node_ip:
         type: str
         required: true

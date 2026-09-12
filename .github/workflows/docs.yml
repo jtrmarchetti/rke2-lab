@@ -59,7 +59,7 @@ jobs:
           cache-dependency-path: docs/requirements.txt
 
       # The same pinned file the controller installs from. Sphinx and furo are
-      # exact pins for the reason plan/CONTROLLER.md gives about every other
+      # exact pins for the reason spec/CONTROLLER.md gives about every other
       # pin in this repository: a floor records what was tested against
       # nothing in particular.
       - name: Install the documentation toolchain

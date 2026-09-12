@@ -93,7 +93,7 @@ The clean route, and it needs one reboot per worker:
 #. Grow the third disk in Pulumi (``infra/pulumi/modules/vm_definitions.py``)
    and ``pulumi up``. Only ever grow: shrinking a virtual disk destroys the
    filesystem on it.
-#. Reflect the new size in ``plan/TARGETS.md`` — that file is the source of
+#. Reflect the new size in ``spec/TARGETS.md`` — that file is the source of
    truth for the VM definitions and the two must stay in sync.
 #. On the worker, grow the partition and filesystem:
 

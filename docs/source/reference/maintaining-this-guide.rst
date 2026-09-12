@@ -11,7 +11,7 @@ The rule
 
 **A change to the cluster is not finished until this guide reflects it.**
 
-That is the same rule ``plan/`` already lives under, extended to the operator's
+That is the same rule ``spec/`` already lives under, extended to the operator's
 view. It is enforced by convention rather than by tooling, so the checklist
 below is the whole of the mechanism.
 
@@ -47,9 +47,9 @@ What triggers an update
        that page are the ones most likely to go stale
    * - Adds an Ansible pattern or changes one (marker, gate, recovery path)
      - :doc:`../developer/ansible-patterns`, and the ownership record in
-       ``plan/FLUX_OWNERSHIP.md`` if the split itself moved
+       ``spec/FLUX_OWNERSHIP.md`` if the split itself moved
    * - Changes a design decision (a component, a model, a constraint)
-     - The owning ``plan/`` document, :doc:`../developer/infrastructure-design`
+     - The owning ``spec/`` document, :doc:`../developer/infrastructure-design`
        if it names that decision, and the component page under
        :doc:`../components/index`
    * - Cost you an hour to diagnose
@@ -102,7 +102,7 @@ is skipped for pull requests, so a fork cannot publish to the site.
 
    The published site is public, and the repository it is built from already
    is. That is the reason the guide names hosts, addresses and *which file*
-   holds a credential, and never a credential itself — the same rule ``plan/``
+   holds a credential, and never a credential itself — the same rule ``spec/``
    follows. Keep it that way: no secret value belongs in ``docs/``, including
    in an example.
 

@@ -177,4 +177,4 @@ The machine this repository lives on, outside the Proxmox environment. It runs
 Pulumi (the VMs) and Ansible (everything else), and reaches the internal
 network through a point-to-point WireGuard tunnel terminated on ``repo01``.
 Lose the controller and you rebuild it from ``bootstrap/`` plus a backup of
-``~/.config/rke2lab/``; see ``plan/CONTROLLER.md``.
+``~/.config/rke2lab/``; see ``spec/CONTROLLER.md``.

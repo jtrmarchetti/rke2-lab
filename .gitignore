@@ -1,4 +1,4 @@
-# Secrets live outside the repo, in ~/.config/rke2lab/ (see plan/SECRETS.md).
+# Secrets live outside the repo, in ~/.config/rke2lab/ (see spec/SECRETS.md).
 # These patterns are a backstop against anything sensitive landing here by accident.
 *.env
 .env

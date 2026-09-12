@@ -3,8 +3,8 @@ Automation design
 ========================
 
 How a change reaches the cluster, and the conventions the automation is
-built to. The prose is the shape; ``plan/ANSIBLE_STANDARDS.md`` is the
-enforcement, and ``plan/CONTROLLER.md`` owns the controller machine itself.
+built to. The prose is the shape; ``spec/ANSIBLE_STANDARDS.md`` is the
+enforcement, and ``spec/CONTROLLER.md`` owns the controller machine itself.
 
 The chain, end to end
 =====================
@@ -62,7 +62,7 @@ feeds it, in the order a new artifact must pass:
 The conventions the code is built to
 ====================================
 
-From ``plan/ANSIBLE_STANDARDS.md`` — the load-bearing ones:
+From ``spec/ANSIBLE_STANDARDS.md`` — the load-bearing ones:
 
 * **FQCN module names, logic in roles, playbooks are orchestration.**
 * **Idempotency is explicit** on every state-changing task, and check mode is
@@ -72,7 +72,7 @@ From ``plan/ANSIBLE_STANDARDS.md`` — the load-bearing ones:
 * **Every download is pinned** — version, URL and checksum in one entry, so a
   bumped version cannot change the URL and leave the checksum behind.
 * **A change is not done until the documentation is updated**: the relevant
-  ``plan/`` document, and this site — see
+  ``spec/`` document, and this site — see
   :doc:`../reference/maintaining-this-guide`.
 
 This page describes the chain at the level of *what moves where*. The two

@@ -15,13 +15,13 @@ The design record
 
    * - Document
      - Owns
-   * - ``plan/OVERVIEW.md``
+   * - ``spec/OVERVIEW.md``
      - Architecture, the artifact model, cross-phase rules
-   * - ``plan/TARGETS.md``
+   * - ``spec/TARGETS.md``
      - Per-VM CPU, RAM, disks, addresses
-   * - ``plan/CLUSTER_COMPONENTS.md``
+   * - ``spec/CLUSTER_COMPONENTS.md``
      - Which component was chosen for each job, and why
-   * - ``plan/FLUX_OWNERSHIP.md``
+   * - ``spec/FLUX_OWNERSHIP.md``
      - What Flux owns, what Ansible covers, and the durable GitOps mechanics
 
 :doc:`../orientation` is the operator's summary of the same ground: the eight
