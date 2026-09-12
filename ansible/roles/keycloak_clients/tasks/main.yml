@@ -12,7 +12,7 @@
     fail_msg: >-
       keycloak_clients needs Keycloak's URL, the application realm — which must
       not be master — the admin password (KEYCLOAK_ADMIN_PASSWORD), and at
-      least one application. See spec/SECRETS.md.
+      least one application. See docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Assert every application carries a client secret
@@ -33,7 +33,7 @@
       No client secret for: {{ _keycloak_clients_unset | join(', ') }}. These
       are authored values from ~/.config/rke2lab/env.sh, not generated ones —
       an empty secret produces a client that accepts an empty secret. Run
-      `source ~/.config/rke2lab/env.sh` first; see spec/SECRETS.md.
+      `source ~/.config/rke2lab/env.sh` first; see docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Configure a client for every federated application

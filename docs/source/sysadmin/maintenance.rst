@@ -66,17 +66,16 @@ Changing VM sizing
 ==================
 
 CPU, memory and disks are Pulumi's, in
-``infra/pulumi/modules/vm_definitions.py``, with ``spec/TARGETS.md`` as the
-source of truth the code must match. Applying a CPU or memory change
+``infra/pulumi/modules/vm_definitions.py``, with :doc:`../reference/proxmox`
+as the source of truth the code must match. Applying a CPU or memory change
 power-cycles the VM, so batch such changes.
 
 .. warning::
 
-   The estate is allocated more memory than the hypervisor physically has. Do
-   not enable ballooning or memory reservations — with overcommitment this
-   size, a reservation that cannot be satisfied is a VM that will not start.
-   Watch swap on the **hypervisor**; zero has been the health signal through
-   every phase.
+   **Do not enable ballooning or memory reservations** — a reservation that
+   cannot be satisfied is a VM that will not start. Per-node placement keeps
+   every node under commit; watch swap on the **PVE nodes**, and zero host
+   swap has been the health signal through the build.
 
 Re-running automation
 =====================

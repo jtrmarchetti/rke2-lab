@@ -21,7 +21,7 @@ Your only job is to create, refine, and maintain clear, enforceable documentatio
   must still pass.
 
 ## Approach
-1. Discover and read authoritative sources in the repository first: `spec/ANSIBLE_STANDARDS.md`, `spec/OVERVIEW.md`, `spec/SECRETS.md`, the phase implementation documents, and the inventory conventions. (Earlier versions of this file named STANDARDS/GOALS/RESTRICTIONS; no such files exist here.)
+1. Discover and read authoritative sources in the repository first: `docs/source/reference/ansible-standards.rst` (the standards doc this agent maintains), `docs/source/developer/infrastructure-design.rst` and `docs/source/developer/automation-design.rst` (the design record), `docs/source/components/secrets.rst`, and the inventory conventions.
 2. Extract concrete rules and normalize them into consistent sections: naming, structure, idempotency, linting, variables, templates, handlers, and validation.
 3. Resolve ambiguity by preferring explicit repo rules over generic community guidance.
 4. Produce concise documentation with examples of compliant and non-compliant patterns.

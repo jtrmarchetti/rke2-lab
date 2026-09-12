@@ -1,7 +1,8 @@
 # Python dependencies of the automation controller itself.
 #
-# Pinned exactly, and deliberately. spec/CONTROLLER.md records these as "what is
-# installed and working", which is only a useful record if a rebuild installs
+# Pinned exactly, and deliberately. docs/source/developer/automation-design.rst
+# records these as "what is installed and working", which is only a useful
+# record if a rebuild installs
 # the same thing — a floor (">=") records what was tested against nothing in
 # particular.
 #

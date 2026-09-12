@@ -82,30 +82,35 @@ Who reads what
 
    sysadmin/versions
    sysadmin/urls-and-access
+   reference/ansible-standards
+   reference/proxmox
    reference/cheatsheet
    reference/maintaining-this-guide
 
 Where the authority lives
 =========================
 
-This site explains how to operate and extend the environment. It is not the
-design record, and where the two disagree the design record wins:
+This site explains how to operate and extend the environment. The design
+record — the *why* behind each decision — now lives in the developer and
+reference sections of this guide rather than in a separate tree, and where the
+operator pages and the design pages disagree the design pages win:
 
 .. list-table::
    :header-rows: 1
    :widths: 30 70
 
-   * - Document
+   * - Page
      - Holds
-   * - ``spec/OVERVIEW.md``
-     - Architecture, the artifact model, and the cross-cutting rules
-   * - ``spec/TARGETS.md``
-     - Per-VM specifications: CPU, RAM, disks, addresses
-   * - ``spec/SECRETS.md``
+   * - :doc:`developer/infrastructure-design`
+     - Architecture, the artifact model, cross-cutting rules, and why each
+       component was chosen
+   * - :doc:`developer/automation-design`
+     - The controller machine: dependency manifest and cold start
+   * - :doc:`components/secrets` + :doc:`sysadmin/rotating-credentials`
      - Every secret, where it lives, and how to rotate it
-   * - ``spec/CLUSTER_COMPONENTS.md``
-     - Which component was chosen and why
-   * - ``spec/FLUX_OWNERSHIP.md``
+   * - :doc:`developer/ansible-patterns`
      - What Flux owns, what Ansible covers, and the durable GitOps mechanics
-   * - ``spec/ANSIBLE_STANDARDS.md``
+   * - :doc:`reference/ansible-standards`
      - The conventions all automation follows
+   * - :doc:`reference/proxmox`
+     - The Proxmox cluster, SDN overlay, VM placement and per-VM specs

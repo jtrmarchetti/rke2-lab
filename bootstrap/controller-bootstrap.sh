@@ -52,7 +52,7 @@ Restore it from backup, or start from the template:
     \${EDITOR:-vi} ~/.config/rke2lab/env.sh
 
 A restore also needs sealed-secrets-key.yaml and k8s-ca/ beside it; see
-spec/SECRETS.md.
+docs/source/components/secrets.rst.
 EOF
 fi
 
@@ -69,5 +69,5 @@ That playbook owns the rest of the controller: split DNS, the WireGuard tunnel
 to repo01, the Pulumi CLI and its virtual environment, and the shell
 environment. Only then is the controller able to build anything else.
 
-The full order for a cold start is in spec/CONTROLLER.md.
+The full order for a cold start is in docs/source/developer/automation-design.rst.
 EOF

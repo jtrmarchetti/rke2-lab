@@ -10,11 +10,12 @@ the code today. Each pattern below names the problem it was built for.
 The Flux / Ansible ownership split
 ==================================
 
-The standing decision, owned by ``spec/FLUX_OWNERSHIP.md``: **Flux owns every
-in-cluster object it can reach through the GitOps tree; Ansible covers the
-gaps** — bootstrap before GitOps exists, provisioning into external systems
-(OpenBao, Keycloak, FreeIPA, Garage), host-level configuration, and
-out-of-band recovery.
+The standing decision: **Flux owns every in-cluster object it can reach
+through the GitOps tree; Ansible covers the gaps** — one-time bootstrap that
+happens before GitOps exists at all, provisioning into external systems
+(OpenBao, Keycloak, FreeIPA, Garage), host-level and out-of-band
+configuration, and out-of-band recovery. Anything that is a static in-cluster
+object and has no ordering dependency on those gaps belongs in the tree.
 
 That split is not a preference; it is what Flux *can do*. The available
 primitives were probed on the installed CRDs, not recalled:
@@ -131,14 +132,27 @@ sets, or a dragged-in task that needs a skipped task's output, still gets
 exercised by the run. Run with the widest tag that is still narrow
 enough, and read what actually runs before believing the tag.
 
-Where the pattern record lives
-==============================
+The durable GitOps mechanics
+============================
 
-The durable ownership record is ``spec/FLUX_OWNERSHIP.md`` (the split and
-the garage gate, plus the durable GitOps mechanics); the failure histories
-that a pattern row names live in the ``spec/`` documents. When a pattern
-here is updated,
-the trigger table in :doc:`../reference/maintaining-this-guide` — the rows
-for Ansible role/playbook changes and for Ansible pattern changes — says
-which of this page's sections the new fact belongs in, alongside the
-established rows for design-decision and automation-flow changes.
+- **The source is one-way, re-sealed on every pass.** ``gitops_source``
+  renders the tree, then reads the *committed* ciphertext for each sealed
+  secret, decrypts it with the backed-up recovery key, and only reuses the
+  committed blob when it still matches what the source renders; otherwise it
+  re-seals and pushes. A drifted secret is healed by converging on the
+  rendered value, never by a hand edit in GitLab surviving a pass.
+- **``site.yml`` runs ``gitops.yml`` twice, and that is load-bearing, not
+  redundant.** The OpenBao unseal keys cannot predate the vault that holds
+  their threshold, so the first pass seals them and the second reconciles
+  once the vault can serve them.
+- **Render the chart and read what it actually asks for.** A chart's
+  ``appVersion`` is not its image tag — a chart can declare one version and
+  default the image to another. The rendered manifest is authoritative about
+  what gets pulled; that is the habit :doc:`adding-a-service` bakes into the
+  workflow.
+
+When a pattern here is updated, the trigger table in
+:doc:`../reference/maintaining-this-guide` — the rows for Ansible
+role/playbook changes and for Ansible pattern changes — says which of this
+page's sections the new fact belongs in, alongside the established rows for
+design-decision and automation-flow changes.

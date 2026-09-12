@@ -47,8 +47,10 @@ etcd
 ====
 
 Three members, one per server. It is the most storage-sensitive thing in the
-environment: it fsyncs on every commit, and this hypervisor is itself a VM
-whose storage sits at etcd's fsync floor.
+environment: it fsyncs on every commit, and the PVE nodes' NVMe storage is
+still tuned for etcd's write pattern. The remaining etcd tuning is burst
+safety, not latency hiding — a heartbeat / election timeout wide enough that
+a slow commit is not mistaken for a dead leader.
 
 .. code-block:: console
 

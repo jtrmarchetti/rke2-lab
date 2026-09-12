@@ -11,29 +11,26 @@ Your primary job is to write and update Ansible automation that is correct,
 idempotent, check-mode safe, and compliant with repository standards.
 
 ## Source of Truth
-- Treat `spec/ANSIBLE_STANDARDS.md` as mandatory policy for all generated code.
-- Treat `spec/OVERVIEW.md`, `spec/SECRETS.md`, and the remaining `spec/`
-  documents as repository constraints.
+- Treat `docs/source/reference/ansible-standards.rst` as mandatory policy for
+  all generated code.
+- Treat `docs/source/developer/infrastructure-design.rst`,
+  `docs/source/developer/automation-design.rst`, and
+  `docs/source/components/secrets.rst` as repository constraints.
 - If guidance conflicts, follow repository docs over generic best practices.
-
-These paths were `STANDARDS.md`, `CLAUDE.md`, `GOALS.md` and `RESTRICTIONS.md`
-until 2026-08-17. No file of any of those names has ever existed in this
-repository; the real documents are the ones above.
 
 ## Documentation Is Part Of The Change
 This repository treats documentation as the working record, not as a summary
-written afterwards. Two obligations, and neither is optional:
+written afterwards. The documentation lives in `docs/`, and a change is not
+complete until it reflects the change:
 
-- **`spec/`** — correct every claim the change invalidated, including "Status"
-  and "Still open" sections in *earlier* phase documents. Mark items closed
-  rather than deleting them, and say which change closed them.
-- **`docs/`** — the documentation site, with two sections. If the change alters
-  how the environment is operated or extended — a service, a credential, a URL,
-  an address, a version, a storage decision, a design decision, or a fault
-  worth recording — update the sysadmin section, the developer section, or both,
-  in the same change. `docs/source/reference/maintaining-this-guide.rst` holds
-  the trigger table mapping a kind of change to the page it obliges. Verify the
-  build with `make -C docs html`, which runs with `-W`.
+- **`docs/`** — the documentation site, with a sysadmin section, a developer
+  section, and a reference section. If the change alters how the environment is
+  operated or extended — a service, a credential, a URL, an address, a version,
+  a storage decision, a design decision, or a fault worth recording — update the
+  sysadmin section, the developer section, or the component page, in the same
+  change. `docs/source/reference/maintaining-this-guide.rst` holds the trigger
+  table mapping a kind of change to the page it obliges. Verify the build with
+  `make -C docs html`, which runs with `-W`.
 
 A change that touches a running component and leaves `docs/` untouched is
 incomplete, not merely undocumented.
@@ -59,7 +56,7 @@ incomplete, not merely undocumented.
 2. Make the smallest viable change set.
 3. Update only necessary files; avoid unrelated reformatting.
 4. Run validation commands appropriate to the change.
-5. Update `spec/` and `docs/` for anything the change invalidated.
+5. Update `docs/` for anything the change invalidated.
 6. Summarize what changed and why.
 7. Provide a validator-ready handoff.
 
@@ -79,7 +76,7 @@ Return results in this exact structure:
 - What changed and why.
 
 2. Files Changed
-- List each file touched, including `spec/` and `docs/` updates.
+- List each file touched, including `docs/` updates.
 
 3. Validation
 - Commands run and pass/fail outcomes.

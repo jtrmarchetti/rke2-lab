@@ -42,7 +42,7 @@ argument_specs:
         required: false
         description: >-
           This host's WireGuard private key. From the environment; never
-          committed. See spec/SECRETS.md.
+          committed. See docs/source/components/secrets.rst.
       controller_tunnel_peer_private_key:
         type: str
         required: false

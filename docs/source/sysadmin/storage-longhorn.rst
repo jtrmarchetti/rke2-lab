@@ -93,8 +93,8 @@ The clean route, and it needs one reboot per worker:
 #. Grow the third disk in Pulumi (``infra/pulumi/modules/vm_definitions.py``)
    and ``pulumi up``. Only ever grow: shrinking a virtual disk destroys the
    filesystem on it.
-#. Reflect the new size in ``spec/TARGETS.md`` — that file is the source of
-   truth for the VM definitions and the two must stay in sync.
+#. Reflect the new size in :doc:`../reference/proxmox` — that page is the
+   source of truth for the VM definitions and the two must stay in sync.
 #. On the worker, grow the partition and filesystem:
 
    .. code-block:: console
@@ -115,9 +115,10 @@ Add a worker
 ------------
 
 The most capacity per unit of risk, and the most work: a new VM in Pulumi, an
-inventory entry, ``playbooks/kubewk.yml``, and the hypervisor has to have the
-memory — which today it does not, at 64 GiB allocated against 62.8 GiB
-physical. Grow the hypervisor first.
+inventory entry, and ``playbooks/kubewk.yml``. Per-node placement (one
+control plane + one worker per node) keeps every node under commit, so a new
+worker needs a node with headroom — or a new PVE node if none has any. The
+placement model is in :doc:`../reference/proxmox`.
 
 .. warning::
 

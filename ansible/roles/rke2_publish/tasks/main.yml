@@ -9,7 +9,7 @@
     fail_msg: >-
       rke2_publish needs rke2_publish_root_password, an artifact directory, and
       a package version. The password comes from GITLAB_ROOT_PASSWORD in
-      ~/.config/rke2lab/env.sh; see spec/SECRETS.md.
+      ~/.config/rke2lab/env.sh; see docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Publish the RKE2 artifact set into GitLab

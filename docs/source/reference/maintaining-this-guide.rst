@@ -11,9 +11,10 @@ The rule
 
 **A change to the cluster is not finished until this guide reflects it.**
 
-That is the same rule ``spec/`` already lives under, extended to the operator's
-view. It is enforced by convention rather than by tooling, so the checklist
-below is the whole of the mechanism.
+That rule binds the operator's view and the design record alike — and, now
+that the design record lives in this guide, the operator's pages. It is
+enforced by convention rather than by tooling, so the checklist below is the
+whole of the mechanism.
 
 What triggers an update
 =======================
@@ -46,12 +47,11 @@ What triggers an update
      - :doc:`../developer/ansible-design` — the layout and naming claims on
        that page are the ones most likely to go stale
    * - Adds an Ansible pattern or changes one (marker, gate, recovery path)
-     - :doc:`../developer/ansible-patterns`, and the ownership record in
-       ``spec/FLUX_OWNERSHIP.md`` if the split itself moved
+     - :doc:`../developer/ansible-patterns`, including the durable GitOps
+       mechanics section if the split itself moved
    * - Changes a design decision (a component, a model, a constraint)
-     - The owning ``spec/`` document, :doc:`../developer/infrastructure-design`
-       if it names that decision, and the component page under
-       :doc:`../components/index`
+     - :doc:`../developer/infrastructure-design` for the decision and its
+       rationale, and the component page under :doc:`../components/index`
    * - Cost you an hour to diagnose
      - :doc:`../sysadmin/troubleshooting` — this is the highest-value page in
        the guide and it only grows by someone adding what bit them
@@ -69,8 +69,10 @@ House style
 * **Say why, once, where it is surprising.** Two replicas rather than three,
   no forwarders on ``core01``, authored client secrets — each of those is a
   decision someone will otherwise "fix".
-* **Do not restate the plan documents.** Link to them. They own the design
-  record; this guide owns the operating procedure.
+* **Keep the lanes separate.** The operator's view (``sysadmin/``) and the
+  design record (the developer and reference sections) live in this guide now;
+  each owns its half. The operating procedure is not the rationale, and the
+  rationale is not the procedure — link between the two rather than copying.
 * **Verify before you write.** Several documented facts in this project turned
   out never to have been true. Run the command and paste what it said.
 
@@ -102,9 +104,8 @@ is skipped for pull requests, so a fork cannot publish to the site.
 
    The published site is public, and the repository it is built from already
    is. That is the reason the guide names hosts, addresses and *which file*
-   holds a credential, and never a credential itself — the same rule ``spec/``
-   follows. Keep it that way: no secret value belongs in ``docs/``, including
-   in an example.
+   holds a credential, and never a credential itself. Keep it that way: no
+   secret value belongs in ``docs/``, including in an example.
 
 Nothing in the build reaches the lab. Sphinx runs against the checkout alone,
 and ``conf.py`` carries no extension that fetches anything, so the site can be

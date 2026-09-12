@@ -42,5 +42,5 @@ The controller generates its own key pair on first start and stores it as a
 Secret labelled `sealedsecrets.bitnami.com/sealed-secrets-key` in
 `kube-system`. **That key is the most valuable secret in the lab**: without it
 no SealedSecret in Git can be decrypted, including the OpenBao unseal keys 6b
-seals. It is backed up outside the cluster — see `spec/SECRETS.md` in the
+seals. It is backed up outside the cluster — see `docs/source/components/secrets.rst` in the
 automation repository — and that backup is a risk gate, not a nicety.

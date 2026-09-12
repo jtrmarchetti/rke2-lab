@@ -11,7 +11,7 @@
       keycloak_break_glass needs Keycloak's URL, the administrative realm, and
       the admin password (KEYCLOAK_ADMIN_PASSWORD from
       ~/.config/rke2lab/env.sh, and in the vault at kv/keycloak). See
-      spec/SECRETS.md.
+      docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Make the local administrator permanent

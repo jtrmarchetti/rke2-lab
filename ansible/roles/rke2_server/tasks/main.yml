@@ -9,7 +9,7 @@
     fail_msg: >-
       rke2_server needs a cluster token, this node's address, and the names the
       API certificate must cover. The token comes from RKE2_TOKEN in
-      ~/.config/rke2lab/env.sh; see spec/SECRETS.md.
+      ~/.config/rke2lab/env.sh; see docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Record the etcd rejoin join-pin marker

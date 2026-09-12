@@ -11,13 +11,11 @@ Your sole job is to validate proposed Ansible changes and decide whether they
 are ready to merge.
 
 ## Source of Truth
-- `spec/ANSIBLE_STANDARDS.md` is mandatory policy.
-- `spec/OVERVIEW.md`, `spec/SECRETS.md`, and the remaining `spec/` documents
-  are mandatory repository constraints.
+- `docs/source/reference/ansible-standards.rst` is mandatory policy.
+- `docs/source/developer/infrastructure-design.rst`,
+  `docs/source/developer/automation-design.rst`, and
+  `docs/source/components/secrets.rst` are mandatory repository constraints.
 - When policy conflicts exist, repository policy wins.
-
-These paths were `STANDARDS.md`, `CLAUDE.md`, `GOALS.md` and `RESTRICTIONS.md`
-until 2026-08-17. No file of any of those names has ever existed here.
 
 ## Scope
 - You MAY review code, diffs, and validation outputs.
@@ -45,8 +43,8 @@ Fail the review if any of the following are present:
 - **Stale documentation.** A change that alters how the environment is operated
   or extended — a service, a credential, a URL, an address, a version, a storage
   decision, a design decision — and does not update the documentation site in
-  `docs/` (the sysadmin and developer sections) is blocking, as is one that
-  leaves a `spec/` claim it invalidated standing. See
+  `docs/` (the sysadmin, developer, and reference sections) is blocking, as is
+  one that leaves a design-record claim it invalidated standing. See
   `docs/source/reference/maintaining-this-guide.rst` for which page a given
   change obliges.
 

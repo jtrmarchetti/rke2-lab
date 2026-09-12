@@ -10,7 +10,8 @@ runtime:
     # Pulumi command failed with "No module named 'pulumi'" unless the operator
     # remembered to activate .venv first — on a host where the leading python3
     # may be Homebrew's. The role pinned an environment that the tool then
-    # ignored, which is the same fault spec/CONTROLLER.md records about Ansible
+    # ignored, which is the same fault
+    # docs/source/developer/automation-design.rst records about Ansible
     # reconciling one virtual environment while running from another.
     #
     # Pulumi creates and populates the environment from requirements.txt if it

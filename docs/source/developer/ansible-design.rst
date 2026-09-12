@@ -5,8 +5,9 @@ The Ansible automation: how it works
 `automation-design` covered the chain (this repo → controller → GitLab → Flux)
 and the artifact pipeline. This page covers the other half: the Ansible half
 itself — how the automation is built, and why the pieces are arranged the way
-they are. The rules are enforced by ``spec/ANSIBLE_STANDARDS.md``; this page
-is the map of the result, and it says *why* where the layout is surprising.
+they are. The rules are enforced by
+:doc:`../reference/ansible-standards`; this page is the map of the result,
+and it says *why* where the layout is surprising.
 
 What lives where
 ================

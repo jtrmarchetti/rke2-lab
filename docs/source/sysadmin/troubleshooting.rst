@@ -238,14 +238,13 @@ Cluster and storage
 ===================
 
 **etcd leader elections, API latency, ``request timed out``.** Storage, not
-etcd. This hypervisor is itself a VM and its storage is at etcd's fsync floor.
+etcd. The PVE nodes' NVMe storage is still tuned for etcd's write pattern.
 Benchmark one host at a time — a synthetic fsync test on all six at once is a
 denial of service against storage already at its limit.
 
-**Two faults in the same area are still two faults.** The hypervisor was
-swapping *and* its storage was too slow for etcd; fixing the first changed
-nothing about the second. Confirm that what you repaired was what was breaking
-you.
+**Two faults in the same area are still two faults.** A host can be swapping
+*and* its storage too slow for etcd; fixing the first changed nothing about
+the second. Confirm that what you repaired was what was breaking you.
 
 **A node will not restart cleanly.** ``pgrep -a etcd`` after
 ``rke2-killall.sh``. See :doc:`maintenance`.

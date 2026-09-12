@@ -14,7 +14,7 @@
       ~/.config/rke2lab/env.sh) and at least one application — in either
       ipa_sso_groups_applications or
       ipa_sso_groups_admin_only_applications — to create groups for. See
-      spec/SECRETS.md.
+      docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Ensure each application has an administrator and a user group # noqa: risky-shell-pipe

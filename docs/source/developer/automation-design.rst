@@ -3,8 +3,9 @@ Automation design
 ========================
 
 How a change reaches the cluster, and the conventions the automation is
-built to. The prose is the shape; ``spec/ANSIBLE_STANDARDS.md`` is the
-enforcement, and ``spec/CONTROLLER.md`` owns the controller machine itself.
+built to. The prose is the shape; :doc:`../reference/ansible-standards` is
+the enforcement, and the "The controller machine" section below owns the
+controller itself — its dependency manifest and cold-start order.
 
 The chain, end to end
 =====================
@@ -62,7 +63,7 @@ feeds it, in the order a new artifact must pass:
 The conventions the code is built to
 ====================================
 
-From ``spec/ANSIBLE_STANDARDS.md`` — the load-bearing ones:
+From :doc:`../reference/ansible-standards` — the load-bearing ones:
 
 * **FQCN module names, logic in roles, playbooks are orchestration.**
 * **Idempotency is explicit** on every state-changing task, and check mode is
@@ -72,7 +73,7 @@ From ``spec/ANSIBLE_STANDARDS.md`` — the load-bearing ones:
 * **Every download is pinned** — version, URL and checksum in one entry, so a
   bumped version cannot change the URL and leave the checksum behind.
 * **A change is not done until the documentation is updated**: the relevant
-  ``spec/`` document, and this site — see
+  page in this guide — see
   :doc:`../reference/maintaining-this-guide`.
 
 This page describes the chain at the level of *what moves where*. The two
@@ -93,3 +94,87 @@ Renders the tree, seals into it, prints the diff and stops before the commit.
 It is the only way to see what Flux is about to be told without telling it.
 Then ``make -C docs html`` — the guide builds with ``-W``, so a broken
 cross-reference fails the gate.
+
+The controller machine
+======================
+
+The controller is ``controller01`` in the inventory, reached as
+``ansible_connection: local`` — the workstation the automation runs from, not
+a managed VM. It sits on ``192.168.1.0/24`` and reaches the internal
+``192.168.2.0/24`` network through a WireGuard tunnel to ``repo01``. It holds
+every secret in the environment and is deliberately outside the domain: nothing
+in the cluster depends on it at run time.
+
+Every controller dependency is documented and scripted, so the automation
+environment can be rebuilt from scratch. The manifest is
+``ansible/inventory/group_vars/controller/artifacts.yml`` — the counterpart to
+``group_vars/repo/artifacts.yml``, which covers the machines being *built*
+while this one covers the machine doing the building. Every download the
+controller makes has an entry: the four that Ansible installs carry the
+version, URL and checksum the roles consume, and the rest are index rows
+naming the file the pin actually lives in
+(``bootstrap/requirements-controller.txt``, ``ansible/requirements.yml``,
+``infra/pulumi/requirements.txt``, ``infra/pulumi/__main__.py``, and the role
+defaults that list apt packages).
+
+Two dependencies come from ``repo01`` Apache rather than upstream: **kubeseal
+and the Flux CLI** are artifact-manifest entries with ``retention: bootstrap``,
+staged on ``repo01`` and fetched from Apache. The line between them and what
+comes from GitHub (k9s) is whether the rebuild path runs through the tool:
+kubeseal is the only way to produce a SealedSecret, which puts it in the
+rebuild path and in the vault's recovery path. k9s is a terminal UI; if it is
+missing, someone types ``kubectl`` instead.
+
+The one thing that is *not* automation is **state that only a backup can
+supply**: ``~/.config/rke2lab/env.sh`` and the two files beside it. A rebuild
+can create every machine in the lab and still not reach the end without them.
+``bootstrap/env.sh.example`` narrows that gap to *values* rather than
+knowledge — a rebuilt controller knows exactly which names it is missing. See
+:doc:`../components/secrets`.
+
+Cold start, from a bare Ubuntu host
+-----------------------------------
+
+Four commands, and the order between them is the whole content of the
+section::
+
+  git clone <this repository> && cd code
+
+  # 1. The one hand-run step. Ansible cannot install Ansible.
+  ./bootstrap/controller-bootstrap.sh
+
+  # 2. Secrets. Restore ~/.config/rke2lab/ from backup, or start from the
+  #    template the script points at. Nothing below this line runs without it.
+  source ~/.config/rke2lab/env.sh
+
+  # 3. The controller itself: split DNS, the pinned runtimes, Pulumi, the tunnel.
+  source ~/.venvs/rke2lab/bin/activate
+  cd ansible && ansible-playbook playbooks/controller_bootstrap.yml
+
+  # 4. Everything else. Pulumi builds the VMs, then site.yml builds the lab.
+  #    site.yml imports step 3 as its first play, so a rebuild that starts here
+  #    is also correct.
+  ansible-playbook playbooks/site.yml
+
+What each step owns:
+
+1. **``bootstrap/controller-bootstrap.sh``** installs the system packages,
+   creates ``~/.venvs/rke2lab`` from ``bootstrap/requirements-controller.txt``,
+   and installs the pinned collections into ``~/.ansible/collections``. Its
+   scope is one chicken-and-egg problem: *Ansible cannot install Ansible.*
+2. **Secrets** restore ``~/.config/rke2lab/`` — ``env.sh`` at mode 0600, with
+   ``sealed-secrets-key.yaml`` and ``k8s-ca/`` beside it.
+3. **``playbooks/controller_bootstrap.yml``** does the rest, in this order:
+   split DNS (nothing that resolves a ``dev.lo`` name works before this),
+   then the pinned runtimes via the ``controller_runtime`` role, then the
+   WireGuard tunnel last — because the tunnel is what reaches the internal
+   network, it precedes every Ansible run against an internal host, but the
+   play that configures it reaches ``repo01`` on ``192.168.1.20``, so
+   configuring the tunnel never depends on the tunnel.
+4. **``playbooks/site.yml``** builds the environment, and imports step 3 as
+   its own first play.
+
+Two things are *not* in this list because they cannot be: **SSH host keys**
+and **the FreeIPA CA**, both handled by the ``controller_trust`` role inside
+``playbooks/controller.yml``, which takes ``kubectl`` from a cluster node and
+so cannot run until a cluster exists.

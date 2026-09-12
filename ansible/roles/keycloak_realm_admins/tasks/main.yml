@@ -16,7 +16,7 @@
       delegated over — which must not be master unless
       keycloak_realm_admins_allow_master_realm is set — the directory group, at
       least one role, and the admin password (KEYCLOAK_ADMIN_PASSWORD). See
-      spec/SECRETS.md.
+      docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Delegate administration of the realm to a directory group
