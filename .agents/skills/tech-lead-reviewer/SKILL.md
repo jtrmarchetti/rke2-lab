@@ -31,7 +31,9 @@ in their language, not in the executor's.
      (`failed=0`, zero unexpected `changed`).
    - Destructive or wide-scope actions (`pulumi destroy`, `kubectl delete`,
      wide inventory runs) require explicit user confirmation.
-2. **Repository policy**: `docs/source/reference/ansible-standards.rst`,
+2. **Repository policy**: `AGENTS.md` (project standards, coding standards,
+   development process loop, and Tech Lead review process), plus
+   `docs/source/reference/ansible-standards.rst`,
    `docs/source/developer/infrastructure-design.rst`,
    `docs/source/developer/automation-design.rst`, and
    `docs/source/components/secrets.rst`. Repository policy outranks recalled
@@ -62,8 +64,12 @@ in their language, not in the executor's.
 3. **Blocking risks** — data loss, non-idempotent paths, secrets in the
    tree, out-of-band writes to the internal GitLab, unguarded destructive
    steps.
-4. **Standards and maintainability** — variable naming conventions, task
-   structure, docs/plan drift.
+4. **Standards and maintainability** — second-guess every assumption in the
+   code; confirm the change follows the `AGENTS.md` standards and processes
+   and report any deviation; check variable naming conventions, task
+   structure, comment sparsity (comments only for obscure implementations,
+   magic values, or `BUG:`/`TODO:` markers), code self-explanation, docs
+   and plan drift, and that tests stay current with the expected end state.
 
 ## Decision contract
 Return exactly one decision:

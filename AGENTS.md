@@ -22,6 +22,7 @@
 ## Development process loop
 
 * Any changes or fixes to the IaC or configuration as code automation logic require starting the loop from step 1 again
+* Use the `.agents/skills/infra-agent/SKILL.md` skill
 
 1. Research any additional required changes
 2. Implement any additional required changes
@@ -38,6 +39,7 @@
 
 ## Tech Lead review process
 
+* Use the `.agents/skills/tech-lead-reviewer/SKILL.md` skill
 * Second guess all assumptions made in the code
 * Ensure all changes follow the project standards and processes; report any deviations
 * Double check formatting and logic; identify any issues
