@@ -25,6 +25,16 @@ argument_specs:
         required: false
         default: /data1/docker
         description: Path the Docker daemon uses as its data root.
+      container_storage_docker_template:
+        description: >-
+          Path to the Docker daemon.json template, under the repo files tree.
+        type: str
+        required: false
+      container_storage_containerd_template:
+        description: >-
+          Path to the containerd config.toml template, under the repo files tree.
+        type: str
+        required: false
       container_storage_containerd_root:
         type: str
         required: false

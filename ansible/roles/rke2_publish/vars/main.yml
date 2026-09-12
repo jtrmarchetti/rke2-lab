@@ -67,12 +67,6 @@ _var_rke2_publish_manifest_mirrors: >-
      | selectattr('type', 'defined')
      | selectattr('type', 'equalto', 'mirror') | list }}
 
-_var_rke2_publish_mirror_source: >-
-  {{ _item_rke2_publish_mirror['image'] }}
-_var_rke2_publish_mirror_target: >-
-  {{ _item_rke2_publish_mirror['image']
-     | regex_replace('^[^/]+/(.*)$', _var_rke2_publish_registry_prefix ~ '/\1') }}
-
 _var_rke2_publish_chart_file: >-
   {{ rke2_publish_artifact_root }}/{{ _item_rke2_publish_chart['dest'] }}
 

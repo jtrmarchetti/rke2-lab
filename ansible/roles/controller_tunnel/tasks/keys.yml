@@ -57,5 +57,5 @@
     fail_msg: >-
       The tunnel needs this host's private key and the gateway's public key.
       Both come from ~/.config/rke2lab/env.sh as WIREGUARD_CONTROLLER_PRIVATE_KEY
-      and WIREGUARD_REPO_PRIVATE_KEY; see plan/SECRETS.md.
+      and WIREGUARD_REPO_PRIVATE_KEY; see docs/source/components/secrets.rst.
     quiet: true

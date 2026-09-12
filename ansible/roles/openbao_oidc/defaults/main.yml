@@ -19,8 +19,8 @@ openbao_oidc_mount: oidc
 openbao_oidc_role_name: default
 openbao_oidc_admin_role: admin
 openbao_oidc_user_role: user
-openbao_oidc_admin_policy: sso-admins
-openbao_oidc_user_policy: sso-users
+openbao_oidc_admin_policy: null
+openbao_oidc_user_policy: null
 
 openbao_oidc_kv_path: kv
 

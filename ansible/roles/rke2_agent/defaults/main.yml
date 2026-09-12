@@ -1,12 +1,7 @@
 ---
 rke2_agent_enabled: true
 
-rke2_agent_server_address: null
-rke2_agent_supervisor_port: 9345
-
-rke2_agent_data_dir: /data1/rancher/rke2
-
-rke2_agent_expose_metrics: true
+rke2_agent_config_template: null
 
 rke2_agent_control_data_dir: /data1/rancher/rke2
 rke2_agent_control_kubeconfig: /etc/rancher/rke2/rke2.yaml

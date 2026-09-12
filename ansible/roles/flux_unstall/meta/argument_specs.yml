@@ -25,12 +25,6 @@ argument_specs:
       flux_unstall_flux:
         type: str
         description: flux CLI invocation, including the kubeconfig.
-      flux_unstall_settle:
-        type: int
-        default: 8
-        description:
-          - Seconds to wait between the suspend and the resume. The controller
-            has to process the suspend before the resume is meaningful.
       flux_unstall_resume_timeout:
         type: str
         default: 10m

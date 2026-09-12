@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
 
 ---
-runtime-endpoint: {{ kube_cli_node_containerd_sock }}
-image-endpoint: {{ kube_cli_node_containerd_sock }}
+runtime-endpoint: {{ inventory_kube_cli_node_containerd_sock }}
+image-endpoint: {{ inventory_kube_cli_node_containerd_sock }}
 timeout: 10
 debug: false

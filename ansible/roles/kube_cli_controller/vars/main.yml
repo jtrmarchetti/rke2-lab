@@ -1,3 +1,0 @@
----
-
-_var_kube_cli_controller_files_dir: "{{ role_path | dirname | dirname }}/files/kube_cli_controller"

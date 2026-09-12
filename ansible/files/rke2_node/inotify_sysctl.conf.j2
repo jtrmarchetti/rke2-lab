@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
 
-{% for _item_rke2_node_key, _item_rke2_node_value in _var_rke2_node_inotify_settings | dictsort %}
-{{ _item_rke2_node_key }} = {{ _item_rke2_node_value }}
-{% endfor %}
+fs.inotify.max_user_instances = {{ inventory_rke2_node_inotify_max_user_instances }}
+fs.inotify.max_user_watches = {{ inventory_rke2_node_inotify_max_user_watches }}

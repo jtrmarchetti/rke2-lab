@@ -5,8 +5,9 @@ The Ansible automation: how it works
 `automation-design` covered the chain (this repo → controller → GitLab → Flux)
 and the artifact pipeline. This page covers the other half: the Ansible half
 itself — how the automation is built, and why the pieces are arranged the way
-they are. The rules are enforced by ``plan/ANSIBLE_STANDARDS.md``; this page
-is the map of the result, and it says *why* where the layout is surprising.
+they are. The rules are enforced by
+:doc:`../reference/ansible-standards`; this page is the map of the result,
+and it says *why* where the layout is surprising.
 
 What lives where
 ================
@@ -22,7 +23,8 @@ What lives where
    │       ├── main.yml        inventory_<ns>_<noun>  (desired state)
    │       └── artifacts.yml   where the group's artifacts are pinned
    ├── files/<role>/   templates, per role, OUTSIDE the roles
-   └── preflight       every playbook imports a secrets precheck first
+   └── preflight       every playbook except gitops and controller
+                      imports a secrets precheck first
 
 The one layout choice to understand first: **templates do not live inside
 their role.** Every role's templates sit under ``ansible/files/<role>/``, and
@@ -41,25 +43,22 @@ these roles are not published anywhere.
 A playbook is one phase
 =======================
 
-``site.yml`` is twelve ``import_playbook`` lines, in build order:
+``site.yml`` is eleven ``import_playbook`` lines, in build order:
 
 .. code-block:: text
 
    controller → repo01 → core01 → gitlab → kubecp → kubewk
-   → kubecp (again, for ingress) → controller tooling
-   → cluster_services → gitops → cluster_init → gitops (again)
+   → controller tooling → cluster_services → gitops
+   → cluster_init → gitops (again)
 
-Two non-obvious things about that order:
+One non-obvious thing about that order:
 
-* **``kubecp`` appears twice.** The first pass builds the control plane; the
-  second deploys the ingress, which needs workers to schedule on — hence it
-  sits after ``kubewk``.
-* **``gitops`` appears twice.** The first push creates the GitOps tree; the
+* ``gitops`` **appears twice.** The first push creates the GitOps tree; the
   vault it deploys (OpenBao) does not exist yet, so the unseal keys cannot be
   sealed yet. ``cluster_init`` creates the vault; the second ``gitops`` run
   seals the keys into a tree that already exists.
 
-All eleven phase playbooks except ``gitops.yml`` and
+All ten phase playbooks except ``gitops.yml`` and
 ``controller.yml`` start by importing
 ``preflight_secrets.yml`` with their own list of required environment
 variables. The two exceptions carry no such list because they need
@@ -110,8 +109,8 @@ it is spelled, so its origin is readable at the point of use:
      - ``_<ns>_<noun>``
      - ``_gitops_env_sh_text``
 
-The load-bearing rule: **an ``inventory_*`` value reaches a role only through
-a playbook line that names it.**
+The load-bearing rule: an ``inventory_*`` value reaches a role only through
+a playbook line that names it.
 
 .. code-block:: yaml
 
@@ -145,7 +144,7 @@ is not a testing nicety, it is what makes every run safe and makes the
 controller's whole "re-run until green" loop meaningful. The mechanisms that
 serve it:
 
-* **Declarative modules over ``command``/``shell``** — the module knows the
+* Declarative modules over ``command``/``shell`` — the module knows the
   target state and reports ``ok`` when it is already reached. Where
   ``command`` is unavoidable, ``changed_when`` is written down.
 * **Handlers for restarts** — a task *notifies* a handler; the handler runs

@@ -46,7 +46,7 @@ Check it:
 
 .. warning::
 
-   **Watch ``/`` on this host.** It is 32 GB and everything that grows is
+   **Watch** ``/`` **on this host.** It is 32 GB and everything that grows is
    supposed to be on ``/data1``. It reached 79% once, carrying container images
    already published to GitLab. When ``/`` fills, GitLab, the APT proxy, Apache
    *and* the tunnel gateway stop together — which is every path into the
@@ -107,7 +107,7 @@ stays NXDOMAIN on every resolver that asked early, for the zone's negative TTL.
 Verify against the authority with ``dig @192.168.2.4`` before believing a
 resolution failure, then flush the resolver that lied to you.
 
-**The zone ``k8s.dev.lo`` is forwarded, not held.** FreeIPA has no records for
+**The zone** ``k8s.dev.lo`` **is forwarded, not held.** FreeIPA has no records for
 anything inside it; the cluster's own CoreDNS on ``192.168.2.40`` answers. A
 broken cluster therefore breaks every ``k8s.dev.lo`` name, including the ones
 you would use to diagnose it.

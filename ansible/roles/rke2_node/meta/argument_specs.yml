@@ -11,7 +11,8 @@ argument_specs:
       - Installs the RKE2 binary using the release installer, both fetched from
         the GitLab generic package registry.
       - Deliberately does not place an air-gap image tarball on the node; see
-        plan/PHASE4_IMPLEMENTATION.md for why that would hide a broken mirror.
+        docs/source/developer/infrastructure-design.rst (Artifact Distribution Model) for why that would
+        hide a broken mirror.
     options:
       rke2_node_enabled:
         type: bool
@@ -54,9 +55,16 @@ argument_specs:
       rke2_node_gitlab_url:
         type: str
         description: Base URL of the GitLab instance.
-      rke2_node_registry_host:
+      rke2_node_registries_template:
+        description: >-
+          Path to the containerd registries.yaml template, under the repo files tree.
         type: str
-        description: Host name of the GitLab container registry.
+        required: false
+      rke2_node_inotify_template:
+        description: >-
+          Path to the inotify sysctl conf template, under the repo files tree.
+        type: str
+        required: false
       rke2_node_package_project:
         type: str
         default: rke2/packages
@@ -98,14 +106,3 @@ argument_specs:
         type: int
         default: 600
         description: Bound on a single download, in seconds.
-      rke2_node_inotify_max_user_instances:
-        type: int
-        default: 8192
-        description:
-          - Per-UID inotify instance ceiling. The kernel default of 128 is not
-            enough for a Kubernetes node, where nearly every container runs as
-            UID 0 and shares the allowance.
-      rke2_node_inotify_max_user_watches:
-        type: int
-        default: 524288
-        description: Per-UID inotify watch ceiling.

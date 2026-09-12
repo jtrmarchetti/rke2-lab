@@ -4,65 +4,46 @@
   ansible.builtin.import_playbook: preflight_secrets.yml
   vars:
     _preflight_required_env:
-      - GITLAB_ROOT_PASSWORD
       - RKE2_TOKEN
 
-- name: Publish the RKE2 artifact set from the repo host into GitLab
-  hosts: repo
-  gather_facts: true
-  become: true
-  force_handlers: true
+- name: Wait for the RKE2 workers to accept SSH
+  hosts: kubewk
+  gather_facts: false
+  become: false
+  serial: 1
+
+  # Same pre-guard as the control-plane play: a cold-VM sshd or a transient
+  # vxlan overlay blip must not kill the worker join at Gathering Facts.
+  # Knob stays overridable.
   tasks:
-
-    - name: kubewk | Include artifact staging role
+    - name: kubewk | Wait for SSH on the worker node
       tags:
-        - artifact_stage
-      vars:
-        artifact_stage_enabled: "{{ inventory_artifact_stage_enabled }}"
-        artifact_stage_manifest: "{{ inventory_artifact_stage_manifest }}"
-        artifact_stage_root: "{{ inventory_artifact_stage_root }}"
-      ansible.builtin.include_role:
-        name: artifact_stage
-        apply:
-          tags:
-            - artifact_stage
-
-    - name: kubewk | Include RKE2 publishing role
-      tags:
-        - rke2_publish
-      vars:
-        rke2_publish_artifact_dir: "{{ inventory_rke2_publish_artifact_dir }}"
-        rke2_publish_artifact_root: "{{ inventory_artifact_stage_root }}"
-
-        rke2_publish_chart_sets: []
-        rke2_publish_deploy_token_username: >-
-          {{ inventory_rke2_publish_deploy_token_username }}
-        rke2_publish_deploy_token_value: >-
-          {{ inventory_rke2_publish_deploy_token_value }}
-        rke2_publish_enabled: "{{ inventory_rke2_publish_enabled }}"
-        rke2_publish_extra_images: "{{ inventory_rke2_publish_extra_images }}"
-        rke2_publish_gitlab_url: "{{ inventory_rke2_publish_gitlab_url }}"
-        rke2_publish_group: "{{ inventory_rke2_publish_group }}"
-        rke2_publish_images_project: "{{ inventory_rke2_publish_images_project }}"
-        rke2_publish_manifest: "{{ inventory_artifact_stage_manifest }}"
-        rke2_publish_package_version: >-
-          {{ inventory_rke2_publish_package_version }}
-        rke2_publish_packages_project: >-
-          {{ inventory_rke2_publish_packages_project }}
-        rke2_publish_registry_host: "{{ inventory_rke2_publish_registry_host }}"
-        rke2_publish_root_password: "{{ inventory_rke2_publish_root_password }}"
-      ansible.builtin.include_role:
-        name: rke2_publish
-        apply:
-          tags:
-            - rke2_publish
+        - always
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: "{{ kubewk_ssh_wait | default(300) }}"
 
 - name: Join the RKE2 workers to the cluster
   hosts: kubewk
   gather_facts: true
   become: true
 
-  serial: "{{ kubewk_serial | default(2) }}"
+  # One worker in the heavy unpack/image-pull window at a time
+  # (kubewk_serial, group_vars default 1). The nested-VM era ran 1-wide
+  # because a 3-way burst saturated the shared fetch path and turned the
+  # CNI image extract on one node into a partial write (kubewk02 portmap
+  # FIPS abort) that RKE2's .extracted marker locks in. The 2026-09-10
+  # widening attempt measured that this concern is gone on dedicated
+  # hardware (3-wide joined clean, no symptom) but that 3-wide is SLOWER
+  # anyway: the 3-way apt burst left one worker on 'Ensure base packages
+  # are installed' for ~5:25, the worker window went 309s serial ->
+  # 431s one-batch, and the cold build went 48m37s -> 51m25s. Serial is
+  # therefore the faster and the proven choice. The keyword default is
+  # what takes effect (the group_vars kubewk_serial line is documentation
+  # only - ansible 2.21.3 templates the play serial: keyword before
+  # inventory vars enter scope, verified 2026-09-09); -e kubewk_serial=N
+  # still reaches it.
+  serial: "{{ kubewk_serial | default(1) }}"
   force_handlers: true
   tasks:
     - name: kubewk | Include base host role
@@ -72,8 +53,13 @@
         base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
         base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
         base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
-        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
         base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_split_dns_interface: >-
+          {{ inventory_base_host_split_dns_interface }}
+        base_host_split_dns_servers: >-
+          {{ inventory_base_host_split_dns_servers }}
+        base_host_split_dns_template: >-
+          {{ inventory_base_host_split_dns_template }}
         base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
       ansible.builtin.include_role:
         name: base_host
@@ -124,8 +110,8 @@
         - time_sync
       vars:
         time_sync_enabled: "{{ inventory_time_sync_enabled }}"
-        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
         time_sync_sources: "{{ inventory_time_sync_sources }}"
+        time_sync_template: "{{ inventory_time_sync_template }}"
       ansible.builtin.include_role:
         name: time_sync
         apply:
@@ -151,8 +137,10 @@
         rke2_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
         rke2_node_enabled: "{{ inventory_rke2_node_enabled }}"
         rke2_node_gitlab_url: "{{ inventory_rke2_node_gitlab_url }}"
+        rke2_node_inotify_template: "{{ inventory_rke2_node_inotify_template }}"
         rke2_node_package_project: "{{ inventory_rke2_node_package_project }}"
-        rke2_node_registry_host: "{{ inventory_rke2_node_registry_host }}"
+        rke2_node_registries_template: >-
+          {{ inventory_rke2_node_registries_template }}
         rke2_node_registry_mirrors: "{{ inventory_rke2_node_registry_mirrors }}"
         rke2_node_registry_username: >-
           {{ (_reg_kubewk_deploy_token['content'] | b64decode
@@ -172,14 +160,10 @@
       tags:
         - rke2_agent
       vars:
+        rke2_agent_config_template: "{{ inventory_rke2_agent_config_template }}"
         rke2_agent_control_host: "{{ inventory_kubewk_control_host }}"
-        rke2_agent_data_dir: "{{ inventory_rke2_agent_data_dir }}"
         rke2_agent_enabled: "{{ inventory_rke2_agent_enabled }}"
-        rke2_agent_expose_metrics: >-
-          {{ inventory_rke2_agent_expose_metrics }}
         rke2_agent_node_ip: "{{ inventory_rke2_agent_node_ip }}"
-        rke2_agent_server_address: "{{ inventory_rke2_agent_server_address }}"
-        rke2_agent_supervisor_port: "{{ inventory_rke2_agent_supervisor_port }}"
         rke2_agent_token: "{{ inventory_rke2_agent_token }}"
       ansible.builtin.include_role:
         name: rke2_agent
@@ -191,8 +175,11 @@
       tags:
         - kube_cli
       vars:
+        kube_cli_node_cli_template: "{{ inventory_kube_cli_node_cli_template }}"
+        kube_cli_node_crictl_template: >-
+          {{ inventory_kube_cli_node_crictl_template }}
         kube_cli_node_data_dir: "{{ inventory_rke2_node_data_dir }}"
-        kube_cli_node_kubeconfig: ""
+        kube_cli_node_kubeconfig: "{{ inventory_kube_cli_node_kubeconfig }}"
       ansible.builtin.include_role:
         name: kube_cli_node
         apply:
@@ -210,6 +197,8 @@
       --kubeconfig /etc/rancher/rke2/rke2.yaml
     _kubewk_worker_label: node-role.kubernetes.io/worker=true
     _kubewk_control_plane_taint: CriticalAddonsOnly=true:NoExecute
+    _kubewk_domain: >-
+      {{ inventory_base_host_split_dns_domains | first }}
   tasks:
     - name: kubewk | Apply the cluster-level changes from one server
 
@@ -226,7 +215,7 @@
             - node_labels
           ansible.builtin.command:
             cmd: >-
-              {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.dev.lo
+              {{ _kubewk_kubectl }} label node {{ _item_kubewk_worker }}.{{ _kubewk_domain }}
               {{ _kubewk_worker_label }} --overwrite
 
         - name: kubewk | Count the workers that have registered
@@ -240,6 +229,11 @@
               -l {{ _kubewk_worker_label }} --no-headers
 
         - name: kubewk | Wait for every registered worker to report Ready
+          # 600s covers the cilium CNI-installer init container's 600s
+          # startup-probe window: a worker whose CNI set is still
+          # converging must not be read NotReady by the NoExecute-taint
+          # guard below. The agent role already waits 900s per node; this
+          # re-checks the whole set from one control plane host.
           changed_when: false
           failed_when: false
           register: _reg_kubewk_ready
@@ -248,7 +242,7 @@
           ansible.builtin.command:
             cmd: >-
               {{ _kubewk_kubectl }} wait --for=condition=Ready
-              node -l {{ _kubewk_worker_label }} --timeout=300s
+              node -l {{ _kubewk_worker_label }} --timeout=600s
 
         - name: kubewk | Assert every worker is Ready before tainting anything
           tags:
@@ -262,8 +256,8 @@
               Not every worker is Ready, so the control plane must not be tainted.
               CriticalAddonsOnly is NoExecute: applying it now would evict CoreDNS
               and metrics-server with nowhere to reschedule, and cluster DNS would
-              stop. Fix the workers first — see the runbook in
-              plan/PHASE5_IMPLEMENTATION.md.
+              stop. Fix the workers first — see the taint/eviction notes in
+              docs/source/kubernetes-basics.
             quiet: true
 
         - name: kubewk | Taint the control plane CriticalAddonsOnly
@@ -279,5 +273,5 @@
             - control_plane_taint
           ansible.builtin.command:
             cmd: >-
-              {{ _kubewk_kubectl }} taint node {{ _item_kubewk_server }}.dev.lo
+              {{ _kubewk_kubectl }} taint node {{ _item_kubewk_server }}.{{ _kubewk_domain }}
               {{ _kubewk_control_plane_taint }}

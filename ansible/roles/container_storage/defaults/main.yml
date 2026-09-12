@@ -16,3 +16,6 @@ container_storage_compose_stop_timeout: 360
 container_storage_migrate: true
 
 container_storage_remove_rollback: false
+
+container_storage_docker_template: null
+container_storage_containerd_template: null

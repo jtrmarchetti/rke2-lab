@@ -7,20 +7,17 @@ gitlab_external_url: null
 gitlab_registry_external_url: null
 
 gitlab_https_port: 443
-gitlab_ssh_port: 2222
 
 gitlab_root_password: ""
 
-gitlab_letsencrypt_enabled: false
 gitlab_ssl_source_dir: null
+gitlab_ca_cert_name: null
 
 gitlab_container_name: gitlab
 gitlab_container_image: "gitlab/gitlab-ce:19.3.0-ce.0"
 gitlab_compose_dir: /opt/rke2lab/gitlab
 
 gitlab_data_root: /data1/gitlab
-
-gitlab_backup_dir: /data1/gitlab/data/backups
 
 gitlab_image_tarball_url: null
 gitlab_image_tarball_path: /var/tmp/gitlab-ce-19.3.0-ce.0.tar
@@ -29,30 +26,27 @@ gitlab_runtime_packages:
   - docker.io
   - docker-compose-v2
 
-gitlab_puma_worker_processes: 2
-gitlab_sidekiq_concurrency: 10
-gitlab_monitoring_enabled: false
-gitlab_kas_enabled: false
-
-gitlab_monitoring_allowed_networks: null
-
 gitlab_oidc_enabled: false
 gitlab_oidc_issuer: null
-gitlab_oidc_client_id: gitlab
 gitlab_oidc_client_secret: ""
-gitlab_oidc_label: dev.lo single sign-on
-gitlab_oidc_auto_sign_in: false
-gitlab_oidc_block_auto_created_users: false
 
 gitlab_oidc_ca_source_file: null
 
 gitlab_registry_enabled: true
-gitlab_package_registry_enabled: true
 
-gitlab_shm_size: 256m
-
-gitlab_ready_retries: 60
+gitlab_env_template: null
+gitlab_compose_template: null
+# Cold-build measured on the current real-disk hardware (2026-09-09):
+# the readiness poll needed ~166s (~17 polls) from listener-up to the
+# readiness endpoint returning 200. 30 x 10s = 5 minutes keeps ~3x that
+# with room for a slow first reconfigure; the earlier 60 x 10s = 10
+# minutes predated the hardware migration.
+gitlab_ready_retries: 30
 gitlab_ready_delay: 10
-gitlab_install_timeout: 2400
+# Caps the container start + HTTPS listener wait. A measured cold start
+# to readiness on the current hardware took ~9 minutes wall clock, so
+# 1200s (20 minutes) is ~2.2x headroom; 2400s was sized for the slow
+# nested-VM I/O era.
+gitlab_install_timeout: 1200
 
 gitlab_no_log: true

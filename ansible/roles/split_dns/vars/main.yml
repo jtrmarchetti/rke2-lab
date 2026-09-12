@@ -1,4 +1,2 @@
 ---
 _var_split_dns_config_path: /etc/dnsmasq.d/split_dns.conf
-
-_var_split_dns_files_dir: "{{ role_path | dirname | dirname }}/files/split_dns"

@@ -7,7 +7,7 @@ metadata:
   namespace: longhorn-system
 data:
   ca.crt: >-
-    {{ lookup('file', gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+    {{ lookup('file', inventory_gitops_source_domain_ca_file, rstrip=false) | b64encode }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,10 +32,10 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --provider=keycloak-oidc
-            - --oidc-issuer-url=https://sso.{{ gitops_source_cluster_domain }}/realms/{{ gitops_source_keycloak_realm }}
+            - --oidc-issuer-url=https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}
             - --client-id=longhorn
             - --provider-ca-file=/etc/ssl/domain/ca.crt
-            - --redirect-url=https://longhorn.{{ gitops_source_cluster_domain }}/oauth2/callback
+            - --redirect-url=https://longhorn.{{ inventory_gitops_source_cluster_domain }}/oauth2/callback
             - --upstream=http://longhorn-frontend.longhorn-system.svc.cluster.local:80
             - --allowed-role=longhorn:admin
             - --allowed-role=longhorn:user
@@ -104,28 +104,19 @@ spec:
       targetPort: 4180
       name: http
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
   name: longhorn-auth
   namespace: longhorn-system
-  annotations:
-    cert-manager.io/cluster-issuer: k8s-ca
 spec:
-  ingressClassName: traefik
-  tls:
-    - hosts:
-        - longhorn.{{ gitops_source_cluster_domain }}
-      secretName: longhorn-ui-tls
+  parentRefs:
+    - name: platform
+      namespace: kube-system
+      sectionName: longhorn
+  hostnames:
+    - longhorn.{{ inventory_gitops_source_cluster_domain }}
   rules:
-    - host: longhorn.{{ gitops_source_cluster_domain }}
-      http:
-        paths:
-
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: longhorn-auth
-                port:
-                  number: 80
+    - backendRefs:
+        - name: longhorn-auth
+          port: 80

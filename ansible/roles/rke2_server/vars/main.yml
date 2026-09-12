@@ -1,5 +1,3 @@
 ---
 
 _var_rke2_server_kubeconfig_owner: "{{ lookup('env', 'USER') }}"
-
-_var_rke2_server_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_server"

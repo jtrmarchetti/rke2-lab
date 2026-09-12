@@ -2,14 +2,18 @@
 
 - name: inotify | Ensure the inotify sysctl drop-in is present
   ansible.builtin.template:
-    src: "{{ _var_rke2_node_files_dir }}/inotify_sysctl.conf.j2"
+    src: "{{ rke2_node_inotify_template }}"
     dest: "{{ _var_rke2_node_inotify_conf_path }}"
     owner: root
     group: root
     mode: "0644"
 
 - name: inotify | Apply the inotify limits to the running kernel
-  loop: "{{ _var_rke2_node_inotify_settings | dict2items }}"
+  loop:
+    - key: fs.inotify.max_user_instances
+      value: "{{ inventory_rke2_node_inotify_max_user_instances }}"
+    - key: fs.inotify.max_user_watches
+      value: "{{ inventory_rke2_node_inotify_max_user_watches }}"
   loop_control:
     label: "{{ _item_rke2_node_sysctl['key'] }}"
     loop_var: _item_rke2_node_sysctl

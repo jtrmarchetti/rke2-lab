@@ -25,7 +25,7 @@ to reach Longhorn at all.
 Realms
 ======
 
-Applications and federated users live in the **``dev-lo``** realm. The
+Applications and federated users live in the ``dev-lo`` realm. The
 ``master`` realm administers every other realm and holds Keycloak's own local
 administrator, which stays local deliberately: a Keycloak whose administrators
 were themselves federated would be unadministrable exactly when FreeIPA is what
@@ -187,8 +187,8 @@ resource* against a realm where every mapping reads back correctly.
 ``Realm settings → Sessions`` or a ``POST`` to
 ``/admin/realms/<realm>/clear-user-cache``.
 
-**An *unfiltered* federation provider in ``master`` is not a leftover to live
-with.** One sat there from before the realm split, still enabled, still binding
+An *unfiltered* federation provider in ``master`` is not a leftover to live
+with. One sat there from before the realm split, still enabled, still binding
 over plain LDAP, importing every domain account into the realm that administers
 every other realm. ``keycloak_break_glass`` removes any provider there that is
 not explicitly allowed, and the accounts an absent provider left behind.

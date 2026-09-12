@@ -3,7 +3,7 @@
 - name: profile | Render the subordinate CA profile configuration
   register: _reg_ipa_sub_ca_profile_file
   ansible.builtin.template:
-    src: "{{ _var_ipa_sub_ca_files_dir }}/subca-profile.cfg.j2"
+    src: "{{ ipa_sub_ca_profile_template }}"
     dest: "{{ ipa_sub_ca_output_dir }}/{{ ipa_sub_ca_profile_id }}.cfg"
     mode: "0644"
 

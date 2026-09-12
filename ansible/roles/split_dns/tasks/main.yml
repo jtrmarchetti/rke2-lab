@@ -22,7 +22,7 @@
     - (split_dns_enabled | bool)
     - (split_dns_manage_resolver | bool)
   ansible.builtin.template:
-    src: "{{ _var_split_dns_files_dir }}/resolv.conf.j2"
+    src: "{{ split_dns_resolver_template }}"
     dest: /etc/resolv.conf
     owner: root
     group: root
@@ -33,7 +33,7 @@
   when: (split_dns_enabled | bool)
   notify: Restart dnsmasq
   ansible.builtin.template:
-    src: "{{ _var_split_dns_files_dir }}/split_dns.conf.j2"
+    src: "{{ split_dns_config_template }}"
     dest: "{{ _var_split_dns_config_path }}"
     owner: root
     group: root

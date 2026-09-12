@@ -1,18 +1,9 @@
 ---
 split_dns_enabled: true
 
-split_dns_upstream_servers: []
-
 split_dns_forward_zones: []
 
-split_dns_listen_addresses:
-  - 127.0.0.1
-
 split_dns_manage_resolver: true
-
-split_dns_search_domain: ""
-
-split_dns_cache_size: 1000
 
 split_dns_verify_zones: true
 
@@ -20,3 +11,6 @@ split_dns_packages:
   - dnsmasq
 
   - bind9-dnsutils
+
+split_dns_config_template: null
+split_dns_resolver_template: null

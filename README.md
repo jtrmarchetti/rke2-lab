@@ -47,8 +47,7 @@ not surface as an unexplained failure in the next.
 | `infra/pulumi/` | Every VM in the environment, as Python |
 | `ansible/` | Every host's configuration: roles, playbooks, and the inventory that drives them |
 | `ansible/inventory/group_vars/repo/artifacts.yml` | The artifact manifest — every binary, image and archive the lab consumes, with checksums |
-| `plan/` | Architecture, per-phase implementation records, and the standards all automation follows |
-| `docs/` | The sysadmin guide: how the built environment is operated, as a Sphinx site |
+| `docs/` | The environment guide — the design record (architecture, component choices, the Ansible standards) and the sysadmin view, as a Sphinx site |
 
 ## Operate it
 
@@ -67,16 +66,18 @@ python3 -m venv ~/.venvs/rke2lab-docs
 make -C docs html          # docs/_build/html/index.html
 ```
 
-A change to the environment is not finished until that guide reflects it — the
-same rule the plan documents live under. See
+A change to the environment is not finished until that guide reflects it. See
 [`docs/source/reference/maintaining-this-guide.rst`](docs/source/reference/maintaining-this-guide.rst).
 
 ## Where to read next
 
-Start with [`plan/OVERVIEW.md`](plan/OVERVIEW.md) for the architecture and the
-cross-phase rules, [`plan/CONTROLLER.md`](plan/CONTROLLER.md) for the
-controller's dependency manifest and cold start, and
-[`plan/PHASES.md`](plan/PHASES.md) for the build order.
+Start with
+[`docs/source/developer/infrastructure-design.rst`](docs/source/developer/infrastructure-design.rst)
+for the architecture, the cross-cutting rules, and which component was chosen
+for each job, and
+[`docs/source/developer/automation-design.rst`](docs/source/developer/automation-design.rst)
+for the controller's dependency manifest and cold start. The sysadmin view is
+the entry point at [`docs/source/index.rst`](docs/source/index.rst).
 
 ## Two rules that explain most of the design
 
@@ -88,4 +89,4 @@ The flow is always `internet → repo01 → GitLab → internal nodes`.
 **No secret is in this repository.** Everything sensitive lives in
 `~/.config/rke2lab/` and is read from the environment at run time; every
 playbook asserts what it needs is present before it starts. See
-[`plan/SECRETS.md`](plan/SECRETS.md).
+[`docs/source/components/secrets.rst`](docs/source/components/secrets.rst).

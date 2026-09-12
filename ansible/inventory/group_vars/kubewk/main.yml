@@ -33,6 +33,10 @@ inventory_rke2_node_enabled: true
 inventory_rke2_node_type: agent
 inventory_rke2_node_version: 1.36.3+rke2r1
 inventory_rke2_node_data_dir: /data1/rancher/rke2
+
+# Workers keep no kubeconfig here: the agent's kubeconfig lands under the
+# data-dir override, and the CLI on workers is completion-only.
+inventory_kube_cli_node_kubeconfig: ""
 inventory_rke2_node_ca_url: http://192.168.2.99/certs/dev.lo-ca.crt
 inventory_rke2_node_gitlab_url: https://gitlab.dev.lo
 inventory_rke2_node_registry_host: registry.gitlab.dev.lo
@@ -48,6 +52,12 @@ inventory_rke2_agent_server_address: 192.168.2.20
 inventory_rke2_agent_supervisor_port: 9345
 
 inventory_rke2_agent_expose_metrics: true
+
+inventory_rke2_agent_config_template: >-
+  {{ inventory_files_base }}/rke2_agent/config.yaml.j2
+
+inventory_longhorn_node_blacklist_template: >-
+  {{ inventory_files_base }}/longhorn_node/longhorn-blacklist.conf.j2
 
 inventory_base_host_split_dns_domains:
   - dev.lo

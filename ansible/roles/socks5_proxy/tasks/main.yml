@@ -10,7 +10,7 @@
   notify:
     - Restart danted
   ansible.builtin.template:
-    src: "{{ _var_socks5_proxy_files_dir }}/danted.conf.j2"
+    src: "{{ socks5_proxy_template }}"
     dest: "{{ _var_socks5_proxy_config_path }}"
     mode: "0644"
 

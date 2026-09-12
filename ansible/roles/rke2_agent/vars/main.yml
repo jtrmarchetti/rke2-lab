@@ -1,3 +1,0 @@
----
-
-_var_rke2_agent_files_dir: "{{ role_path | dirname | dirname }}/files/rke2_agent"

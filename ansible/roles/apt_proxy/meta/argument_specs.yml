@@ -18,18 +18,8 @@ argument_specs:
         description: On-demand cache location, placed on the data volume.
         type: str
         required: false
-      apt_proxy_log_dir:
-        type: str
-        required: false
-      apt_proxy_expire_days:
-        description: Days before unreferenced cached files are expired.
-        type: int
-        required: false
-      apt_proxy_keep_extra_versions:
-        description: Number of superseded package versions retained.
-        type: int
-        required: false
-      apt_proxy_passthrough_pattern:
-        description: Hosts permitted for CONNECT tunneling. Keep this narrow.
+      apt_proxy_template:
+        description: >-
+          Path to the cacher override template, under the repo files tree.
         type: str
         required: false

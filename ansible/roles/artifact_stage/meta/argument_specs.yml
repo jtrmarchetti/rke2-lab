@@ -96,7 +96,8 @@ argument_specs:
         type: int
         required: false
         default: 3
-        description: Task-level attempts for a failing download before the task is fatal.
+        description: >-
+          Task-level attempts for a failing download before the task is fatal.
       artifact_stage_download_delay:
         type: int
         required: false
@@ -106,7 +107,8 @@ argument_specs:
         type: int
         required: false
         default: 3
-        description: Task-level attempts for a failing image pull before the task is fatal.
+        description: >-
+          Task-level attempts for a failing image pull before the task is fatal.
       artifact_stage_image_pull_delay:
         type: int
         required: false

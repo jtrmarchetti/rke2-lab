@@ -47,6 +47,8 @@
     - name: cluster_init | Include the OpenBao initialisation role
       tags:
         - openbao_init
+      vars:
+        openbao_init_kubectl: "{{ inventory_controller_kubectl_cmd }}"
       ansible.builtin.include_role:
         name: openbao_init
         apply:
@@ -76,14 +78,14 @@
              if _openbao_root_token_from_file | length > 0
              else lookup('env', 'OPENBAO_ROOT_TOKEN') }}
 
-    - name: cluster_init | Wait for the ingress to serve the vault's certificate
+    - name: cluster_init | Wait for the gateway to serve the vault's certificate
       tags:
         - openbao_config
 
       when: not ansible_check_mode
-      register: _reg_openbao_ingress_ready
+      register: _reg_openbao_gateway_ready
       until: >-
-        (_reg_openbao_ingress_ready['status'] | default(0))
+        (_reg_openbao_gateway_ready['status'] | default(0))
         in [200, 403, 429, 472, 473, 503]
       retries: 20
       delay: 15
@@ -96,25 +98,26 @@
         ca_path: "{{ inventory_gitops_bootstrap_domain_ca_file }}"
         status_code: [200, 403, 429, 472, 473, 503]
 
-    - name: cluster_init | Report that the ingress certificate does not verify
+    - name: cluster_init | Report that the gateway certificate does not verify
       tags:
         - openbao_config
       when:
-        - not (_reg_openbao_ingress_ready is skipped)
-        - (_reg_openbao_ingress_ready['status'] | default(0))
+        - not (_reg_openbao_gateway_ready is skipped)
+        - (_reg_openbao_gateway_ready['status'] | default(0))
           not in [200, 403, 429, 472, 473, 503]
       ansible.builtin.assert:
         that:
-          - (_reg_openbao_ingress_ready['status'] | default(0))
+          - (_reg_openbao_gateway_ready['status'] | default(0))
             in [200, 403, 429, 472, 473, 503]
         fail_msg: >-
           {{ inventory_openbao_config_url }} still did not verify against
           {{ inventory_gitops_bootstrap_domain_ca_file }} after
           {{ 20 * 15 }}s of waiting. cert-manager has not issued the
-          openbao-tls Secret, or Traefik is still serving its default
+          bao-edge-tls Secret, or Traefik is still serving its default
           certificate, and every vault role in this play fails on TLS until
-          it has. Look at the openbao-tls Secret and Certificate in the
-          openbao namespace, and the k8s-ca Secret in cert-manager.
+          it has. Look at the bao-edge-tls Secret in kube-system (the
+          platform Gateway's listener certificate, shimmed by cert-manager
+          from the Gateway), and the k8s-ca Secret in cert-manager.
         quiet: true
 
     - name: cluster_init | Include the OpenBao configuration role
@@ -123,6 +126,7 @@
       vars:
         openbao_config_url: "{{ inventory_openbao_config_url }}"
         openbao_config_root_token: "{{ cluster_init_openbao_root_token }}"
+        openbao_config_kubectl: "{{ inventory_controller_kubectl_cmd }}"
       ansible.builtin.include_role:
         name: openbao_config
         apply:
@@ -168,6 +172,9 @@
     - name: cluster_init | Include the Garage initialisation role
       tags:
         - garage_init
+      vars:
+        garage_init_kubectl: "{{ inventory_controller_kubectl_cmd }}"
+        garage_init_zone: "{{ inventory_garage_init_zone }}"
       ansible.builtin.include_role:
         name: garage_init
         apply:
@@ -249,6 +256,10 @@
     - name: cluster_init | Include the Flux unstall role
       tags:
         - flux_unstall
+      vars:
+        flux_unstall_kubectl: "{{ inventory_controller_kubectl_cmd }}"
+        flux_unstall_flux: >-
+          {{ inventory_controller_flux_cmd }}
       ansible.builtin.include_role:
         name: flux_unstall
         apply:
@@ -337,13 +348,18 @@
       tags:
         - keycloak_ldap
       vars:
+        keycloak_ldap_base_dn: "{{ inventory_keycloak_ldap_base_dn }}"
+        keycloak_ldap_bind_user: "{{ inventory_keycloak_ldap_bind_user }}"
         keycloak_ldap_connection_url: >-
           {{ inventory_keycloak_ldap_connection_url }}
         keycloak_ldap_dir_manager_password: >-
           {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
         keycloak_ldap_groups_dn: "{{ inventory_keycloak_ldap_groups_dn }}"
+        keycloak_ldap_ipa_container: "{{ inventory_keycloak_ldap_ipa_container }}"
+        keycloak_ldap_ipa_host: "{{ inventory_keycloak_ldap_ipa_host }}"
         keycloak_ldap_realm: "{{ inventory_keycloak_realm_name }}"
         keycloak_ldap_url: "{{ inventory_keycloak_ldap_url }}"
+        keycloak_ldap_users_dn: "{{ inventory_keycloak_ldap_users_dn }}"
         keycloak_ldap_bind_password: >-
           {{ lookup('env', 'KEYCLOAK_LDAP_BIND_PASSWORD') }}
         keycloak_ldap_admin_password: >-
@@ -364,20 +380,25 @@
         keycloak_ldap_allow_master_realm: true
         keycloak_ldap_admin_password: >-
           {{ lookup('env', 'KEYCLOAK_ADMIN_PASSWORD') }}
+        keycloak_ldap_base_dn: "{{ inventory_keycloak_ldap_base_dn }}"
         keycloak_ldap_bind_password: >-
           {{ lookup('env', 'KEYCLOAK_LDAP_BIND_PASSWORD') }}
         keycloak_ldap_connection_url: >-
           {{ inventory_keycloak_ldap_connection_url }}
         keycloak_ldap_dir_manager_password: >-
           {{ lookup('env', 'FREEIPA_DIR_MANAGER_PASSWORD') }}
+        keycloak_ldap_bind_user: "{{ inventory_keycloak_ldap_bind_user }}"
         keycloak_ldap_groups_dn: "{{ inventory_keycloak_ldap_groups_dn }}"
         keycloak_ldap_groups_filter: >-
           {{ inventory_keycloak_admin_groups_filter }}
+        keycloak_ldap_ipa_container: "{{ inventory_keycloak_ldap_ipa_container }}"
+        keycloak_ldap_ipa_host: "{{ inventory_keycloak_ldap_ipa_host }}"
         keycloak_ldap_manage_sysaccount: false
         keycloak_ldap_realm: master
         keycloak_ldap_url: "{{ inventory_keycloak_ldap_url }}"
         keycloak_ldap_user_search_filter: >-
           {{ inventory_keycloak_admin_user_filter | trim }}
+        keycloak_ldap_users_dn: "{{ inventory_keycloak_ldap_users_dn }}"
       ansible.builtin.include_role:
         name: keycloak_ldap
         apply:
@@ -442,6 +463,7 @@
       tags:
         - openbao_oidc
       vars:
+        openbao_oidc_admin_policy: "{{ inventory_openbao_oidc_admin_policy }}"
         openbao_oidc_client_secret: >-
           {{ inventory_openbao_oidc_client_secret }}
         openbao_oidc_discovery_ca_file: >-
@@ -449,6 +471,7 @@
         openbao_oidc_issuer: "{{ inventory_keycloak_realm_issuer }}"
         openbao_oidc_root_token: "{{ cluster_init_openbao_root_token }}"
         openbao_oidc_url: "{{ inventory_openbao_oidc_url }}"
+        openbao_oidc_user_policy: "{{ inventory_openbao_oidc_user_policy }}"
       ansible.builtin.include_role:
         name: openbao_oidc
         apply:

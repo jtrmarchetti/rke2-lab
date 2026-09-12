@@ -1,5 +1,4 @@
 ---
-gitlab_admin_token_enabled: true
 
 gitlab_admin_token_file: /data1/gitlab/admin-token.yml
 

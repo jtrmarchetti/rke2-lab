@@ -4,7 +4,9 @@
 apiVersion: v1
 kind: List
 items:
-{% for _item_gitops_bootstrap_key in _var_gitops_bootstrap_sealing_keys %}
+{% for _item_gitops_bootstrap_key in
+        (lookup('file', inventory_gitops_bootstrap_sealing_key_file)
+         | from_yaml)['items'] %}
   - apiVersion: v1
     kind: Secret
     type: {{ _item_gitops_bootstrap_key['type'] }}

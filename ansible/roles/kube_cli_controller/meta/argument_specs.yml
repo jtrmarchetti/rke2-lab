@@ -36,10 +36,11 @@ argument_specs:
         description: Whether kubectl is installed.
       kube_cli_controller_kubectl_source_host:
         type: str
-        default: kubecp01
+        default: null
         description: Inventory host the kubectl binary is copied from.
       kube_cli_controller_kubectl_source_path:
         type: str
+        default: null
         description: Path to kubectl on that host.
       kube_cli_controller_kubectl_version:
         type: str
@@ -62,10 +63,9 @@ argument_specs:
         type: bool
         default: true
         description: Whether the shell environment is written.
-      kube_cli_controller_alias:
-        type: str
-        default: k
-        description: Alias for kubectl, with completion bound to it.
+      kube_cli_controller_shell_template:
+        type: path
+        description: Path to the kube-env.sh template, from inventory.
       kube_cli_controller_flux_enabled:
         type: bool
         required: false

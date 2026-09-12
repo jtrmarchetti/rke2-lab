@@ -6,7 +6,7 @@ metadata:
   name: kubevip
   namespace: kube-system
 data:
-  range-global: {{ gitops_source_lb_range }}
+  range-global: {{ inventory_gitops_source_lb_range }}
 ---
 apiVersion: v1
 kind: ServiceAccount

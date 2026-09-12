@@ -3,13 +3,15 @@ gitops_bootstrap_enabled: true
 
 gitops_bootstrap_gitlab_url: null
 
+gitops_bootstrap_files_dir: null
+
 gitops_bootstrap_group: platform
 gitops_bootstrap_project: cluster-state
 gitops_bootstrap_branch: main
 
 gitops_bootstrap_work_dir: >-
   {{ ansible_facts['env']['HOME'] }}/.cache/rke2lab/cluster-state
-gitops_bootstrap_cluster_dir: clusters/dev-lo
+gitops_bootstrap_cluster_dir: null
 
 gitops_bootstrap_deploy_token_name: flux-cluster-state
 gitops_bootstrap_deploy_token_scopes:
@@ -26,21 +28,15 @@ gitops_bootstrap_ca_file: /etc/ssl/certs/ca-certificates.crt
 
 gitops_bootstrap_namespace: flux-system
 
-gitops_bootstrap_sealing_key_file: >-
-  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/sealed-secrets-key.yaml
-
 gitops_bootstrap_sealing_key_label: >-
   sealedsecrets.bitnami.com/sealed-secrets-key=active
 
-gitops_bootstrap_flux: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/flux
+gitops_bootstrap_flux: null
 
-gitops_bootstrap_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+gitops_bootstrap_kubectl: null
 
-gitops_bootstrap_commit_name: rke2lab automation
-gitops_bootstrap_commit_email: automation@dev.lo
+gitops_bootstrap_commit_name: automation
+gitops_bootstrap_commit_email: null
 gitops_bootstrap_flux_commit_message: >-
   Regenerate the flux-system folder from the Flux CLI
 

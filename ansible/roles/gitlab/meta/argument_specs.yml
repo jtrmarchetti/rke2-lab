@@ -29,29 +29,21 @@ argument_specs:
         required: false
         default: 443
         description: Host port published for HTTPS.
-      gitlab_ssh_port:
-        type: int
-        required: false
-        default: 2222
-        description: >-
-          Host port published for git SSH. Not 22, which the host sshd owns.
       gitlab_root_password:
         type: str
         required: false
         description: >-
           Initial root password, applied on first reconfigure only. Sourced
           from the environment.
-      gitlab_letsencrypt_enabled:
-        type: bool
-        required: false
-        default: false
-        description: >-
-          Whether omnibus requests certificates automatically. Always false
-          here; this network cannot reach an ACME endpoint.
       gitlab_ssl_source_dir:
         type: path
         required: false
         description: Host directory holding the issued certificates and keys.
+      gitlab_ca_cert_name:
+        type: str
+        required: false
+        description: >-
+          File name of the domain CA certificate inside the SSL source dir.
       gitlab_container_name:
         type: str
         required: false
@@ -72,11 +64,6 @@ argument_specs:
         required: false
         default: /data1/gitlab
         description: Root of the persistent data tree on the data disk.
-      gitlab_backup_dir:
-        type: path
-        required: false
-        default: /data1/gitlab/backups
-        description: Directory backups are written to.
       gitlab_image_tarball_url:
         type: str
         required: false
@@ -92,33 +79,16 @@ argument_specs:
         elements: str
         required: false
         description: Host packages required to run the container.
-      gitlab_puma_worker_processes:
-        type: int
-        required: false
-        default: 2
-        description: Puma worker count.
-      gitlab_sidekiq_concurrency:
-        type: int
-        required: false
-        default: 10
-        description: Sidekiq concurrency.
-      gitlab_monitoring_enabled:
-        type: bool
-        required: false
-        default: false
-        description: Whether the bundled Prometheus stack and exporters run.
-      gitlab_kas_enabled:
-        type: bool
-        required: false
-        default: false
-        description: Whether the Kubernetes agent server runs.
-      gitlab_monitoring_allowed_networks:
-        type: list
-        elements: str
-        required: false
+      gitlab_env_template:
         description: >-
-          Networks permitted to read the health endpoints. Must include the
-          compose network gateway or the readiness check answers 404.
+          Path to the GitLab env file template, under the repo files tree.
+        type: str
+        required: false
+      gitlab_compose_template:
+        description: >-
+          Path to the GitLab docker-compose template, under the repo files tree.
+        type: str
+        required: false
       gitlab_oidc_enabled:
         type: bool
         required: false
@@ -131,11 +101,6 @@ argument_specs:
         type: str
         required: false
         description: Keycloak realm issuer URL, used for OIDC discovery.
-      gitlab_oidc_client_id:
-        type: str
-        required: false
-        default: gitlab
-        description: The client id keycloak_clients created.
       gitlab_oidc_client_secret:
         type: str
         required: false
@@ -144,26 +109,6 @@ argument_specs:
           That client's authored secret, from env.sh. Authored rather than
           generated so GitLab can carry this configuration from its first run,
           long before the cluster hosting Keycloak exists.
-      gitlab_oidc_label:
-        type: str
-        required: false
-        description: Text on the sign-in button.
-      gitlab_oidc_auto_sign_in:
-        type: bool
-        required: false
-        default: false
-        description: >-
-          Redirect the login page straight to Keycloak. Left false on purpose —
-          it leaves the local form reachable only by appending a query
-          parameter, and a break-glass path nobody can remember is not one.
-      gitlab_oidc_block_auto_created_users:
-        type: bool
-        required: false
-        default: false
-        description: >-
-          Create federated users blocked, requiring an administrator to
-          release them. False, because on a first sign-in that administrator is
-          root logging in with a password.
       gitlab_oidc_ca_source_file:
         type: str
         required: false
@@ -176,20 +121,10 @@ argument_specs:
         required: false
         default: true
         description: Whether the container registry is enabled.
-      gitlab_package_registry_enabled:
-        type: bool
-        required: false
-        default: true
-        description: Whether the package registry is enabled.
-      gitlab_shm_size:
-        type: str
-        required: false
-        default: 256m
-        description: Shared memory size for the container.
       gitlab_ready_retries:
         type: int
         required: false
-        default: 60
+        default: 30
         description: Readiness poll attempts.
       gitlab_ready_delay:
         type: int
@@ -199,7 +134,7 @@ argument_specs:
       gitlab_install_timeout:
         type: int
         required: false
-        default: 2400
+        default: 1200
         description: Seconds allowed for the first reconfigure.
       gitlab_no_log:
         type: bool

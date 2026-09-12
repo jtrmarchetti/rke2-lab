@@ -81,7 +81,7 @@
   notify:
     - Reload Apache
   ansible.builtin.template:
-    src: "{{ _var_artifact_host_files_dir }}/artifact_host_hardening.conf.j2"
+    src: "{{ artifact_host_hardening_template }}"
     dest: "{{ _var_artifact_host_hardening_conf }}"
     owner: root
     group: root
@@ -92,7 +92,7 @@
   notify:
     - Reload Apache
   ansible.builtin.template:
-    src: "{{ _var_artifact_host_files_dir }}/artifact_host_vhost.conf.j2"
+    src: "{{ artifact_host_vhost_template }}"
     dest: "{{ _var_artifact_host_site_available }}"
     owner: root
     group: root

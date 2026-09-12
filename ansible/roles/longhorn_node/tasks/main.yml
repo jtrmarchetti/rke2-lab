@@ -33,7 +33,7 @@
   register: _reg_longhorn_node_multipath
   notify: Restart multipathd
   ansible.builtin.template:
-    src: "{{ _var_longhorn_node_files_dir }}/longhorn-blacklist.conf.j2"
+    src: "{{ longhorn_node_blacklist_template }}"
     dest: "{{ longhorn_node_multipath_conf }}"
     owner: root
     group: root
@@ -58,6 +58,6 @@
     fail_msg: >-
       {{ longhorn_node_data_path }} is not on a separate filesystem — findmnt
       reports '{{ _reg_longhorn_node_mount['stdout'] | trim }}'. Longhorn would
-      write replicas onto the OS disk, which is the failure plan/OVERVIEW.md
+      write replicas onto the OS disk, which is the failure docs/source/developer/infrastructure-design.rst
       states as a rule: the OS disk is for the OS.
     quiet: true

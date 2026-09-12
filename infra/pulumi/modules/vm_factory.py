@@ -40,10 +40,22 @@ class VmCommonSettings:
     disk_io_thread: bool = True
     scsi_hardware: str = "virtio-scsi-single"
 
+    def vm_footprint_bytes(self, spec: "VmSpec") -> tuple[int, int]:
+        """(ram_bytes, disk_bytes) a VM asks of its host, for placement.
+
+        RAM is the spec's dedicated memory. Disk is the total of its LUN
+        sizes; the thin pool is large so RAM is the real constraint, but
+        both are tracked so a huge-disk spec can never stack onto a full node.
+        """
+        ram = spec.memory_mb * 1024 * 1024
+        disk = sum(spec.disks_gb) * 1024 * 1024 * 1024
+        return ram, disk
+
 def _disk_args(
     common: VmCommonSettings,
     disks_gb: list[int],
-    boot_image_file_id: pulumi.Input[str] | None,
+    host_node: str,
+    boot_image_by_node: dict[str, "pulumi.Input[str]"] | None,
 ) -> list[proxmox.VmLegacyDiskArgs]:
     disk_args: list[proxmox.VmLegacyDiskArgs] = []
     for idx, disk_gb in enumerate(disks_gb):
@@ -62,8 +74,15 @@ def _disk_args(
         if common.disk_io_thread:
             disk_kwargs["iothread"] = True
 
-        if idx == 0 and common.template_vm_id is None and boot_image_file_id is not None:
-            disk_kwargs["import_from"] = boot_image_file_id
+        # The boot image is a per-node file (each node downloaded its own
+        # copy), so import_from must be the id on THIS VM's node.
+        if (
+            idx == 0
+            and common.template_vm_id is None
+            and boot_image_by_node
+            and host_node in boot_image_by_node
+        ):
+            disk_kwargs["import_from"] = boot_image_by_node[host_node]
 
         disk_args.append(proxmox.VmLegacyDiskArgs(**disk_kwargs))
     return disk_args
@@ -96,9 +115,19 @@ def create_vm(
     spec: VmSpec,
     common: VmCommonSettings,
     provider: proxmox.Provider,
-    boot_image_file_id: pulumi.Input[str] | None = None,
+    node_name: str | None = None,
+    boot_image_by_node: dict[str, "pulumi.Input[str]"] | None = None,
     depends_on: list[pulumi.Resource] | None = None,
 ) -> proxmox.VmLegacy:
+    # The VM's host node: the placement planner's choice for this VM, falling
+    # back to the single template node when no per-VM placement is supplied.
+    host_node = node_name if node_name is not None else common.template_node_name
+
+    # Resolve per-node artifacts onto this VM's node.
+    boot_image_file_id = (
+        boot_image_by_node.get(host_node) if boot_image_by_node else None
+    )
+
     clone_args = None
     if common.template_vm_id is not None:
         clone_args = proxmox.VmLegacyCloneArgs(
@@ -107,9 +136,35 @@ def create_vm(
             full=True,
         )
 
+    # upgrade=False: PVE otherwise runs the unbounded first-boot auto-upgrade
+    # tail (apt full-upgrade before cloud-init user-data processing), which is
+    # the non-deterministic source of the slow-IO flake where a cold-booted VM
+    # stays SSH-unreachable for 50+ minutes while Ansible's join window has
+    # already expired. Updates are a first-class Ansible concern, not a PVE
+    # first-boot side effect. Cold-boot sshd readiness is handled on the
+    # Ansible side (bounded wait/retry), not by a PVE snippet: PVE 9.x
+    # refuses REST snippet upload and its filtered dir-store listing
+    # (GET /storage/<id>/content/snippets) 500s on dir stores, so the
+    # provider cannot complete a FileLegacy snippet resource on this stack.
+    init_kwargs: dict = {
+        "type": "nocloud",
+        "datastore_id": common.cloud_init_datastore_id,
+        "dns": proxmox.VmLegacyInitializationDnsArgs(
+            domain=common.vm_domain,
+            servers=spec.dns_servers,
+        ),
+        "ip_configs": _ip_config_args(spec.nics),
+        "user_account": proxmox.VmLegacyInitializationUserAccountArgs(
+            username=common.vm_username,
+            password=common.vm_user_password,
+            keys=[common.vm_ssh_public_key],
+        ),
+        "upgrade": False,
+    }
+
     vm = proxmox.VmLegacy(
         resource_name=spec.key,
-        node_name=common.template_node_name,
+        node_name=host_node,
         vm_id=spec.vm_id,
         name=spec.hostname,
         tags=spec.tags,
@@ -128,22 +183,9 @@ def create_vm(
             dedicated=spec.memory_mb,
         ),
         clone=clone_args,
-        disks=_disk_args(common, spec.disks_gb, boot_image_file_id),
+        disks=_disk_args(common, spec.disks_gb, host_node, boot_image_by_node),
         network_devices=_network_args(spec.nics),
-        initialization=proxmox.VmLegacyInitializationArgs(
-            type="nocloud",
-            datastore_id=common.cloud_init_datastore_id,
-            dns=proxmox.VmLegacyInitializationDnsArgs(
-                domain=common.vm_domain,
-                servers=spec.dns_servers,
-            ),
-            ip_configs=_ip_config_args(spec.nics),
-            user_account=proxmox.VmLegacyInitializationUserAccountArgs(
-                username=common.vm_username,
-                password=common.vm_user_password,
-                keys=[common.vm_ssh_public_key],
-            ),
-        ),
+        initialization=proxmox.VmLegacyInitializationArgs(**init_kwargs),
         opts=pulumi.ResourceOptions(provider=provider, depends_on=depends_on),
     )
     return vm

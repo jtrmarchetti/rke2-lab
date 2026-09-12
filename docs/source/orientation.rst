@@ -2,9 +2,21 @@
 The environment at a glance
 ===========================
 
-Everything in ``dev.lo`` runs as a virtual machine on a single Proxmox
-hypervisor. Eight VMs, all Ubuntu 24.04, all root-only — there is no
+Everything in ``dev.lo`` runs as a virtual machine on a three-node Proxmox
+cluster. Eight VMs, all Ubuntu 24.04, all root-only — there is no
 unprivileged login account anywhere in the estate.
+
+Hypervisor
+==========
+
+Proxmox 9.2 runs as a **three-node cluster on dedicated hardware**:
+``pve01``, ``pve02``, ``pve03``, each an i7-9700T with 62.6 GiB of RAM and
+NVMe-backed ``local-lvm`` thin storage. The internal LAN the lab VMs live on
+is a cluster-wide vxlan overlay, not a per-node bridge. The automation
+controller is **not** one of these — it sits outside the Proxmox
+environment entirely and drives it over a WireGuard tunnel. The overlay,
+VM placement and per-VM specs live in :doc:`reference/proxmox`; keep this
+page as the operator's summary.
 
 Hosts
 =====
@@ -31,7 +43,7 @@ Hosts
      - FreeIPA: LDAP, DNS, NTP and the ``dev.lo`` certificate authority
    * - ``kubecp01-03``
      - ``kubecp0N.dev.lo``
-     - 2
+     - 4
      - 6 GiB
      - RKE2 control plane and etcd. Tainted, so no workload schedules here
    * - ``kubewk01-03``
@@ -46,10 +58,10 @@ Addresses are fixed. Control plane nodes are ``192.168.2.21-23``, workers
 
 .. warning::
 
-   The eight VMs are allocated 64 GiB on a hypervisor with 62.8 GiB. This works
-   only because Proxmox hands out guest memory on demand. **Do not enable
-   ballooning or memory reservations**, and watch swap on the *hypervisor*
-   rather than in the guests — zero host swap is the health signal.
+   **Do not enable ballooning or memory reservations**, and watch swap on the
+   *hypervisor nodes* rather than in the guests — zero host swap is the
+   health signal. Per-node placement keeps every node under commit; the
+   headroom per node is set out in :doc:`reference/proxmox`.
 
 Networks
 ========
@@ -135,4 +147,5 @@ The machine this repository lives on, outside the Proxmox environment. It runs
 Pulumi (the VMs) and Ansible (everything else), and reaches the internal
 network through a point-to-point WireGuard tunnel terminated on ``repo01``.
 Lose the controller and you rebuild it from ``bootstrap/`` plus a backup of
-``~/.config/rke2lab/``; see ``plan/CONTROLLER.md``.
+``~/.config/rke2lab/``; :doc:`developer/automation-design` carries its
+dependency manifest and cold-start order.

@@ -20,8 +20,13 @@
         base_host_apt_proxy_enabled: "{{ inventory_base_host_apt_proxy_enabled }}"
         base_host_apt_proxy_url: "{{ inventory_base_host_apt_proxy_url }}"
         base_host_manage_hostname: "{{ inventory_base_host_manage_hostname }}"
-        base_host_split_dns_domains: "{{ inventory_base_host_split_dns_domains }}"
         base_host_split_dns_enabled: "{{ inventory_base_host_split_dns_enabled }}"
+        base_host_split_dns_interface: >-
+          {{ inventory_base_host_split_dns_interface }}
+        base_host_split_dns_servers: >-
+          {{ inventory_base_host_split_dns_servers }}
+        base_host_split_dns_template: >-
+          {{ inventory_base_host_split_dns_template }}
         base_host_target_hostname: "{{ inventory_base_host_target_hostname }}"
       ansible.builtin.include_role:
         name: base_host
@@ -48,6 +53,14 @@
       tags:
         - container_storage
       vars:
+        container_storage_containerd_root: >-
+          {{ inventory_container_storage_containerd_root }}
+        container_storage_containerd_template: >-
+          {{ inventory_container_storage_containerd_template }}
+        container_storage_docker_root: >-
+          {{ inventory_container_storage_docker_root }}
+        container_storage_docker_template: >-
+          {{ inventory_container_storage_docker_template }}
         container_storage_graceful_compose_dirs:
           - "{{ inventory_gitlab_compose_dir }}"
       ansible.builtin.include_role:
@@ -60,10 +73,9 @@
       tags:
         - time_sync
       vars:
-        time_sync_allow_networks: "{{ inventory_time_sync_allow_networks }}"
         time_sync_enabled: "{{ inventory_time_sync_enabled }}"
-        time_sync_source_directive: "{{ inventory_time_sync_source_directive }}"
         time_sync_sources: "{{ inventory_time_sync_sources }}"
+        time_sync_template: "{{ inventory_time_sync_template }}"
       ansible.builtin.include_role:
         name: time_sync
         apply:
@@ -87,32 +99,15 @@
       tags:
         - wireguard_gateway
       vars:
-        wireguard_gateway_address: "{{ inventory_wireguard_gateway_address }}"
         wireguard_gateway_enabled: "{{ inventory_wireguard_gateway_enabled }}"
         wireguard_gateway_interface: "{{ inventory_wireguard_gateway_interface }}"
-        wireguard_gateway_internal_subnet: >-
-          {{ inventory_wireguard_gateway_internal_subnet }}
         wireguard_gateway_ip_forward_enabled: >-
           {{ inventory_wireguard_gateway_ip_forward_enabled }}
-        wireguard_gateway_listen_port: >-
-          {{ inventory_wireguard_gateway_listen_port }}
-        wireguard_gateway_manage_firewall_nat: >-
-          {{ inventory_wireguard_gateway_manage_firewall_nat }}
-        wireguard_gateway_nat_out_interface: >-
-          {{ inventory_wireguard_gateway_nat_out_interface }}
-        wireguard_gateway_nat_source_cidr: >-
-          {{ inventory_wireguard_gateway_nat_source_cidr }}
-        wireguard_gateway_peer_allowed_ips: >-
-          {{ inventory_wireguard_gateway_peer_allowed_ips }}
-        wireguard_gateway_peer_endpoint: >-
-          {{ inventory_wireguard_gateway_peer_endpoint }}
-        wireguard_gateway_peer_persistent_keepalive: >-
-          {{ inventory_wireguard_gateway_peer_persistent_keepalive }}
-
         wireguard_gateway_peer_public_key: >-
           {{ _reg_repo01_controller_wg_public_key['stdout'] | trim }}
         wireguard_gateway_private_key: >-
           {{ inventory_wireguard_gateway_private_key }}
+        wireguard_gateway_template: "{{ inventory_wireguard_gateway_template }}"
       ansible.builtin.include_role:
         name: wireguard_gateway
         apply:
@@ -123,13 +118,8 @@
       tags:
         - socks5_proxy
       vars:
-        socks5_proxy_allowed_client_networks: >-
-          {{ inventory_socks5_proxy_allowed_client_networks }}
         socks5_proxy_enabled: "{{ inventory_socks5_proxy_enabled }}"
-        socks5_proxy_external_interfaces: >-
-          {{ inventory_socks5_proxy_external_interfaces }}
-        socks5_proxy_listen_address: "{{ inventory_socks5_proxy_listen_address }}"
-        socks5_proxy_listen_port: "{{ inventory_socks5_proxy_listen_port }}"
+        socks5_proxy_template: "{{ inventory_socks5_proxy_template }}"
       ansible.builtin.include_role:
         name: socks5_proxy
         apply:
@@ -144,9 +134,7 @@
         apt_proxy_bind_port: "{{ inventory_apt_proxy_bind_port }}"
         apt_proxy_cache_dir: "{{ inventory_apt_proxy_cache_dir }}"
         apt_proxy_enabled: "{{ inventory_apt_proxy_enabled }}"
-        apt_proxy_expire_days: "{{ inventory_apt_proxy_expire_days }}"
-        apt_proxy_keep_extra_versions: >-
-          {{ inventory_apt_proxy_keep_extra_versions }}
+        apt_proxy_template: "{{ inventory_apt_proxy_template }}"
       ansible.builtin.include_role:
         name: apt_proxy
         apply:
@@ -157,12 +145,13 @@
       tags:
         - artifact_host
       vars:
-        artifact_host_allowed_networks: >-
-          {{ inventory_artifact_host_allowed_networks }}
         artifact_host_directories: "{{ inventory_artifact_host_directories }}"
         artifact_host_document_root: "{{ inventory_artifact_host_document_root }}"
         artifact_host_enabled: "{{ inventory_artifact_host_enabled }}"
-        artifact_host_server_name: "{{ inventory_artifact_host_server_name }}"
+        artifact_host_hardening_template: >-
+          {{ inventory_artifact_host_hardening_template }}
+        artifact_host_vhost_template: >-
+          {{ inventory_artifact_host_vhost_template }}
       ansible.builtin.include_role:
         name: artifact_host
         apply:

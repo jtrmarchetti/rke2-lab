@@ -1,0 +1,31 @@
+{{ ansible_managed | comment }}
+
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-cilium
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    operator:
+      # The control plane carries CriticalAddonsOnly from first boot
+      # (inventory_rke2_server_node_taints). The chart's default operator
+      # tolerations only cover not-ready and role taints, so on a single
+      # cold node the operator cannot schedule, the agent cannot register
+      # its CRDs, and the node's CNI never initializes. Supply the
+      # chart's default list plus CriticalAddonsOnly; the chart itself
+      # appends the agent-not-ready toleration.
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: Exists
+        - key: "node-role.kubernetes.io/master"
+          operator: Exists
+        - key: "node.kubernetes.io/not-ready"
+          operator: Exists
+        - key: "node.cloudprovider.kubernetes.io/uninitialized"
+          operator: Exists
+        - key: "node-role.kubernetes.io/etcd"
+          operator: Exists
+        - key: "CriticalAddonsOnly"
+          operator: Exists

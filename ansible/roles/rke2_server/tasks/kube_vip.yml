@@ -10,7 +10,7 @@
 
 - name: kube_vip | Render the kube-vip RBAC and DaemonSet
   ansible.builtin.template:
-    src: "{{ _var_rke2_server_files_dir }}/kube-vip.yaml.j2"
+    src: "{{ rke2_server_kube_vip_template }}"
     dest: "{{ rke2_server_data_dir }}/server/manifests/kube-vip.yaml"
     owner: root
     group: root

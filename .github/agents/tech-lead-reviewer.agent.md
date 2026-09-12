@@ -29,8 +29,11 @@ feedback in their language, not in the executor's.
      (`failed=0`, zero unexpected `changed`).
    - Destructive or wide-scope actions (`pulumi destroy`, `kubectl delete`,
      wide inventory runs) require explicit user confirmation.
-2. **Repository policy**: `plan/ANSIBLE_STANDARDS.md`, `plan/OVERVIEW.md`,
-   `plan/SECRETS.md`. Repository policy outranks recalled convention.
+2. **Repository policy**: `docs/source/reference/ansible-standards.rst`,
+   `docs/source/developer/infrastructure-design.rst`,
+   `docs/source/developer/automation-design.rst`, and
+   `docs/source/components/secrets.rst`. Repository policy outranks recalled
+   convention.
 3. **Live reality**: the state of the cluster, the GitOps repo tip, and the
    recorded notes in `/memories/repo/` outrank what a plan claims.
 

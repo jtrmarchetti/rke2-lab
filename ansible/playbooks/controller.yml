@@ -32,6 +32,10 @@
         - kube_cli
       vars:
 
+        kube_cli_controller_bin_dir: >-
+          {{ inventory_kube_cli_controller_bin_dir }}
+        kube_cli_controller_config_dir: >-
+          {{ inventory_kube_cli_controller_config_dir }}
         kube_cli_controller_flux_url: >-
           {{ inventory_kube_cli_controller_flux_url }}
         kube_cli_controller_flux_version: >-
@@ -47,6 +51,10 @@
           {{ inventory_kube_cli_controller_kubeseal_url }}
         kube_cli_controller_kubeseal_version: >-
           {{ inventory_kube_cli_controller_kubeseal_version }}
+        kube_cli_controller_kubeconfig: >-
+          {{ inventory_kube_cli_controller_kubeconfig }}
+        kube_cli_controller_shell_template: >-
+          {{ inventory_kube_cli_controller_shell_template }}
         kube_cli_controller_kubectl_version: >-
           {{ hostvars[inventory_kubewk_control_host]['inventory_rke2_node_version']
              | regex_replace('\+.*$', '') }}

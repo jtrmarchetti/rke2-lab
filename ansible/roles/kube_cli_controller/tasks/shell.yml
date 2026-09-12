@@ -2,7 +2,7 @@
 
 - name: shell | Write the cluster environment
   ansible.builtin.template:
-    src: "{{ _var_kube_cli_controller_files_dir }}/kube-env.sh.j2"
+    src: "{{ kube_cli_controller_shell_template }}"
     dest: "{{ kube_cli_controller_config_dir }}/kube-env.sh"
     mode: "0644"
 
@@ -41,8 +41,8 @@
       {{ _reg_kube_cli_controller_check['stderr'] | default('') }}
       The kubeconfig is written by the rke2_server role during
       playbooks/kubecp.yml, so run that first if the file is missing. If it is
-      present, check the tunnel is up and that kube.dev.lo still resolves to the
-      virtual address.
+      present, check the tunnel is up and that the cluster's virtual DNS
+      name still resolves to the virtual address.
     success_msg: >-
       kubectl reaches the cluster:
       {{ _reg_kube_cli_controller_check['stdout_lines'] | default([]) | length }}

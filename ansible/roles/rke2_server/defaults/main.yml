@@ -5,45 +5,23 @@ rke2_server_bootstrap: false
 
 rke2_server_api_address: null
 rke2_server_api_name: null
-rke2_server_supervisor_port: 9345
 rke2_server_api_port: 6443
 
 rke2_server_tls_san: []
 
-rke2_server_cni: cilium
-
-rke2_server_disable: []
-
 rke2_server_ingress_controller:
   - traefik
 
-rke2_server_ingress_node_selector: node-role.kubernetes.io/worker
-
-rke2_server_ingress_address: null
-
-rke2_server_node_taints:
-  - CriticalAddonsOnly=true:NoExecute
-
 rke2_server_data_dir: /data1/rancher/rke2
 
-rke2_server_etcd_snapshot_schedule: "0 */6 * * *"
-rke2_server_etcd_snapshot_retention: 10
-
-rke2_server_etcd_args:
-  - heartbeat-interval=1000
-  - election-timeout=5000
-
-rke2_server_expose_metrics: true
-
 rke2_server_kube_vip_enabled: true
-
-rke2_server_kube_vip_image: ghcr.io/kube-vip/kube-vip:v1.2.3
-rke2_server_kube_vip_interface: eth0
-rke2_server_kube_vip_lease_duration: 15
-rke2_server_kube_vip_renew_deadline: 10
-rke2_server_kube_vip_retry_period: 2
 
 rke2_server_ready_retries: 90
 rke2_server_ready_delay: 10
 
 rke2_server_kubeconfig_dest: ""
+
+rke2_server_config_template: null
+rke2_server_traefik_template: null
+rke2_server_cilium_config_template: null
+rke2_server_kube_vip_template: null

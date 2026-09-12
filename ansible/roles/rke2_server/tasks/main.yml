@@ -9,8 +9,34 @@
     fail_msg: >-
       rke2_server needs a cluster token, this node's address, and the names the
       API certificate must cover. The token comes from RKE2_TOKEN in
-      ~/.config/rke2lab/env.sh; see plan/SECRETS.md.
+      ~/.config/rke2lab/env.sh; see docs/source/components/secrets.rst.
     quiet: true
+
+- name: main | Record the etcd rejoin join-pin marker
+  # The etcd_rejoin heal writes a marker holding the surviving control
+  # plane address it rejoined through. The config template renders the
+  # server address from the marker on every build, so a healed bootstrap
+  # node stays pinned into the join path instead of falling back to
+  # new-cluster mode. Healthy nodes have no marker and render the
+  # canonical line.
+  register: _reg_rke2_server_join_pin
+  when: (rke2_server_enabled | bool)
+  changed_when: false
+  failed_when: false
+  ansible.builtin.slurp:
+    src: "{{ rke2_server_data_dir }}/join-pin"
+
+- name: main | Resolve the join-pin value for the config render
+  # A failed slurp (no marker) registers without a content key, and its
+  # failed_when override means there is no failed key either, so the
+  # value must be read key-safely with subscript access: no marker ->
+  # empty string -> the template renders the canonical line.
+  when: (rke2_server_enabled | bool)
+  changed_when: false
+  ansible.builtin.set_fact:
+    _rke2_server_join_pin: >-
+      {{ (_reg_rke2_server_join_pin['content'] | default('', true))
+         | b64decode | trim | default('', true) }}
 
 - name: main | Configure the RKE2 server
   when: (rke2_server_enabled | bool)
@@ -29,6 +55,12 @@
     - (rke2_server_ingress_controller | length) > 0
     - (rke2_server_bootstrap | bool)
   ansible.builtin.include_tasks: ingress.yml
+
+- name: main | Configure the packaged CNI chart
+  when:
+    - (rke2_server_enabled | bool)
+    - (rke2_server_bootstrap | bool)
+  ansible.builtin.include_tasks: cilium.yml
 
 - name: main | Start the RKE2 server and wait for it to be usable
   when: (rke2_server_enabled | bool)

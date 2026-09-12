@@ -44,7 +44,7 @@
       vars:
         _validate_expected: >-
           {{ groups['kubecp']
-             | map('regex_replace', '$', '.dev.lo')
+             | map('extract', hostvars, 'inventory_base_host_target_hostname')
              | map('regex_replace', '^', 'node/')
              | list }}
       ansible.builtin.assert:

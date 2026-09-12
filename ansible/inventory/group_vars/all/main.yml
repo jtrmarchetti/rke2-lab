@@ -1,5 +1,30 @@
 ---
-inventory_phase1_environment_name: dev_lo
+inventory_files_base: "{{ ansible_config_file | dirname }}/files"
+
+inventory_base_host_split_dns_template: >-
+  {{ inventory_files_base }}/base_host/split_dns_netplan.j2
+inventory_base_host_split_dns_interface: ""
+inventory_base_host_split_dns_servers: []
+
+inventory_container_storage_docker_template: >-
+  {{ inventory_files_base }}/container_storage/daemon.json.j2
+inventory_container_storage_containerd_template: >-
+  {{ inventory_files_base }}/container_storage/containerd_config.toml.j2
+inventory_container_storage_docker_root: /data1/docker
+inventory_container_storage_containerd_root: /data1/containerd
+
+inventory_rke2_node_registries_template: >-
+  {{ inventory_files_base }}/rke2_node/registries.yaml.j2
+inventory_rke2_node_inotify_template: >-
+  {{ inventory_files_base }}/rke2_node/inotify_sysctl.conf.j2
+inventory_rke2_node_inotify_max_user_instances: 8192
+inventory_rke2_node_inotify_max_user_watches: 524288
+
+inventory_time_sync_makestep: "1.0 3"
+inventory_time_sync_local_stratum: 0
+inventory_time_sync_allow_networks: []
+inventory_time_sync_template: >-
+  {{ inventory_files_base }}/time_sync/chrony.conf.j2
 
 inventory_kubewk_control_host: kubecp01
 
@@ -57,3 +82,60 @@ inventory_rke2_node_registry_mirrors:
   - upstream: registry.access.redhat.com
     pattern: "^(.*)"
     replacement: rke2/images/$1
+
+# Join concurrency. The join plays each unpack the RKE2 tarball and pull
+# the image set from repo01's GitLab registry. The nested-VM era ran them
+# 1-wide because a multi-node burst saturated that shared fetch path and
+# turned one node's CNI image extract into a partial write that RKE2's
+# .extracted marker then locks in permanently. On the current dedicated
+# hardware that I/O path no longer applies: rke2_publish pre-mirrors the
+# full image set into the registry before any join starts, so a join only
+# ever pulls from repo01 (never upstream), and each VM unpacks on its own
+# virtual disk, so a burst cannot tear a shared write. Widths: kubecp
+# stays 1-wide for an I/O-independent reason - the joiner's systemd start
+# fires the etcd-member-add BEFORE the readyz poll that follows it, so a
+# 2-wide batch (bootstrap + joiner together) races the bootstrap's API
+# and the joiner's start aborts (observed 2026-09-10: kubecp02 "Unable
+# to start service rke2-server"); one etcd voter at a time is the
+# control-plane constraint. kubewk joins add no etcd membership, but the
+# 3-wide widening was measured and reverted (2026-09-10): it is SAFE
+# (all three workers joined clean, no partial-write symptom) yet SLOWER -
+# the worker window went 309s serial -> 431s 3-wide (one worker sat on
+# 'Ensure base packages are installed' ~5:25 while the 3-way apt burst
+# contended on repo01's proxy) and the whole cold build went 48m37s ->
+# 51m25s. Serial stays: on dedicated hardware the joins were never the
+# I/O bottleneck the nested-VM era assumed. On a warm re-run every join
+# role no-ops, so the width costs nothing there.
+# Overridable in case the topology changes.
+# Templating trap (verified 2026-09-09, ansible-core 2.21.3): the
+# play-level serial: keyword is templated before inventory and play vars
+# enter scope, so these two lines do NOT drive the join plays by
+# themselves - the effective width is the default(N) fallback written in
+# the plays (serial: "{{ kubecp_serial | default(1) }}" / default(1)).
+# These lines are the single source of the documented values; keep the
+# plays' default(N) numerically consistent with them. -e kubecp_serial=N
+# / -e kubewk_serial=N still reach the keyword and override.
+kubecp_serial: 1
+kubewk_serial: 1
+
+# Cold-VM sshd / transient vxlan-blip guard: the wait_for_connection pre-plays
+# on kubecp/kubewk ride out a slow first-boot sshd before the heavy play's
+# Gathering Facts aborts the build. Sized for the current (real-disk)
+# hypervisor: a measured cold cluster-form saw the pre-play clear in ~58s,
+# so 300s holds ~5x headroom for a slow boot or an overlay blip. The 900s
+# value predated the hardware migration and was sized for the slow nested-VM
+# I/O. The inline fallback in the play matches these values. Overridable per
+# run.
+kubecp_ssh_wait: 300
+kubewk_ssh_wait: 300
+
+# kube_cli_node content values and template paths, shared by kubecp and
+# kubewk which both link the node CLI set.
+inventory_kube_cli_node_alias: k
+inventory_kube_cli_node_containerd_sock: >-
+  unix:///run/k3s/containerd/containerd.sock
+inventory_kube_cli_node_kubeconfig: /etc/rancher/rke2/rke2.yaml
+inventory_kube_cli_node_crictl_template: >-
+  {{ inventory_files_base }}/kube_cli_node/crictl.yaml.j2
+inventory_kube_cli_node_cli_template: >-
+  {{ inventory_files_base }}/kube_cli_node/rke2-cli.sh.j2

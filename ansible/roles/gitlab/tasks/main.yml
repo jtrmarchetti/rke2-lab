@@ -24,7 +24,7 @@
       (OIDC_CLIENT_SECRET_GITLAB from ~/.config/rke2lab/env.sh), and the domain
       CA to verify Keycloak's certificate with. An empty client secret produces
       a sign-in button that fails at the token exchange, long after this run
-      has reported success. See plan/SECRETS.md.
+      has reported success. See docs/source/components/secrets.rst.
     quiet: true
 
 - name: main | Check the service certificates are present
@@ -73,7 +73,7 @@
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - "{{ gitlab_ssl_source_dir }}/dev.lo-ca.crt"
+    - "{{ gitlab_ssl_source_dir }}/{{ gitlab_ca_cert_name }}"
     - /run/docker.pid
 
 - name: main | Restart the container runtime when it predates the domain CA
@@ -145,8 +145,8 @@
   when: (gitlab_enabled | bool)
   no_log: "{{ gitlab_no_log | bool }}"
   ansible.builtin.template:
-    src: "{{ _var_gitlab_files_dir }}/gitlab.env.j2"
-    dest: "{{ _var_gitlab_env_file }}"
+    src: "{{ gitlab_env_template }}"
+    dest: "{{ gitlab_compose_dir }}/gitlab.env"
     owner: root
     group: root
     mode: "0600"
@@ -154,7 +154,7 @@
 - name: main | Ensure the GitLab compose file is present
   when: (gitlab_enabled | bool)
   ansible.builtin.template:
-    src: "{{ _var_gitlab_files_dir }}/docker-compose.gitlab.yml.j2"
+    src: "{{ gitlab_compose_template }}"
     dest: "{{ _var_gitlab_compose_file }}"
     owner: root
     group: root

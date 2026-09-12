@@ -11,11 +11,6 @@ argument_specs:
       split_dns_enabled:
         type: bool
         required: false
-      split_dns_upstream_servers:
-        description: Resolvers for names outside the forwarded zones.
-        type: list
-        elements: str
-        required: false
       split_dns_forward_zones:
         description: >-
           Zones answered by a specific nameserver. Each entry needs domain and
@@ -24,19 +19,10 @@ argument_specs:
         type: list
         elements: dict
         required: false
-      split_dns_listen_addresses:
-        description: Addresses dnsmasq answers on.
-        type: list
-        elements: str
-        required: false
       split_dns_manage_resolver:
         description: >-
           Stop and mask systemd-resolved and point /etc/resolv.conf at dnsmasq.
         type: bool
-        required: false
-      split_dns_search_domain:
-        description: Search domain for /etc/resolv.conf. Empty writes none.
-        type: str
         required: false
       split_dns_verify_zones:
         description: >-
@@ -44,10 +30,17 @@ argument_specs:
           configuring, so a daemon that runs but answers nothing fails here.
         type: bool
         required: false
-      split_dns_cache_size:
-        type: int
-        required: false
       split_dns_packages:
         type: list
         elements: str
+        required: false
+      split_dns_config_template:
+        description: >-
+          Path to the dnsmasq config template, under the repo files tree.
+        type: str
+        required: false
+      split_dns_resolver_template:
+        description: >-
+          Path to the /etc/resolv.conf template, under the repo files tree.
+        type: str
         required: false

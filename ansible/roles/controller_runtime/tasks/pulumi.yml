@@ -20,7 +20,7 @@
   check_mode: false
   register: _reg_controller_runtime_pulumi
   ansible.builtin.command:
-    cmd: "{{ _var_controller_runtime_pulumi_bin }}/pulumi version"
+    cmd: "{{ inventory_controller_runtime_pulumi_bin }}/pulumi version"
 
 - name: pulumi | Download and install the pinned release
   when: >-
@@ -48,14 +48,14 @@
 
     - name: pulumi | Ensure the install directory exists
       ansible.builtin.file:
-        path: "{{ _var_controller_runtime_pulumi_bin }}"
+        path: "{{ inventory_controller_runtime_pulumi_bin }}"
         state: directory
         mode: "0755"
 
     - name: pulumi | Install the binaries
       ansible.builtin.copy:
         src: "{{ _reg_controller_runtime_tmp['path'] }}/pulumi/"
-        dest: "{{ _var_controller_runtime_pulumi_bin }}/"
+        dest: "{{ inventory_controller_runtime_pulumi_bin }}/"
         remote_src: true
         mode: "0755"
   always:
@@ -84,4 +84,4 @@
     not in _reg_controller_runtime_pulumi_check['stdout']
   register: _reg_controller_runtime_pulumi_check
   ansible.builtin.command:
-    cmd: "{{ _var_controller_runtime_pulumi_bin }}/pulumi version"
+    cmd: "{{ inventory_controller_runtime_pulumi_bin }}/pulumi version"

@@ -7,7 +7,7 @@ metadata:
   namespace: flux-system
 spec:
   type: oci
-  url: oci://{{ gitops_source_registry_host }}/{{ gitops_source_charts_repo }}
+  url: oci://{{ inventory_gitops_source_registry_host }}/{{ inventory_gitops_source_charts_repo }}
   interval: 1h
   secretRef:
     name: gitlab-registry

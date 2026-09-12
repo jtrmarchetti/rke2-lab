@@ -24,10 +24,12 @@ The five nouns that matter
    reachable only inside the cluster; type ``LoadBalancer`` gets an address
    from the pool on ``192.168.2.40-52``.
 
-**Ingress**
+**Gateway / HTTPRoute**
    An HTTP front door: hostname in, Service out. Every ``*.k8s.dev.lo`` web UI
-   is an Ingress handled by Traefik on ``192.168.2.41``, with a certificate
-   cert-manager issued from the ``k8s-ca`` issuer.
+   is an ``HTTPRoute`` that attaches to the shared ``platform`` ``Gateway`` in
+   ``kube-system`` (programmed by Traefik on ``192.168.2.41``); the Gateway's
+   listener terminates TLS with a certificate cert-manager issued into
+   ``kube-system`` from the ``k8s-ca`` issuer.
 
 **PersistentVolumeClaim (PVC)**
    A request for disk. Longhorn satisfies it by creating a replicated volume
@@ -81,7 +83,7 @@ Reading a pod's state
 What is different about this cluster
 ====================================
 
-**You do not ``kubectl apply``.** Flux reconciles every workload from Git. A
+**You do not** ``kubectl apply``. Flux reconciles every workload from Git. A
 resource you create by hand is not deleted, but a resource you *edit* is
 reverted the next time Flux reconciles — typically within minutes. Changes go
 through :doc:`developer/adding-a-service`.

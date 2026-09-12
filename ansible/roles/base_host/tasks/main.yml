@@ -45,7 +45,7 @@
   notify:
     - Apply netplan configuration
   ansible.builtin.template:
-    src: "{{ _var_base_host_files_dir }}/split_dns_netplan.j2"
+    src: "{{ base_host_split_dns_template }}"
     dest: "{{ _var_base_host_split_dns_netplan_path }}"
     owner: root
     group: root
@@ -95,10 +95,12 @@
   delay: "{{ base_host_apt_update_delay }}"
   until: _reg_base_host_apt_update.rc == 0
   ansible.builtin.shell: |
-    pkill -9 -f 'AnsiballZ_ap[t]' 2>/dev/null || true
-    pkill -9 -f '/usr/lib/apt/methods/[a-z]+' 2>/dev/null || true
-    pkill -9 -x apt-get 2>/dev/null || true
-    exec timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
+    # flock on the dpkg frontend lock instead of killing apt
+    # processes: a lock held by a live process clears itself when it
+    # finishes, so the bounded retries below clear it without killing
+    # anyone. -w caps the per-attempt wait; until/retries re-attempt.
+    exec flock -w 120 /var/lib/dpkg/lock-frontend \
+      timeout -k 30 "{{ base_host_apt_update_timeout }}" apt-get update
 
 - name: main | Ensure base packages are installed
   ansible.builtin.apt:
@@ -111,3 +113,14 @@
     - (base_host_target_hostname | length > 0)
   ansible.builtin.hostname:
     name: "{{ base_host_target_hostname }}"
+
+# The PVE cloud image ships with the ssh unit disabled; only a one-shot
+# cloud-init start brings it up at first boot, and that one-shot can race
+# the first-boot remount/resize and never fire, stranding an unreachable
+# VM. Enabling + starting the unit here makes every boot and re-run
+# self-heal instead of leaving the host down until a manual reset.
+- name: main | Ensure the SSH server is enabled and started
+  ansible.builtin.systemd:
+    name: ssh
+    state: started
+    enabled: true

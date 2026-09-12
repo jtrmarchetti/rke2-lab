@@ -7,20 +7,13 @@ controller_tunnel_validate_enabled: true
 
 controller_tunnel_interface: wg0
 
-controller_tunnel_address: null
-controller_tunnel_listen_port: 51821
-
 controller_tunnel_private_key: ""
 
 controller_tunnel_peer_private_key: ""
 
 controller_tunnel_peer_public_key: ""
 
-controller_tunnel_peer_endpoint: ""
-controller_tunnel_peer_allowed_ips: null
-controller_tunnel_peer_persistent_keepalive: 25
-
-controller_tunnel_route_subnets: []
+controller_tunnel_wg_template: null
 
 controller_tunnel_validate_address: null
 controller_tunnel_validate_port: 22

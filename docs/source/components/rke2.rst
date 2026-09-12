@@ -47,8 +47,10 @@ etcd
 ====
 
 Three members, one per server. It is the most storage-sensitive thing in the
-environment: it fsyncs on every commit, and this hypervisor is itself a VM
-whose storage sits at etcd's fsync floor.
+environment: it fsyncs on every commit, and the PVE nodes' NVMe storage is
+still tuned for etcd's write pattern. The remaining etcd tuning is burst
+safety, not latency hiding — a heartbeat / election timeout wide enough that
+a slow commit is not mistaken for a dead leader.
 
 .. code-block:: console
 
@@ -105,12 +107,13 @@ class. Every ``*.k8s.dev.lo`` web UI arrives here.
 
    $ kubectl -n kube-system get pods -l app.kubernetes.io/name=traefik
    $ kubectl -n kube-system logs -l app.kubernetes.io/name=traefik --tail=50
-   $ kubectl get ingress -A
+   $ kubectl get gateway,httproute -A
 
-A 404 from Traefik means no Ingress matched the hostname — check the Ingress
-exists and its ``host`` is exactly right. A 503 means the Ingress matched and
-its backend Service has no ready endpoints, which is a workload problem, not an
-ingress one.
+Traefik programs the shared ``platform`` Gateway (see
+:doc:`../developer/adding-a-service`). A 404 means no ``HTTPRoute`` matched the
+hostname — check a route for that host exists and its ``hostnames`` is exactly
+right. A 503 means the route matched and its backend Service has no ready
+endpoints, which is a workload problem, not an edge one.
 
 .. note::
 

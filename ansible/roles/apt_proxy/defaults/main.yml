@@ -5,10 +5,5 @@ apt_proxy_bind_addresses: null
 apt_proxy_bind_port: 3142
 
 apt_proxy_cache_dir: /data1/apt-cacher-ng
-apt_proxy_log_dir: /var/log/apt-cacher-ng
 
-apt_proxy_expire_days: 7
-apt_proxy_keep_extra_versions: 1
-
-apt_proxy_passthrough_pattern: >-
-  ^(archive|security|ports|changelogs)\.ubuntu\.com:443$
+apt_proxy_template: null

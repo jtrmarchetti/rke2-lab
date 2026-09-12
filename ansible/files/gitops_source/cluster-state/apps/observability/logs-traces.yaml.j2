@@ -72,7 +72,7 @@ spec:
           ruler: loki
         s3:
           endpoint: http://garage.garage.svc.cluster.local:3900
-          region: dev-lo
+          region: "{{ inventory_garage_init_zone }}"
           s3ForcePathStyle: true
           insecure: true
       limits_config:
@@ -179,7 +179,7 @@ spec:
           s3:
             bucket: tempo
             endpoint: garage.garage.svc.cluster.local:3900
-            region: dev-lo
+            region: "{{ inventory_garage_init_zone }}"
             insecure: true
             forcepathstyle: true
       retention: 48h

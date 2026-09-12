@@ -51,6 +51,10 @@ argument_specs:
         type: str
         default: cluster-state
         description: Project the cluster reconciles from.
+      gitops_source_templates_dir:
+        type: path
+        required: true
+        description: Directory of the cluster-state template tree, from inventory.
       gitops_source_branch:
         type: str
         default: main
@@ -59,46 +63,16 @@ argument_specs:
             project's default branch when this role creates it.
       gitops_source_cluster_path:
         type: str
-        default: ./clusters/dev-lo
+        default: null
         description:
           - Flux's entry point within the repository, as the Kustomization in
             gotk-sync.yaml reconciles it.
       gitops_source_domain:
         type: str
         description: The domain the environment lives in.
-      gitops_source_cluster_domain:
-        type: str
-        description:
-          - The cluster's own subdomain, which the domain forwards wholesale
-            and holds no records inside.
-      gitops_source_keycloak_realm:
-        type: str
-        description:
-          - The Keycloak realm the cluster's services authenticate against.
-            Every OIDC endpoint in the rendered tree is built from it. Must not
-            be master; see the keycloak_realm role.
       gitops_source_registry_host:
         type: str
         description: Registry every image and chart is pulled from.
-      gitops_source_charts_repo:
-        type: str
-        default: rke2/charts
-        description:
-          - OCI repository charts are installed from, as group/project. Keep
-            equal to rke2_publish's group and charts project.
-      gitops_source_lb_range:
-        type: str
-        description: Address pool the LoadBalancer controller allocates from.
-      gitops_source_dns_address:
-        type: str
-        description:
-          - Address the cluster's DNS service requests, because the domain's
-            forward zone names it.
-      gitops_source_ingress_address:
-        type: str
-        description:
-          - Address every ingress hostname resolves to, answered by the
-            cluster's own DNS.
       gitops_source_domain_ca_file:
         type: str
         description:
@@ -169,6 +143,18 @@ argument_specs:
             not enough to rekey.
           - Empty is a real state, not a mistake - on a cold rebuild the vault
             does not exist yet. The entry is omitted while this is empty.
+      gitops_source_unseal_keys_only:
+        type: bool
+        default: false
+        description:
+          - The surgical second pass. When true the role skips the project
+            calls and the template-tree render, and seals only the OpenBao
+            unseal-key entry into the working clone the earlier full pass
+            left behind. In steady state, where the keys did not change,
+            the sealed entry is reused and no commit happens. The unseal
+            keys must be present for this mode to work; it is the
+            `site.yml` second `gitops.yml` import that runs it, after
+            `cluster_init` has recorded the keys.
       gitops_source_no_log:
         type: bool
         default: true

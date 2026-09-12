@@ -12,7 +12,34 @@
       and the threshold cannot exceed the number of shares.
     quiet: true
 
+- name: main | Wait for the vault pod to report Ready
+  changed_when: false
+  failed_when: false
+  register: _reg_openbao_init_pod_ready
+  until: _reg_openbao_init_pod_ready.rc == 0
+  retries: "{{ openbao_init_pod_ready_retries }}"
+  delay: "{{ openbao_init_pod_ready_delay }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ openbao_init_kubectl }} wait -n {{ openbao_init_namespace }}
+      pod/{{ openbao_init_pod }}
+      --for=condition=Ready
+      --timeout={{ openbao_init_pod_ready_timeout }}s
+
+- name: main | Fail with an actionable message when the pod never became Ready
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_init_pod }} did not report Ready after
+      {{ openbao_init_pod_ready_retries }} x
+      {{ openbao_init_pod_ready_delay }}s polls. On a cold build the OpenBao
+      stack
+      is installed by the Flux cascade; check `kubectl -n
+      {{ openbao_init_namespace }} get pods`, the HelmRelease conditions, and
+      pod events before re-running.
+  when: _reg_openbao_init_pod_ready.rc != 0
+
 - name: main | Read the vault's current state
+  when: not ansible_check_mode
   changed_when: false
 
   failed_when: _reg_openbao_init_status['rc'] not in [0, 1, 2]
@@ -20,14 +47,15 @@
   until: >-
     _reg_openbao_init_status['rc'] in [0, 1, 2]
     and ('"initialized"' in _reg_openbao_init_status['stdout'])
-  retries: 80
-  delay: 15
+  retries: 4
+  delay: 5
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
       {{ openbao_init_pod }} -- bao status -format=json
 
 - name: main | Parse the read result (an empty dict when the pod was unreachable)
+  when: not ansible_check_mode
   ansible.builtin.set_fact:
     _var_openbao_init_status: >-
       {{ _reg_openbao_init_status['stdout'] | default('{}', true) | from_json }}
@@ -39,9 +67,12 @@
       the pod is probably not up yet. On a cold build the OpenBao stack is
       installed by the Flux cascade, which may still be settling. Re-run
       this playbook once the cluster workloads are Ready.
-  when: (_var_openbao_init_status | length) == 0
+  when:
+    - not ansible_check_mode
+    - (_var_openbao_init_status | default({}, true) | length) == 0
 
 - name: main | Report the vault's state
+  when: not ansible_check_mode
   ansible.builtin.debug:
     msg: >-
       {{ openbao_init_pod }}: initialised =
@@ -50,7 +81,9 @@
     verbosity: 0
 
 - name: main | Initialise the vault
-  when: not (_var_openbao_init_status['initialized'] | default(false) | bool)
+  when:
+    - not (_var_openbao_init_status['initialized'] | default(false) | bool)
+    - not ansible_check_mode
   block:
     - name: main | Run the one-time initialisation
       changed_when: true
@@ -86,9 +119,11 @@
       ansible.builtin.command:
         cmd: >-
           {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
-          {{ openbao_init_pod }} -- bao operator unseal {{ _item_openbao_init_unseal_key }}
+          {{ openbao_init_pod }} -- bao operator unseal
+          {{ _item_openbao_init_unseal_key }}
 
 - name: main | Confirm the vault is initialised and unsealed
+  when: not ansible_check_mode
   changed_when: false
   failed_when: _reg_openbao_init_final['rc'] not in [0, 2]
   register: _reg_openbao_init_final
@@ -96,14 +131,15 @@
     _reg_openbao_init_final['rc'] == 0
     and not ((_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)
              ['sealed'] | default(false) | bool)
-  retries: 10
-  delay: 6
+  retries: 20
+  delay: 5
   ansible.builtin.command:
     cmd: >-
       {{ openbao_init_kubectl }} exec -n {{ openbao_init_namespace }}
       {{ openbao_init_pod }} -- bao status -format=json
 
 - name: main | Assert the vault is open
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - (_reg_openbao_init_final['stdout'] | default('{}', true) | from_json)

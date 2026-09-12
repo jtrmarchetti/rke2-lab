@@ -1,6 +1,6 @@
 Declarative state for the RKE2 cluster, reconciled by Flux from the internal
 GitLab. Nothing here reaches the internet: every image resolves to
-`{{ gitops_source_registry_host }}` through the containerd rewrite configured
+`{{ inventory_gitops_source_registry_host }}` through the containerd rewrite configured
 on each node, so manifests keep upstream image names and stay portable.
 
 Every file below — including this one — is rendered by the `gitops_source`
@@ -19,7 +19,8 @@ appears here.
 
 This is not bureaucracy. The lab is built on the premise that the whole
 internal environment can be rebuilt from the automation repository alone, and
-`repo01` — this GitLab — is one of the things that gets rebuilt. State that
+the GitLab host — this repository's own host — is one of the things that gets
+rebuilt. State that
 exists only here is state that does not survive that.
 
 ```text
@@ -49,7 +50,8 @@ path and never holds the value.
 Three things are sealed into Git instead, and only three, because each is
 needed before the vault can be reached at all: the registry credential Flux
 pulls charts with, the CA key pair cert-manager issues from — including the
-certificate on the vault's own ingress — and the vault's unseal keys.
+certificate on the vault's own HTTPRoute on the platform Gateway listener —
+and the vault's unseal keys.
 
 Every `SealedSecret` here is generated at play time by `kubeseal`, from
 plaintext held in `~/.config/rke2lab/env.sh` on the controller and from the

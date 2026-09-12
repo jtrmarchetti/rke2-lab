@@ -3,7 +3,7 @@
 - name: named_options | Render the BIND options customization
   register: _reg_freeipa_server_named_options
   ansible.builtin.template:
-    src: "{{ _var_freeipa_server_files_dir }}/named-options-ext.conf.j2"
+    src: "{{ freeipa_server_named_options_template }}"
     dest: "{{ freeipa_server_named_options_path }}"
     owner: root
     group: "{{ freeipa_server_named_config_group }}"
@@ -18,7 +18,9 @@
       ipactl restart --ignore-service-failures
 
 - name: named_options | Wait for the domain to answer again
-  when: _reg_freeipa_server_named_options is changed
+  when:
+    - _reg_freeipa_server_named_options is changed
+    - not ansible_check_mode
   changed_when: false
   register: _reg_freeipa_server_named_ready
   until: (_reg_freeipa_server_named_ready['stdout'] | trim | length) > 0

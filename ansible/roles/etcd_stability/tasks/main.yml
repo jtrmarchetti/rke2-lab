@@ -1,0 +1,80 @@
+---
+
+- name: etcd_stability | Probe this node's API server until it is healthy
+  when: (etcd_stability_enabled | bool) and not ansible_check_mode
+  changed_when: false
+  failed_when: false
+  register: _reg_etcd_stability_readyz
+  until: >-
+    _reg_etcd_stability_readyz['rc'] | default(1) == 0
+    and _reg_etcd_stability_readyz['stdout'] | default('') == 'ok'
+  retries: "{{ etcd_stability_retries }}"
+  delay: "{{ etcd_stability_delay }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ etcd_stability_kubectl }} get --raw=/readyz
+
+- name: etcd_stability | Settle the cluster into a live quorum
+  when:
+    - (etcd_stability_enabled | bool)
+    - (etcd_stability_bootstrap | bool)
+    - not ansible_check_mode
+  changed_when: false
+  register: _reg_etcd_stability_census
+  until: _reg_etcd_stability_census['rc'] | default(1) == 0
+  retries: "{{ etcd_stability_retries }}"
+  delay: "{{ etcd_stability_delay }}"
+  ansible.builtin.shell: |
+    # Transactional census: a wedged member still lists itself while the
+    # healthy quorum cannot commit, so a plain member listing proves
+    # nothing. The quorum write and delete below is the only signal that
+    # the cluster is usable, and the retries give a freshly joined
+    # cluster a bounded window to settle on its own.
+    set -euo pipefail
+    K="{{ etcd_stability_kubectl }}"
+    JP='{range .items[*]}{.metadata.name} '
+    JP="${JP}{.status.conditions[?(@.type==\"Ready\")].status} "
+    JP="${JP}{.status.conditions[?(@.type==\"EtcdIsVoter\")].status}{\"\n\"}{end}"
+    census=$($K get nodes -o jsonpath="$JP")
+    voters=$(printf '%s\n' "$census" | grep -c ' True True$' || true)
+    [ "$voters" -eq "{{ etcd_stability_cp_hostnames | length }}" ]
+    LPATH='{.spec.holderIdentity}'
+    holder=$($K -n kube-system get lease rke2-etcd -o jsonpath="$LPATH")
+    printf '%s\n' "$census" | grep -q "^${holder} True True$"
+    $K create configmap etcd-stability-probe -n kube-system \
+      --from-literal probe=etcd-stability --dry-run=client -o yaml | $K apply -f -
+    $K delete configmap etcd-stability-probe -n kube-system --ignore-not-found
+  args:
+    executable: /bin/bash
+
+- name: etcd_stability | Assert the cluster settled
+  when:
+    - (etcd_stability_enabled | bool)
+    - (etcd_stability_bootstrap | bool)
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - _reg_etcd_stability_census['rc'] | default(1) == 0
+    fail_msg: >-
+      The etcd cluster did not settle into a live quorum within
+      {{ etcd_stability_retries | int * etcd_stability_delay | int }}s.
+      Check, in order, on each control plane node: `journalctl -u
+      rke2-server` for leaderelection-lost crash loops, whether an
+      orphaned kube-vip left the API virtual address
+      ({{ etcd_stability_api_address }}) as a local interface address
+      that traps the node's own bootstrap traffic, and `etcdctl
+      endpoint health` from the etcd pod rootfs.
+    quiet: true
+
+- name: etcd_stability | Report the settled cluster
+  when:
+    - (etcd_stability_enabled | bool)
+    - (etcd_stability_bootstrap | bool)
+    - not ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      The etcd cluster is settled: all
+      {{ etcd_stability_cp_hostnames | length }} control plane nodes
+      report Ready with the etcd voter condition, the rke2-etcd lease
+      is held by a live voter, and a quorum write succeeded.
+    verbosity: 0

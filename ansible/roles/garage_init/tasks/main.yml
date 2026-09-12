@@ -54,7 +54,8 @@
       changed_when: true
       ansible.builtin.command:
         cmd: >-
-          {{ _var_garage_init_exec }} /garage layout assign {{ _garage_init_node }}
+          {{ _var_garage_init_exec }} /garage layout assign
+          {{ _garage_init_node }}
           -z {{ garage_init_zone }} -c {{ garage_init_capacity }}
 
     - name: main | Apply the layout
@@ -75,7 +76,9 @@
   loop_control:
     loop_var: _item_garage_init_bucket
   ansible.builtin.command:
-    cmd: "{{ _var_garage_init_exec }} /garage bucket create {{ _item_garage_init_bucket }}"
+    cmd: >-
+      {{ _var_garage_init_exec }} /garage bucket create
+      {{ _item_garage_init_bucket }}
 
 - name: main | Read the existing access keys
   changed_when: false
@@ -84,7 +87,9 @@
     cmd: "{{ _var_garage_init_exec }} /garage key list"
 
 - name: main | Create the access key and grant it the buckets
-  when: garage_init_key_name not in _reg_garage_init_keys['stdout']
+  when:
+    - garage_init_key_name not in _reg_garage_init_keys['stdout']
+    - not ansible_check_mode
   block:
 
     - name: main | Create the access key
@@ -93,7 +98,8 @@
       register: _reg_garage_init_new_key
       ansible.builtin.command:
         cmd: >-
-          {{ _var_garage_init_exec }} /garage key create {{ garage_init_key_name }}
+          {{ _var_garage_init_exec }} /garage key create
+          {{ garage_init_key_name }}
 
     - name: main | Record the credentials in the controller's environment
       no_log: "{{ garage_init_no_log | bool }}"

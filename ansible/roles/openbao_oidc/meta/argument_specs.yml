@@ -89,11 +89,11 @@ argument_specs:
         description: Client role that grants the read-only policy.
       openbao_oidc_admin_policy:
         type: str
-        default: sso-admins
+        default: null
         description: Name of the administrator policy.
       openbao_oidc_user_policy:
         type: str
-        default: sso-users
+        default: null
         description: Name of the read-only policy.
       openbao_oidc_kv_path:
         type: str

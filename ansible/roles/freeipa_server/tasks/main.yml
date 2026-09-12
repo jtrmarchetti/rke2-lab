@@ -49,7 +49,7 @@
     - (freeipa_server_enabled | bool)
     - (freeipa_server_manage_resolver | bool)
   ansible.builtin.template:
-    src: "{{ _var_freeipa_server_files_dir }}/resolv.conf.j2"
+    src: "{{ freeipa_server_resolv_template }}"
     dest: /etc/resolv.conf
     owner: root
     group: root
@@ -140,7 +140,7 @@
   when: (freeipa_server_enabled | bool)
   no_log: true
   ansible.builtin.template:
-    src: "{{ _var_freeipa_server_files_dir }}/freeipa.env.j2"
+    src: "{{ freeipa_server_env_template }}"
     dest: "{{ _var_freeipa_server_env_file }}"
     owner: root
     group: root
@@ -149,7 +149,7 @@
 - name: main | Ensure the FreeIPA compose file is present
   when: (freeipa_server_enabled | bool)
   ansible.builtin.template:
-    src: "{{ _var_freeipa_server_files_dir }}/docker-compose.freeipa.yml.j2"
+    src: "{{ freeipa_server_compose_template }}"
     dest: "{{ _var_freeipa_server_compose_file }}"
     owner: root
     group: root

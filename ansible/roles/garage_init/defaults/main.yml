@@ -1,17 +1,14 @@
 ---
-garage_init_enabled: true
 
 garage_init_namespace: garage
 garage_init_pod: garage-0
-garage_init_kubectl: >-
-  {{ ansible_facts['env']['HOME'] }}/.local/bin/kubectl
-  --kubeconfig {{ ansible_facts['env']['HOME'] }}/.kube/dev-lo.config
+garage_init_kubectl: null
 
 garage_init_ready_timeout: 180
 garage_init_ready_retries: 30
 garage_init_ready_delay: 10
 
-garage_init_zone: dev-lo
+garage_init_zone: null
 
 garage_init_capacity: 16G
 

@@ -133,7 +133,8 @@ before the vault can be reached at all:
 * the **registry credential**, which is how Flux pulls the charts that deploy
   OpenBao and ESO in the first place;
 * the **cluster CA key pair**, which cert-manager needs before anything has a
-  certificate — including the vault's own ingress;
+  certificate — including the vault's own HTTPRoute on the platform Gateway
+  listener;
 * the vault's **unseal keys**, which are what make it readable at all.
 
 .. code-block:: console
@@ -165,13 +166,19 @@ intermediate CA signed by FreeIPA, whose key pair lives on the controller at
 ``~/.config/rke2lab/k8s-ca/`` and reaches the cluster as a SealedSecret. No
 ACME, and no exported FreeIPA key.
 
+Edge TLS is owned by the shared platform Gateway: the Gateway's
+``cert-manager.io/cluster-issuer: k8s-ca`` annotation makes cert-manager
+derive one ``Certificate`` per listener, each issuing into the
+``<host>-edge-tls`` Secret in ``kube-system`` that the listener's
+``tls.certificateRefs`` pre-declares. Applications never hold the key — they
+only route to the host and let the platform terminate TLS.
+
 .. code-block:: console
 
    $ kubectl get clusterissuer
-   $ kubectl get certificate -A
-   $ kubectl -n keycloak describe certificate keycloak-tls
-   $ kubectl get certificaterequest,order -A
+   $ kubectl -n kube-system get certificate
+   $ kubectl -n kube-system describe certificate sso-edge-tls
+   $ kubectl get certificaterequest -A
 
-Every Ingress that carries ``cert-manager.io/cluster-issuer: k8s-ca`` gets its
-certificate automatically and renewed automatically. A ``Certificate`` stuck
-``False`` is nearly always the issuer being unhealthy, not the workload.
+A ``Certificate`` stuck ``False`` is nearly always the issuer being
+unhealthy, not the workload.

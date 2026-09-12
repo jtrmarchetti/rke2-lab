@@ -1,4 +1,4 @@
-# Secrets live outside the repo, in ~/.config/rke2lab/ (see plan/SECRETS.md).
+# Secrets live outside the repo, in ~/.config/rke2lab/ (see docs/source/components/secrets.rst).
 # These patterns are a backstop against anything sensitive landing here by accident.
 *.env
 .env
@@ -23,5 +23,9 @@ __pycache__/
 
 # Docs — the built site is generated from docs/source, never committed.
 docs/_build/
+
+# Scratch space for machine-driven build chains and their logs.
+# (Workstation /tmp is wiped on host reboot — chains live here instead.)
+.scratch/
 
 agent_plans/

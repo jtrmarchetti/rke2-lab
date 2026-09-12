@@ -1,12 +1,12 @@
 {{ ansible_managed | comment }}
 
-profileId={{ ipa_sub_ca_profile_id }}
+profileId={{ inventory_ipa_sub_ca_profile_id }}
 classId=caEnrollImpl
-desc={{ ipa_sub_ca_profile_description }}
+desc={{ inventory_ipa_sub_ca_profile_description }}
 visible=false
 enable=true
 enableBy=ipara
-name={{ ipa_sub_ca_profile_description }}
+name={{ inventory_ipa_sub_ca_profile_description }}
 auth.instance_id=raCertAuth
 input.i1.class_id=certReqInputImpl
 input.i2.class_id=submitterInfoInputImpl
@@ -21,15 +21,15 @@ policyset.serverCertSet.1.constraint.params.accept=true
 policyset.serverCertSet.1.constraint.params.pattern=CN=[^,]+,.+
 policyset.serverCertSet.1.default.class_id=subjectNameDefaultImpl
 policyset.serverCertSet.1.default.name=Subject Name Default
-policyset.serverCertSet.1.default.params.name=CN=$request.req_subject_name.cn$, O={{ ipa_sub_ca_realm }}
+policyset.serverCertSet.1.default.params.name=CN=$request.req_subject_name.cn$, O={{ inventory_ipa_sub_ca_realm }}
 policyset.serverCertSet.2.constraint.class_id=validityConstraintImpl
 policyset.serverCertSet.2.constraint.name=Validity Constraint
 policyset.serverCertSet.2.constraint.params.notAfterCheck=false
 policyset.serverCertSet.2.constraint.params.notBeforeCheck=false
-policyset.serverCertSet.2.constraint.params.range={{ (ipa_sub_ca_validity_days | int) + 9 }}
+policyset.serverCertSet.2.constraint.params.range={{ (inventory_ipa_sub_ca_validity_days | int) + 9 }}
 policyset.serverCertSet.2.default.class_id=validityDefaultImpl
 policyset.serverCertSet.2.default.name=Validity Default
-policyset.serverCertSet.2.default.params.range={{ ipa_sub_ca_validity_days }}
+policyset.serverCertSet.2.default.params.range={{ inventory_ipa_sub_ca_validity_days }}
 policyset.serverCertSet.2.default.params.startTime=0
 policyset.serverCertSet.3.constraint.class_id=keyConstraintImpl
 policyset.serverCertSet.3.constraint.name=Key Constraint
@@ -47,7 +47,7 @@ policyset.serverCertSet.5.default.class_id=authInfoAccessExtDefaultImpl
 policyset.serverCertSet.5.default.name=AIA Extension Default
 policyset.serverCertSet.5.default.params.authInfoAccessADEnable_0=true
 policyset.serverCertSet.5.default.params.authInfoAccessADLocationType_0=URIName
-policyset.serverCertSet.5.default.params.authInfoAccessADLocation_0={{ ipa_sub_ca_ocsp_url }}
+policyset.serverCertSet.5.default.params.authInfoAccessADLocation_0={{ inventory_ipa_sub_ca_ocsp_url }}
 policyset.serverCertSet.5.default.params.authInfoAccessADMethod_0=1.3.6.1.5.5.7.48.1
 policyset.serverCertSet.5.default.params.authInfoAccessCritical=false
 policyset.serverCertSet.5.default.params.authInfoAccessNumADs=1
@@ -90,7 +90,7 @@ policyset.serverCertSet.9.default.params.crlDistPointsEnable_0=true
 policyset.serverCertSet.9.default.params.crlDistPointsIssuerName_0=CN=Certificate Authority,o=ipaca
 policyset.serverCertSet.9.default.params.crlDistPointsIssuerType_0=DirectoryName
 policyset.serverCertSet.9.default.params.crlDistPointsNum=1
-policyset.serverCertSet.9.default.params.crlDistPointsPointName_0={{ ipa_sub_ca_crl_url }}
+policyset.serverCertSet.9.default.params.crlDistPointsPointName_0={{ inventory_ipa_sub_ca_crl_url }}
 policyset.serverCertSet.9.default.params.crlDistPointsPointType_0=URIName
 policyset.serverCertSet.9.default.params.crlDistPointsReasons_0=
 policyset.serverCertSet.10.constraint.class_id=noConstraintImpl

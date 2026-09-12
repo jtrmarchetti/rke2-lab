@@ -233,7 +233,9 @@
         - name: validate_phase5 | Validate Traefik runs on workers only
           vars:
             _validate_worker_names: >-
-              {{ groups['kubewk'] | map('regex_replace', '$', '.dev.lo') | list }}
+              {{ groups['kubewk']
+                 | map('extract', hostvars, 'inventory_base_host_target_hostname')
+                 | list }}
           ansible.builtin.assert:
             that:
               - _reg_validate_traefik_nodes['stdout'] | trim | length > 0
@@ -298,7 +300,9 @@
         - name: validate_phase5 | Validate the workload ran, and ran only on workers
           vars:
             _validate_worker_names: >-
-              {{ groups['kubewk'] | map('regex_replace', '$', '.dev.lo') | list }}
+              {{ groups['kubewk']
+                 | map('extract', hostvars, 'inventory_base_host_target_hostname')
+                 | list }}
           ansible.builtin.assert:
             that:
               - _reg_validate_available['rc'] == 0

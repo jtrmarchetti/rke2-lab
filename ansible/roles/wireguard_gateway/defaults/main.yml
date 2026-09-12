@@ -1,15 +1,7 @@
 ---
 wireguard_gateway_enabled: false
 wireguard_gateway_interface: wg0
-wireguard_gateway_address: null
-wireguard_gateway_listen_port: 51820
 wireguard_gateway_private_key: ""
 wireguard_gateway_peer_public_key: ""
-wireguard_gateway_peer_endpoint: ""
-wireguard_gateway_peer_allowed_ips: null
-wireguard_gateway_peer_persistent_keepalive: 25
 wireguard_gateway_ip_forward_enabled: true
-wireguard_gateway_manage_firewall_nat: false
-wireguard_gateway_nat_source_cidr: null
-wireguard_gateway_nat_out_interface: ""
-wireguard_gateway_internal_subnet: null
+wireguard_gateway_template: null

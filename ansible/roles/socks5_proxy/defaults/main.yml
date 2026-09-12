@@ -1,8 +1,4 @@
 ---
 socks5_proxy_enabled: true
-socks5_proxy_listen_address: 0.0.0.0
-socks5_proxy_listen_port: 1080
 
-socks5_proxy_external_interfaces:
-  - eth0
-socks5_proxy_allowed_client_networks: null
+socks5_proxy_template: null

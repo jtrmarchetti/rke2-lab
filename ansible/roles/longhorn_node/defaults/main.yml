@@ -14,3 +14,5 @@ longhorn_node_root_device: /dev/sda
 
 longhorn_node_multipath_blacklist: true
 longhorn_node_multipath_conf: /etc/multipath/conf.d/longhorn.conf
+
+longhorn_node_blacklist_template: null
