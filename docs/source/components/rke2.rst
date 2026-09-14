@@ -77,6 +77,36 @@ Installed as RKE2's packaged chart, sidecarless, and it is why nodes reach
 A node stuck ``NotReady`` with ``NetworkPluginNotReady`` is a Cilium pod that
 has not started on that node.
 
+Service-to-service mTLS
+-----------------------
+
+East-west traffic is encrypted and authenticated: mutual authentication
+backed by SPIRE's in-cluster install (every pod gets a SPIFFE SVID, and the
+chart's ``cilium-spire`` namespace carries the SPIRE server and per-node
+agents), and IPsec on the pod network. Both ride the same packaged chart —
+the estate's ``rke2-cilium`` HelmChartConfig turns ``authentication.mutual``
+on with the spire integration, and ``encryption`` on with type ``ipsec`` —
+so there is no separate mesh to deploy or version against anything.
+
+Encryption keys are not chart material: the ``cilium-ipsec-keys`` Secret in
+``kube-system`` carries one PSK line generated on the controller and held
+under ``~/.config/rke2lab/`` (recorded in ``env.sh`` as
+``CILIUM_IPSEC_KEYS``), written as a static RKE2 manifest like the others.
+A rotation is a new generated line, not a re-keyed file.
+
+.. code-block:: console
+
+   $ kubectl -n cilium-spire get sts spire-server
+   $ kubectl -n cilium-spire get ds spire-agent
+   $ kubectl -n kube-system get secret cilium-ipsec-keys
+   $ kubectl -n keycloak get cnp cnp-mutual-auth-keycloak-db
+
+Policies are CiliumNetworkPolicies with ``authentication.mode: required`` on
+the path being enforced — the pilot is the SSO path, keycloak to its
+database (port 5432). A policy in ``required`` fails closed on a missing
+handshake, so a stuck SPIRE server or an agent that never scheduled
+surfaces as denied connections, not clear-text traffic.
+
 CoreDNS
 =======
 

@@ -29,3 +29,65 @@ spec:
           operator: Exists
         - key: "CriticalAddonsOnly"
           operator: Exists
+    # Service-to-service mTLS: mutual authentication backed by the chart's
+    # in-cluster SPIRE. Identities are SPIFFE SVIDs minted by SPIRE, one per
+    # endpoint, so an east-west connection performs an out-of-band mTLS
+    # handshake between the two agents (port 4250) and is admitted only when
+    # a CiliumNetworkPolicy requires it (the cilium-mtls GitOps tree). This
+    # is the identity half of mTLS; the confidentiality half is the
+    # encryption block below. Traefik and the platform Gateway are
+    # deliberately untouched - they keep terminating TLS at the edge and
+    # ride the encrypted pod network as ordinary endpoints.
+    authentication:
+      enabled: true
+      mutual:
+        spire:
+          enabled: true
+          install:
+            enabled: true
+            server:
+              # Keep the mesh CA and SPIRE entries on the 1Gi longhorn-single
+              # PVC across restarts. Deleting the PVC re-generates the CA and
+              # re-issues every SVID (workloads still authenticate; revocation
+              # and audit state resets), so it is never deleted on a routine
+              # rollback.
+              dataStorage:
+                enabled: true
+                size: 1Gi
+                storageClass: longhorn-single
+              # The SPIRE server has no default tolerations (the chart default
+              # is []), but it must land on the control plane on the cold
+              # single-node path, which carries CriticalAddonsOnly from first
+              # boot. Without these the StatefulSet never schedules on the
+              # cold path and the whole feature is dead there. The agent
+              # follows the cilium agent's tolerations by default, so only the
+              # server needs an explicit list.
+              tolerations:
+                - key: "node-role.kubernetes.io/control-plane"
+                  operator: Exists
+                - key: "node-role.kubernetes.io/master"
+                  operator: Exists
+                - key: "node.kubernetes.io/not-ready"
+                  operator: Exists
+                - key: "node.cloudprovider.kubernetes.io/uninitialized"
+                  operator: Exists
+                - key: "node-role.kubernetes.io/etcd"
+                  operator: Exists
+                - key: "CriticalAddonsOnly"
+                  operator: Exists
+    # With the chart default (true) the first CiliumNetworkPolicy in a
+    # namespace silently flips that namespace to default-deny and can
+    # black-hole DNS or egress the moment a keycloak policy lands. Keeping
+    # it false makes CNP rollout purely additive: every rule is an explicit
+    # allow/require, and removing a CNP restores default-allow.
+    enableNonDefaultDenyPolicies: false
+    # Confidentiality half of the mTLS: encrypt node-to-node and pod-to-pod
+    # traffic. IPsec (the chart's own default type) rather than WireGuard,
+    # per the estate decision - the key material is the
+    # cilium-ipsec-keys Secret, delivered on every node as a RKE2 static
+    # manifest so the agent has its keys before the datapath starts. The
+    # chart's keyWatcher is already true, so a key rotation is picked up
+    # without a manual agent restart.
+    encryption:
+      enabled: true
+      type: ipsec

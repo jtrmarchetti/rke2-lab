@@ -137,6 +137,15 @@ before the vault can be reached at all:
   listener;
 * the vault's **unseal keys**, which are what make it readable at all.
 
+None of those is the **Cilium IPsec key** — it travels the same
+discipline as the controller-held key material, but not the SealedSecret
+channel. It is one PSK line that encrypts the pod network: generated on
+the controller, written to the controller's ``~/.config/rke2lab/`` and
+recorded in ``env.sh`` as ``CILIUM_IPSEC_KEYS``, delivered to the cluster
+as a static RKE2 manifest (``cilium-ipsec-keys`` in ``kube-system``). A
+rotation is a regeneration of that one line, so the key is handled like the
+sealing key set: a recorded break-glass value, not a workload credential.
+
 .. code-block:: console
 
    $ kubectl get sealedsecret -A

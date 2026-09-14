@@ -109,7 +109,20 @@ GitOps managed (installed by Flux)
   one-replica class, because one node loss must not destroy every runtime
   secret. OpenBao rather than Vault because Vault is now BUSL and OpenBao is
   the Linux Foundation's MPL-2.0 fork, API-compatible and supported by ESO.
-- **Service mesh: Cilium (sidecarless).**
+- **Service mesh: Cilium (sidecarless), encrypted and authenticated in the
+  data plane.** The mesh's mTLS rides the same packaged RKE2 chart rather
+  than a separately deployed SPIRE fleet: the estate's ``rke2-cilium``
+  HelmChartConfig turns ``authentication.mutual`` on (spire integration,
+  in-cluster install) and ``encryption`` on with type ``ipsec``, and the
+  three SPIRE images are mirrored like the rest of the chart's. Service-to-
+  service policies require the handshake (``authentication.mode: required``
+  on the path being enforced, pilot: keycloak to its database); a required
+  policy fails closed, so a missing handshake surfaces as a denied
+  connection, never clear text. The IPsec PSK is one generated line, held
+  on the controller under ``~/.config/rke2lab/`` and delivered as a static
+  RKE2 manifest — a rotation is regenerating that line, not re-keying
+  files. Edge TLS stays on the platform Gateway; nothing in the mesh
+  terminates application traffic.
 - **SSO: Keycloak, federated to FreeIPA.** Two FreeIPA groups per application
   (``<app>-admins`` / ``<app>-users``) map to two Keycloak client roles
   (``admin`` / ``user``); the directory stays the authority for who someone

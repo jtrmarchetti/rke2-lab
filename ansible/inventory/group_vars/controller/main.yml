@@ -66,6 +66,21 @@ inventory_gitops_bootstrap_files_dir: >-
 inventory_gitops_bootstrap_sealing_key_file: >-
   {{ lookup('env', 'HOME') }}/.config/rke2lab/sealed-secrets-key.yaml
 
+# The cluster's Cilium IPsec key. Cluster key material held under
+# ~/.config/rke2lab/ alongside the sealing key and the k8s-ca keypair,
+# never committed to the cluster-state GitLab repo (a PSK in GitLab would
+# let anyone who can read the repo decrypt every east-west packet). The
+# keygen play (imported at the top of the RKE2 control plane phase)
+# generates this file once on the cold build; every warm build re-reads it
+# and skips generation, so the encrypted pod network is stable. Rotation
+# is a deliberate operator act: delete the file (and the CILIUM_IPSEC_KEYS
+# line in env.sh) and re-run, or bump the id and regenerate.
+inventory_cilium_ipsec_keygen_key_id: 1
+inventory_cilium_ipsec_keygen_key_file: >-
+  {{ lookup('env', 'HOME') }}/.config/rke2lab/cilium-ipsec-keys
+inventory_cilium_ipsec_keygen_env_file: >-
+  {{ lookup('env', 'HOME') }}/.config/rke2lab/env.sh
+
 inventory_gitops_source_templates_dir: "{{ inventory_files_base }}/gitops_source"
 
 inventory_gitops_source_gitlab_url: https://gitlab.dev.lo

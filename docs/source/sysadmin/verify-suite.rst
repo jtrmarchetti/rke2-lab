@@ -51,6 +51,16 @@ cold rebuild needs (including the Garage S3 key), the SSO ACL policies are
 defined, the admin policy is scoped, and the root token still carries the
 root policy (the offline way-in).
 
+``verify/test_mtls.py`` — the service-to-service mTLS configuration surface:
+the ``rke2-cilium`` HelmChartConfig carries mutual authentication (SPIRE)
+and IPsec encryption, the ``cilium-ipsec-keys`` Secret holds a well-formed
+key line, the pilot policy enforces the SSO path, the SPIRE stack is
+scheduled, and the edge TLS termination is still owned by the platform
+Gateway — nothing in the mesh pulls it in. The whole module skips until
+the feature is deployed on the estate (the HCC has no ``authentication``
+block yet); once the build lands it, it enforces on every warm build so a
+drift or rollback fails fast.
+
 Running it
 ==========
 

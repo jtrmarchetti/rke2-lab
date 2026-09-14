@@ -119,6 +119,35 @@ inventory_artifact_stage_manifest:
       https://github.com/fluxcd/flux2/releases/download/v2.9.4/flux_2.9.4_linux_amd64.tar.gz
     dest: flux/flux_2.9.4_linux_amd64.tar.gz
 
+  # The Cilium chart's in-cluster SPIRE install (service-to-service mTLS)
+  # pulls these three from ghcr.io and docker.io. They are NOT in the
+  # rke2-images-cilium tarball (that holds only the cilium-agent /
+  # cilium-envoy / operator / cni image set), so without mirrors a cold
+  # build schedules spire-server / spire-agent into ImagePullBackOff and the
+  # whole mutual-authentication feature is dead on the cold single-node path.
+  # The chart pins each by digest with useDigest: true, so the mirror must
+  # preserve digests - skopeo --all --preserve-digests does that, and the
+  # rewrite to <mirror>/spiffe/... plus <mirror>/library/... resolves the
+  # pinned references. Phase 6 so they land with the other Flux-tier
+  # mirrors, and transit so the blobs stay only while the cluster needs them.
+  - name: spire-server
+    phase: 6
+    retention: transit
+    type: mirror
+    image: ghcr.io/spiffe/spire-server:1.9.6
+
+  - name: spire-agent
+    phase: 6
+    retention: transit
+    type: mirror
+    image: ghcr.io/spiffe/spire-agent:1.9.6
+
+  - name: spire-init-busybox
+    phase: 6
+    retention: transit
+    type: mirror
+    image: docker.io/library/busybox:1.37.0
+
   - name: sealed-secrets-controller
     phase: 6
     retention: transit

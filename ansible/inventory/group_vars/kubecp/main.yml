@@ -103,8 +103,13 @@ inventory_rke2_server_traefik_template: >-
   {{ inventory_files_base }}/rke2_server/traefik-config.yaml.j2
 inventory_rke2_server_cilium_config_template: >-
   {{ inventory_files_base }}/rke2_server/cilium-config.yaml.j2
+inventory_rke2_server_cilium_ipsec_secret_template: >-
+  {{ inventory_files_base }}/rke2_server/cilium-ipsec-keys-secret.yaml.j2
 inventory_rke2_server_kube_vip_template: >-
   {{ inventory_files_base }}/rke2_server/kube-vip.yaml.j2
+
+# Set false only to debug the rendered IPsec Secret; it would print the key.
+inventory_rke2_server_no_log: true
 
 inventory_base_host_split_dns_domains:
   - dev.lo

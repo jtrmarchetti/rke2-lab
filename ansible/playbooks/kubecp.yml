@@ -7,6 +7,15 @@
       - GITLAB_ROOT_PASSWORD
       - RKE2_TOKEN
 
+# Generate (or re-read) the cluster's Cilium IPsec key on the controller
+# before any RKE2 node is formed. The key is cluster key material held on
+# the controller, never committed to the cluster-state GitLab repo; this
+# must precede the RKE2 phase so the rke2_server role can render the
+# cilium-ipsec-keys Secret onto the control plane. Idempotent: a recorded
+# key is read back and the generation skipped on a warm build.
+- name: Generate the cluster IPsec key material
+  ansible.builtin.import_playbook: cilium_ipsec.yml
+
 - name: Publish the RKE2 artifact set from the repo host into GitLab
   hosts: repo
   gather_facts: true
@@ -172,6 +181,32 @@
       ansible.builtin.slurp:
         src: /data1/gitlab/rke2-deploy-token.yml
 
+    - name: kubecp | Read the cluster IPsec key from the controller
+      # The keygen play generated this on the controller before the RKE2
+      # phase; the rke2_server role renders it into the cilium-ipsec-keys
+      # Secret so the IPsec datapath has its keys at boot. Absent file
+      # (never generated) means an empty key, which leaves the encryption
+      # datapath off rather than failing the build.
+      delegate_to: "{{ groups['controller'] | first }}"
+      no_log: true
+      register: _reg_kubecp_cilium_ipsec_key
+      failed_when: false
+      tags:
+        - always
+      ansible.builtin.slurp:
+        src: >-
+          {{ hostvars[groups['controller'] | first]
+             ['inventory_cilium_ipsec_keygen_key_file'] }}
+
+    - name: kubecp | Record the IPsec key line for the rke2_server role
+      no_log: true
+      ansible.builtin.set_fact:
+        kubecp_cilium_ipsec_keys: >-
+          {{ (_reg_kubecp_cilium_ipsec_key['content'] | default('', true))
+             | b64decode | trim | default('', true) }}
+      tags:
+        - always
+
     - name: kubecp | Include RKE2 node preparation role
       tags:
         - rke2_node
@@ -227,6 +262,12 @@
           {{ inventory_rke2_server_traefik_template }}
         rke2_server_cilium_config_template: >-
           {{ inventory_rke2_server_cilium_config_template }}
+        rke2_server_cilium_ipsec_secret_template: >-
+          {{ inventory_rke2_server_cilium_ipsec_secret_template }}
+        rke2_server_cilium_ipsec_keys: >-
+          {{ kubecp_cilium_ipsec_keys | default('', true) }}
+        rke2_server_no_log: >-
+          {{ inventory_rke2_server_no_log | bool }}
         rke2_server_kubeconfig_dest: >-
           {{ hostvars[groups['controller'] | first]['inventory_kube_cli_controller_kubeconfig'] }}
       ansible.builtin.include_role:

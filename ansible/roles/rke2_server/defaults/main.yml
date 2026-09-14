@@ -24,4 +24,14 @@ rke2_server_kubeconfig_dest: ""
 rke2_server_config_template: null
 rke2_server_traefik_template: null
 rke2_server_cilium_config_template: null
+rke2_server_cilium_ipsec_secret_template: null
 rke2_server_kube_vip_template: null
+
+# The full one-line IPsec key (key-id + algo + PSK + key-size) that the
+# rendered cilium-ipsec-keys Secret carries. Empty disables the Secret
+# (and therefore the encryption datapath). Comes from the controller's
+# recorded key file, not from anywhere a cluster member can read it.
+rke2_server_cilium_ipsec_keys: ""
+
+# Set false only to debug the rendered Secret; it would print the key.
+rke2_server_no_log: true
