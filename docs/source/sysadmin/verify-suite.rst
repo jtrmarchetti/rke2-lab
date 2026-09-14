@@ -61,6 +61,17 @@ the feature is deployed on the estate (the HCC has no ``authentication``
 block yet); once the build lands it, it enforces on every warm build so a
 drift or rollback fails fast.
 
+``verify/test_mtls_dataplane.py`` — the data-plane half of the same feature:
+the SPIRE server reports healthy (SVIDs can be issued), a live agent-to-agent
+mTLS handshake between two throwaway pods in a ``mtls-verify`` namespace
+succeeds under a required-auth CiliumNetworkPolicy, a third pod outside the
+rule's ``fromEndpoints`` is refused (per-connection enforcement, not just a
+config flag), the running agents report IPsec enabled and the node kernels
+carry ESP xfrm policies, and the edge hosts still terminate TLS with the
+domain CA. The probes run in the throwaway namespace, which the fixture
+tears down on exit; like the config surface, the whole module skips until
+the feature is deployed.
+
 Running it
 ==========
 

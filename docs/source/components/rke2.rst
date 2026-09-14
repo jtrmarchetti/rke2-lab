@@ -107,6 +107,16 @@ database (port 5432). A policy in ``required`` fails closed on a missing
 handshake, so a stuck SPIRE server or an agent that never scheduled
 surfaces as denied connections, not clear-text traffic.
 
+One hard coupling: the estate runs the chart's L7 proxy (``enable-l7-proxy``
+is the chart default) together with IPsec, and Cilium refuses to start an
+agent that has both without DNS-proxy transparent mode — proxied DNS would
+otherwise leave the node unencrypted. The estate therefore ships
+``dnsProxy.enableTransparentMode`` in the same HelmChartConfig. If the
+agents crash-loop on a fresh cluster and every pod is stuck ``ContainerCreating``
+with a CNI error, read the agent log:
+``IPSec requires DNS proxy transparent mode`` is the symptom of that block
+having been removed.
+
 CoreDNS
 =======
 

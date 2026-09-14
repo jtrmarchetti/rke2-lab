@@ -132,6 +132,21 @@ def kubectl_popen(*args: str) -> subprocess.Popen:
                             stderr=subprocess.DEVNULL, env=env)
 
 
+def kubectl_apply(text: str) -> None:
+    """Apply a YAML document (or multi-doc manifest) through kubectl's
+    stdin. A non-zero exit raises with the server-side error, so a
+    caller sees the API reason (schema, CRD missing) rather than a
+    silent no-op."""
+    proc = subprocess.run(
+        [_kubectl_exe(), "apply", "-f", "-"],
+        input=text, capture_output=True, text=True,
+        env={**os.environ, "KUBECONFIG":
+             os.environ.get("KUBECONFIG") or KUBECONFIG_DEFAULT},
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"kubectl apply failed: {proc.stderr.strip()[:400]}")
+
+
 # ---------------------------------------------------------------------------
 # Keycloak
 # ---------------------------------------------------------------------------
