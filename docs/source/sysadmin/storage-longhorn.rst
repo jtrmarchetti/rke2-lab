@@ -19,6 +19,33 @@ Three workers, one 100 GB disk each, two replicas per volume: roughly 147 GB
 usable. Longhorn over-provisions, so the sum of what is *claimed* can exceed
 what exists — the number that matters is actual usage on the three disks.
 
+Reserved space
+--------------
+
+Longhorn keeps a fixed percentage of each disk reserved so a disk can never
+run fully into the filesystem. The vendor default is 30%; on this estate it is
+set to **0%**, because each worker's third disk is dedicated to Longhorn and
+the OS never writes to it — reserving part of a disk the operating system
+does not touch only buys headroom against a failure that cannot happen.
+
+The value lives in the GitOps source, not on the nodes:
+
+.. code-block:: console
+
+   $ ansible/files/gitops_source/cluster-state/infrastructure/controllers/longhorn/release.yaml.j2
+   spec.values.defaultSettings.storageReservedPercentageForDefaultDisk: 0
+
+To change it: edit that one number and re-run ``ansible-playbook
+playbooks/gitops.yml`` — the re-rendered cluster state pushes through Flux,
+the HelmRelease upgrades, and the manager reclaims (or releases) the space on
+the next reconciled disk. To revert to the vendor behaviour, set it to 30, or
+delete the key so Longhorn's runtime default applies instead. Confirm what is
+in effect with:
+
+.. code-block:: console
+
+   $ kubectl -n longhorn-system get setting storage-reserved-percentage-for-default-disk
+
 Diagnosing
 ==========
 

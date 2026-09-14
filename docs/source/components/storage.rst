@@ -25,6 +25,11 @@ Sizing, and why
    * - ``longhorn-single``
      - One replica. Caches and scratch only — a single node loss destroys the
        volume. **Never** for OpenBao
+   * - Reserved space is 0%, not the vendor default 30%
+     - The dedicated disk belongs to Longhorn alone, so reserving part of it
+       for the operating system would only waste capacity. The value is a
+       named key in the GitOps source, overridable in one place; see
+       :doc:`../sysadmin/storage-longhorn` for the mechanics
 
 Three replicas on a three-node cluster would put a copy on every node and leave
 Longhorn nowhere to rebuild, so a node loss means degraded until it returns.

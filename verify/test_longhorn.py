@@ -100,6 +100,38 @@ def test_longhorn_disk_headroom():
     assert worst > _MIN_HEADROOM_RATIO, f"worst disk headroom is {worst:.2%}"
 
 
+def test_longhorn_reserved_space_is_zero():
+    """The default-disk reserved space is set to 0%, not the vendor default.
+    Each worker's dedicated CSI disk is provisioned for Longhorn alone, so
+    reserving part of it for nothing wastes usable capacity. The HelmRelease
+    sets the key explicitly; without it, Longhorn silently falls back to the
+    vendor 30% default — which is exactly the regression this test catches.
+    The check is two-sided: the live setting (what the manager acts on) and
+    the default-setting ConfigMap the chart renders (what a reinstall would
+    start from, so a re-created cluster cannot regress to 30%)."""
+    setting = helpers.kubectl_json(
+        "get", "setting",
+        "storage-reserved-percentage-for-default-disk",
+        "-n", "longhorn-system")
+    assert setting["value"] == "0", (
+        f"storage-reserved-percentage-for-default-disk is "
+        f"{setting['value']!r}, not '0' — the vendor default reservation is "
+        f"active; set storageReservedPercentageForDefaultDisk in "
+        f"gitops_source/.../longhorn/release.yaml.j2 and re-run gitops.yml"
+    )
+    assert setting.get("status", {}).get("applied") is True, (
+        "the reserved-space setting has not been applied by the manager"
+    )
+    cm = helpers.kubectl_json(
+        "get", "cm", "longhorn-default-setting", "-n", "longhorn-system")
+    rendered = cm["data"]["default-setting.yaml"]
+    assert 'storage-reserved-percentage-for-default-disk: "0"' in rendered, (
+        "the longhorn-default-setting ConfigMap does not carry "
+        "storage-reserved-percentage-for-default-disk: \"0\" — a re-created "
+        "cluster would start from the Longhorn runtime default instead"
+    )
+
+
 def test_longhorn_nodes_schedulable():
     """Every Longhorn node reports its Ready and Schedulable conditions
     true. A single node dropping out of scheduling halves replica
