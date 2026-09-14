@@ -91,3 +91,15 @@ spec:
     encryption:
       enabled: true
       type: ipsec
+    # This estate runs the L7/Envoy proxy (enable-l7-proxy, the chart
+    # default here) together with the IPsec encryption above. Cilium
+    # refuses to start an agent that has both without DNS-proxy
+    # transparent mode: with L7 on, the DNS proxy terminates the encrypted
+    # connection before the request reaches the real upstream, so the
+    # proxied DNS leg would otherwise leave the node unencrypted.
+    # Transparent mode keeps the original source-pod address on proxied
+    # DNS and is the configuration the agent is validated against.
+    # Omitting this block is a hard config error on every node
+    # (the agents fail their start hook and crash-loop) until it is set.
+    dnsProxy:
+      enableTransparentMode: true
