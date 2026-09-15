@@ -309,30 +309,43 @@ def _ds_pod(daemonset: str, namespace: str) -> str:
 def test_cilium_ipsec_datapath_active():
     """The agent reports the IPsec datapath enabled: the confidentiality
     half of mTLS (the encrypted pod network) is configured in the
-    running agent, not just in the HCC."""
+    running agent, not just in the HCC.
+
+    The agent's own status line is the probe: ``cilium status`` reads
+    the running process's effective configuration and reports
+    ``Encryption: IPsec`` only when the IPsec datapath is on. (The
+    separate config key is not a readable CLI key in the chart's
+    Cilium 1.19.x, so the status line is the report that works.)"""
     pod = _ds_pod("cilium", "kube-system")
     proc = helpers.kubectl(
-        "exec", pod, "-n", "kube-system", "-c", "cilium-agent",
-        "--", "cilium", "config", "enable-ipsec", check=False)
+        "exec", pod, "-n", "kube-system", "-c", "cilium-agent", "--",
+        "cilium", "status", check=False)
     assert proc.returncode == 0, (
-        f"the cilium agent's config command failed: "
+        f"the cilium agent's status command failed: "
         f"{(proc.stderr or '').strip()[:200]}")
-    assert proc.stdout.strip().lower() == "true", (
+    encryption = next((line.split(":", 1)[1].strip()
+                       for line in (proc.stdout or "").splitlines()
+                       if line.startswith("Encryption:")), "")
+    assert encryption.lower() == "ipsec", (
         "the running cilium agent does not report IPsec enabled: the "
         "encrypted pod network is off and east-west traffic crosses the "
-        f"nodes in the clear. `cilium config enable-ipsec` gave "
-        f"{proc.stdout.strip()!r}")
+        f"nodes in the clear. `cilium status` reports "
+        f"Encryption: {encryption!r}")
 
 
 def test_node_xfrm_policies_carry_esp():
     """The node kernel is actually encrypting: xfrm policies with an
-    ESP template exist on the nodes. IPsec that is configured in the
-    agent but not installed in the kernel (module missing, xfrm
-    state) still shows the agent flag on and still leaves traffic
-    unencrypted - the kernel is where the claim is proven.
+    ESP template and an ESP state exist on the nodes. IPsec that is
+    configured in the agent but not installed in the kernel (module
+    missing, xfrm state) still shows the agent flag on and still leaves
+    traffic unencrypted - the kernel is where the claim is proven.
 
     Read from the cilium-agent pod on each node: it runs host-network,
-    so its view of ``ip xfrm`` is the node's own xfrm state."""
+    so its view of ``ip xfrm`` is the node's own xfrm state. The agent
+    image carries iproute2, so the policies are dumped by name; the
+    kernel only exposes a procfs policy dump on some builds, so a
+    missing file is not a failure if iproute2 already proved the
+    state."""
     nodes = helpers.kubectl_json("get", "nodes")["items"]
     checked, bad = 0, []
     for node in nodes:
@@ -345,10 +358,19 @@ def test_node_xfrm_policies_carry_esp():
             bad.append(f"{name}: no running cilium-agent pod")
             continue
         pod = pods["items"][0]["metadata"]["name"]
-        # The kernel exposes xfrm state in /proc/net/xfrm_policy; the
-        # agent pod runs host-network, so the file is the node's own.
-        # (The agent image is not guaranteed to carry the iproute2
-        # tools, so the procfs read is the reliable channel.)
+        # Primary channel: the kernel's xfrm policies, dumped by name.
+        # An ESP policy names its protocol ``proto esp``.
+        proc = helpers.kubectl(
+            "exec", pod, "-n", "kube-system", "-c", "cilium-agent", "--",
+            "ip", "xfrm", "policy", check=False)
+        if proc.returncode == 0:
+            checked += 1
+            if "proto esp" not in proc.stdout:
+                bad.append(f"{name}: no ESP policy in the node's xfrm "
+                           "state (ip xfrm policy: "
+                           f"{proc.stdout.strip()[:200]!r})")
+            continue
+        # Fallback: the procfs dump, when the kernel carries it.
         proc = helpers.kubectl(
             "exec", pod, "-n", "kube-system", "-c", "cilium-agent", "--",
             "sh", "-c", "cat /proc/net/xfrm_policy",
