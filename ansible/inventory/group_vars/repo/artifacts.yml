@@ -142,11 +142,19 @@ inventory_artifact_stage_manifest:
     type: mirror
     image: ghcr.io/spiffe/spire-agent:1.9.6
 
+  # The rke2-cilium chart pins the SPIRE init (busybox) image by digest
+  # (`busybox:1.37.0@sha256:9532…`, a multi-arch OCI index). Pin the
+  # mirror source to that digest, not the tag: Docker re-published the
+  # busybox:1.37.0 tag to a different index digest, so a tag-mirror would
+  # land the moving tag and leave the chart-pinned digest absent from the
+  # air-gapped registry, dead in the water on a cold build. skopeo resolves
+  # the digest-only ref on both sides and --preserve-digests keeps it, so
+  # the pinned 9532 index is always present.
   - name: spire-init-busybox
     phase: 6
     retention: transit
     type: mirror
-    image: docker.io/library/busybox:1.37.0
+    image: docker.io/library/busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
 
   - name: sealed-secrets-controller
     phase: 6

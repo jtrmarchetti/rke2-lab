@@ -46,6 +46,17 @@ spec:
           install:
             enabled: true
             server:
+              # Longhorn storage is worker-only in this estate: the
+              # longhornDriver/Manager pin node-role.kubernetes.io/worker
+              # and the csi-plugin runs on the three workers, while the
+              # control-plane nodes carry CriticalAddonsOnly and no CSI
+              # driver. The server's RWO longhorn-single PVC can therefore
+              # never attach on a control-plane node, so pin the server to
+              # a worker: otherwise it lands on a control-plane node, the
+              # PVC stays Pending, the server never starts, no SVID is ever
+              # issued and every required-auth policy fails closed.
+              nodeSelector:
+                node-role.kubernetes.io/worker: "true"
               # Keep the mesh CA and SPIRE entries on the 1Gi longhorn-single
               # PVC across restarts. Deleting the PVC re-generates the CA and
               # re-issues every SVID (workloads still authenticate; revocation
@@ -55,13 +66,13 @@ spec:
                 enabled: true
                 size: 1Gi
                 storageClass: longhorn-single
-              # The SPIRE server has no default tolerations (the chart default
-              # is []), but it must land on the control plane on the cold
-              # single-node path, which carries CriticalAddonsOnly from first
-              # boot. Without these the StatefulSet never schedules on the
-              # cold path and the whole feature is dead there. The agent
-              # follows the cilium agent's tolerations by default, so only the
-              # server needs an explicit list.
+              # The chart default for the server is no tolerations, so the
+              # StatefulSet would not land on a tainted node at all; these
+              # are what let it schedule onto the workers it is pinned to
+              # above (the worker nodes carry node.kubernetes.io/not-ready
+              # and CriticalAddonsOnly taints while booting). The agent
+              # follows the cilium agent's tolerations by default, so only
+              # the server needs an explicit list.
               tolerations:
                 - key: "node-role.kubernetes.io/control-plane"
                   operator: Exists
