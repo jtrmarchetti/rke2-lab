@@ -26,6 +26,10 @@ _EDGE_HOSTS = [
     ("longhorn", "longhorn.k8s.dev.lo", "longhorn-system"),
     ("bao", "bao.k8s.dev.lo", "openbao"),
     ("s3", "s3.k8s.dev.lo", "garage"),
+    # The Hubble UI service is created by the rke2-cilium chart in
+    # kube-system, so its route lives there too - unlike the other edge
+    # hosts whose routes sit in an app namespace next to their proxy.
+    ("hubble", "hubble.k8s.dev.lo", "kube-system"),
 ]
 
 

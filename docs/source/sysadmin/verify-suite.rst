@@ -72,6 +72,19 @@ domain CA. The probes run in the throwaway namespace, which the fixture
 tears down on exit; like the config surface, the whole module skips until
 the feature is deployed.
 
+``verify/test_hubble.py`` — the Hubble configuration surface: the
+``rke2-cilium`` HelmChartConfig carries the ``hubble`` values block that
+switches on the agent-side Hubble server, the relay and the UI; the relay
+and UI Deployments in ``kube-system`` are Ready (the relay's readiness
+proves it reached an agent's Hubble server over TLS); the cilium
+configmap still carries ``enable-hubble``; and the platform Gateway
+carries the ``hubble`` listener with the shim-issued ``hubble-edge-tls``
+certificate and an Accepted, bound HTTPRoute. Like the mTLS module, the
+whole module skips until the values block is on the estate (the HCC has no
+``hubble`` key) and enforces on every warm build after. ``hubble`` also
+joins the edge-host list in ``verify/test_gateway.py``: the listener, the
+route and the TLS-to-domain-CA check cover it with the other edge hosts.
+
 Running it
 ==========
 

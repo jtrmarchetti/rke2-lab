@@ -114,3 +114,28 @@ spec:
     # (the agents fail their start hook and crash-loop) until it is set.
     dnsProxy:
       enableTransparentMode: true
+    # Hubble: service-mesh flow observability. Enabling it turns on the
+    # Hubble server inside every cilium agent, and the chart deploys
+    # hubble-relay and hubble-ui (plus their RBAC) into kube-system. The
+    # relay and UI images are already in the rke2-images-cilium mirror
+    # set, so the air-gapped build needs nothing new.
+    #
+    # The TLS defaults are left as the chart's: hubble.tls.enabled is
+    # true with auto.method=helm, a self-contained self-signed cert loop
+    # for the relay/agent/UI. No cert-manager issuer is involved, and the
+    # helm templates look up the existing secret on upgrade, so the key
+    # material stays stable across chart upgrades.
+    #
+    # The UI is not exposed through the chart's Ingress template (left at
+    # its default, off): this estate terminates edge TLS on the platform
+    # Gateway instead. The GitOps tree adds the `hubble` listener on that
+    # Gateway - the cert-manager Gateway shim issues the hubble-edge-tls
+    # certificate for it - and an HTTPRoute in front of the UI service.
+    # Keycloak SSO in front of the UI is a follow-on card; the baseline
+    # publishes the UI unauthenticated.
+    hubble:
+      enabled: true
+      relay:
+        enabled: true
+      ui:
+        enabled: true

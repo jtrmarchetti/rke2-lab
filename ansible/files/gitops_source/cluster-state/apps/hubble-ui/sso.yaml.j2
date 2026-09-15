@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# Keycloak SSO for the Hubble UI is not part of the baseline; this file
+# is the seam that work lands in. The baseline publishes the UI
+# unauthenticated - route.yaml points the hubble listener at hubble-ui
+# directly.
+#
+# What SSO adds:
+#   - the `hubble` Keycloak client (inventory_keycloak_applications) and
+#     its FreeIPA groups,
+#   - an authenticating proxy in front of hubble-ui, following the
+#     estate's longhorn-auth pattern (oauth2-proxy beside the service it
+#     fronts, sealed client and cookie secrets),
+#   - the HTTPRoute's backend switched from hubble-ui to that proxy.
+#
+# Until that lands, this file renders comment-only: the Kustomization
+# resource list stays stable, so the SSO card replaces this file rather
+# than rewiring the tree around it.

@@ -71,8 +71,17 @@ The pieces
      - Alloy 1.12.0
      - Logs + traces
      - The collector, a DaemonSet on all six nodes. Reads every container's log
-       file and pushes to Loki, and accepts OTLP spans from anything in the
-       cluster and forwards them to Tempo
+       file and pushes to Loki, and accepts OTLP spans from anything in
+       the cluster and forwards them to Tempo
+   * - Hubble
+     - rke2-cilium (chart values)
+     - Metrics
+     - Service-mesh flow observability: the Hubble server inside every
+       cilium agent, a relay that collects the flows, and the UI at
+       ``https://hubble.k8s.dev.lo``. Not a Flux release - it rides the
+       estate's ``rke2-cilium`` HelmChartConfig, switched on by three
+       values, and the UI is exposed through the platform Gateway the
+       same way every other edge host is
 
 .. note::
 
@@ -163,6 +172,10 @@ Addresses and ports
    * - ``https://grafana.k8s.dev.lo``
      - 443
      - Grafana, through Traefik
+   * - ``https://hubble.k8s.dev.lo``
+     - 443
+     - Hubble UI, through the platform Gateway — the service-mesh flow
+       inspector (see `Hubble`_)
 
 Turned off on purpose
 =====================
@@ -294,6 +307,68 @@ The local ``admin`` account is kept on purpose: Grafana federating means
 Grafana is unreachable when Keycloak will not start, and the cluster whose
 metrics would explain why is this one. Its password is in ``kv/grafana`` and in
 ``GRAFANA_ADMIN_PASSWORD``.
+
+Hubble
+======
+
+Hubble is Cilium's service-mesh flow inspector: which pod talked to which,
+through which endpoint, with what verdict. It answers the question the
+other telemetry only suggests — *was that connection admitted or dropped,
+and why* — and it is worth that on an estate that encrypts east-west
+traffic with mTLS, because a policy that fails closed shows up in Hubble
+before it shows up anywhere else.
+
+The chain, and where each piece lives:
+
+.. code-block:: text
+
+   cilium agent (Hubble server, port 4244)  ── one per node
+        │  gRPC + TLS (chart auto-certs)
+        ▼
+   hubble-relay            ── aggregates the agents, exposes :4245
+        │  HTTP (the UI's flows API)
+        ▼
+   hubble-ui (frontend nginx :8081 + backend API :8090)
+        │  plain HTTP inside the pod network
+        ▼
+   platform Gateway `hubble` listener ── TLS terminated at the edge
+        ▼
+   https://hubble.k8s.dev.lo
+
+Nothing here is a Flux release. The ``rke2-cilium`` HelmChartConfig
+switches all three on with one values block — ``hubble.enabled`` (the
+agent-side server), ``hubble.relay.enabled`` and ``hubble.ui.enabled`` —
+and the chart deploys the relay and UI Deployments into kube-system with
+their RBAC. The relay and UI images are already in the estate's
+``rke2-images-cilium`` mirror set, so an air-gapped build needs nothing
+new. The chart's TLS default (``hubble.tls.auto.method: helm``) generates
+the relay/agent/UI client certificates with Helm itself — self-signed and
+self-contained, no cert-manager issuer in the loop — and looks up the
+existing secret on upgrade, so the key material survives chart upgrades.
+
+The UI is exposed the estate's way: the platform Gateway carries a
+``hubble`` listener, the cert-manager Gateway shim issues
+``hubble-edge-tls`` for it (exactly as for every other edge host), and a
+HTTPRoute in kube-system — next to the UI Service the chart creates —
+points the listener at ``hubble-ui``. Edge TLS stays terminated at the
+Gateway; the UI pod stays plain HTTP inside the encrypted pod network,
+the same boundary the mTLS work put around everything else
+(:doc:`../sysadmin/cilium-mtls`).
+
+Sign-in is the baseline's one deliberate gap: the UI is published
+unauthenticated, on a name only the lab's DNS resolves. Keycloak SSO in
+front of it — following the estate's oauth2-proxy pattern, the way
+Longhorn's UI is fronted — is a follow-on change; until it lands, treat
+the URL as internal.
+
+When Hubble shows nothing while flows are obviously moving, check in this
+order: the cilium configmap carries ``enable-hubble: "true"`` (an agent
+that rolled without it runs no Hubble server, and the relay's connections
+refuse); the relay is Ready (its readiness proves it reached an agent's
+Hubble gRPC server with the client certificate); and the UI backend log
+says where the relay points. The configuration surface is pinned by
+``verify/test_hubble.py``, which skips until the values block lands on
+the estate and enforces after.
 
 Logs
 ====

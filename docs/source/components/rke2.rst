@@ -119,6 +119,20 @@ with a CNI error, read the agent log:
 ``IPSec requires DNS proxy transparent mode`` is the symptom of that block
 having been removed.
 
+Hubble
+------
+
+The same HelmChartConfig turns Hubble on: ``hubble.enabled`` starts the
+Hubble server inside every agent, and ``hubble.relay.enabled`` and
+``hubble.ui.enabled`` deploy the relay and the UI into kube-system — the
+chart ships the three, the estate carries only the values. The relay and
+UI images are in the ``rke2-images-cilium`` mirror set already. The UI is
+exposed on the platform Gateway's ``hubble`` listener (the ``hubble``
+GitOps tree, next to the UI Service the chart creates) and is
+unauthenticated in the baseline — Keycloak SSO in front of it is a
+follow-on. The flow path, edge exposure and the ``verify/test_hubble.py``
+gate are documented in :doc:`../components/observability`.
+
 CoreDNS
 =======
 
