@@ -105,7 +105,9 @@ Policies are CiliumNetworkPolicies with ``authentication.mode: required`` on
 the path being enforced — the pilot is the SSO path, keycloak to its
 database (port 5432). A policy in ``required`` fails closed on a missing
 handshake, so a stuck SPIRE server or an agent that never scheduled
-surfaces as denied connections, not clear-text traffic.
+surfaces as denied connections, not clear-text traffic. The runbook —
+enable, verify, roll back, and the edge-TLS boundary — is
+:doc:`../sysadmin/cilium-mtls`.
 
 One hard coupling: the estate runs the chart's L7 proxy (``enable-l7-proxy``
 is the chart default) together with IPsec, and Cilium refuses to start an

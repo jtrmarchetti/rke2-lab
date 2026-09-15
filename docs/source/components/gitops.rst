@@ -29,7 +29,7 @@ The layers
        StorageClasses
    * - ``apps``
      - Keycloak, Garage, the observability stack, the Longhorn auth proxy,
-     and the service-to-service mTLS CiliumNetworkPolicy trees
+       and the service-to-service mTLS CiliumNetworkPolicy trees
    * - ``unsealer``
      - The OpenBao unseal loop, kept separate so retiring it is deleting one
        declaration

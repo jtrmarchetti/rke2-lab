@@ -74,6 +74,9 @@ The table
    * - Cluster intermediate CA
      - ``ipa_sub_ca`` output directory
      - ``playbooks/cluster_init.yml`` + ``gitops.yml``
+   * - Cilium IPsec key
+     - Delete ``~/.config/rke2lab/cilium-ipsec-keys`` (and its ``env.sh`` line), bump the key id
+     - ``playbooks/kubecp.yml`` — the keygen play regenerates; the agent picks it up on watch
    * - Service certificates
      - Nothing — cert-manager renews them
      - —
@@ -210,6 +213,17 @@ The RKE2 cluster token
 worker. Changing it does not rotate anything on a running cluster — a node with
 the wrong value is simply rejected at registration. Treat it as a rebuild-time
 value.
+
+The Cilium IPsec key
+====================
+
+One generated PSK line that encrypts the pod network, held on the controller
+under ``~/.config/rke2lab/`` (beside the sealing key and the k8s-ca
+keypair), never in GitLab. Deleting the file and re-running ``kubecp.yml``
+regenerates it; the static manifest re-renders onto the servers, so the new
+line reaches the API on the next ``rke2-server`` restart. The step-by-step,
+including the key-id bump that retires the old key, is in
+:doc:`cilium-mtls`.
 
 After any rotation
 ==================
