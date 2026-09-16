@@ -127,10 +127,10 @@ def test_openbao_roles_claim(test_users, who, expect):
                          ids=["user", "admin"])
 def test_hubble_roles_claim(test_users, who, expect):
     """Keycloak issues a token for the `hubble` client carrying the
-    expected role claim. The SSO front-end of the Hubble UI (a follow-on
-    card) authorizes on this claim exactly the way the Longhorn proxy
-    does, so proving the claim is present and correct per tier is what the
-    UI's authentication rests on."""
+    expected role claim. The SSO front-end of the Hubble UI (the
+    hubble-auth oauth2-proxy) authorizes on this claim exactly the way
+    the Longhorn proxy does, so proving the claim is present and correct
+    per tier is what the UI's authentication rests on."""
     user, adm = test_users
     subject = user if who == "user" else adm
     result = helpers.keycloak_login(

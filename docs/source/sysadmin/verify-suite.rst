@@ -87,7 +87,11 @@ backend is the proxy, the proxy's admission arguments
 secrets mounted from the synced ExternalSecret), and the K8s RBAC tiers
 through SubjectAccessReviews: a user reads the service-mesh surface but
 cannot manage the Hubble control-plane, an admin can do both, and a
-non-member is denied. Beyond the configuration surface, the module
+non-member is denied. The matrix also asserts the negatives that lock
+the tier boundaries: the admin's HelmChartConfig read is pinned to
+``rke2-cilium`` by ``resourceNames`` (an admin may not read another
+chart's HCC, even though the resource is cluster-scoped), and the view
+tier has no HCC rule at all. Beyond the configuration surface, the module
 proves the live end-to-end flow the way a browser would: a hubble-users
 member and a hubble-admins member, each driving the real ``hubble-auth``
 oauth2-proxy, are admitted onto the Hubble UI (a non-member is denied at

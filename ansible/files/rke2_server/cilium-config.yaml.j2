@@ -130,9 +130,13 @@ spec:
     # its default, off): this estate terminates edge TLS on the platform
     # Gateway instead. The GitOps tree adds the `hubble` listener on that
     # Gateway - the cert-manager Gateway shim issues the hubble-edge-tls
-    # certificate for it - and an HTTPRoute in front of the UI service.
-    # Keycloak SSO in front of the UI is a follow-on card; the baseline
-    # publishes the UI unauthenticated.
+    # certificate for it - and an HTTPRoute that lands the listener on the
+    # hubble-auth oauth2-proxy (the estate's longhorn-auth pattern) in
+    # front of the UI, not on the UI service: unauthenticated requests
+    # redirect to Keycloak, and admission is decided on the `hubble`
+    # client's roles claim. The UI is therefore unreachable without an SSO
+    # session; the RBAC tiers (hubble-view for hubble-users, hubble-admin
+    # for hubble-admins) are the API-level half of the same boundary.
     hubble:
       enabled: true
       relay:

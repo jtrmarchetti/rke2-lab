@@ -298,18 +298,38 @@ def test_hubble_sso_secret_is_synced():
      {"verb": "get", "resource": "helmchartconfigs", "name": "rke2-cilium",
       "group": "helm.cattle.io"},
      True),
+    # Negative (review D3): the HCC read is pinned to rke2-cilium by
+    # resourceNames even though HelmChartConfig is cluster-scoped - the
+    # estate's API server honors resourceNames on this resource, so an
+    # admin may NOT read another chart's HCC. Asserting the negative locks
+    # that the admin tier's HCC access stays scoped to the one that carries
+    # the hubble values, not every HelmChartConfig in the cluster.
+    ("hubble-admins",
+     {"verb": "get", "resource": "helmchartconfigs", "name": "rke2-traefik",
+      "group": "helm.cattle.io"},
+     False),
+    # The view tier has no HCC rule at all: a hubble-users member may not
+    # read even the scoped rke2-cilium HCC.
+    ("hubble-users",
+     {"verb": "get", "resource": "helmchartconfigs", "name": "rke2-cilium",
+      "group": "helm.cattle.io"},
+     False),
     (None,
      {"verb": "list", "resource": "ciliumnetworkpolicies", "group": "cilium.io"},
      False),
 ], ids=["user-views-mesh", "user-views-pods", "user-no-manage",
         "admin-views-mesh", "admin-manages-relay", "admin-manages-hcc",
+        "admin-hcc-scoped", "user-no-hcc",
         "nobody-denied"])
 def test_hubble_rbac_tiers(group, resource_attributes, expected):
     """The K8s RBAC tiers enforce per group: hubble-users may read the
     service-mesh surface (the UI's data) but not manage the Hubble
     control-plane; hubble-admins may do both; a user in neither group is
     denied. A tier that allows too much is a privilege escalation, so
-    both directions are asserted."""
+    both directions are asserted - including the cluster-scoped HCC read,
+    where admin is pinned to rke2-cilium by resourceNames (the review D3
+    negative: admin may NOT read another chart's HCC) and the view tier
+    has no HCC rule at all."""
     assert _subject_access_review("verify-test", [group] if group else [],
                                   resource_attributes) is expected, (
         f"RBAC tier {group or '(no group)'}: "

@@ -699,8 +699,28 @@ def ipa_user_add(name: str, email: str, password: str) -> None:
     )
 
 
+# FreeIPA directory settle: a fresh ``user-add`` is not always visible to
+# the very next ``group-add-member`` channel under full-suite load.  A
+# just-added entry that has not settled yet is reported as ``no such
+# entry``; retry a few times with a short backoff instead of hard-failing
+# (review D1: the hubble_tiers fixture flaked on exactly this window, and
+# the same settle family behind the proxmox-test F1 incident).
+_IPA_GROUP_SETTLE_S = 5
+_IPA_GROUP_SETTLE_RETRIES = 3
+
+
 def ipa_group_add_member(group: str, user: str) -> None:
-    _ipa_admin(f"ipa group-add-member {group} --users={user}")
+    for attempt in range(_IPA_GROUP_SETTLE_RETRIES + 1):
+        try:
+            _ipa_admin(f"ipa group-add-member {group} --users={user}")
+            return
+        except RuntimeError as exc:
+            # Only a just-added entry that has not settled yet is transient;
+            # any other failure (unknown group, kinit) is raised immediately,
+            # and the final attempt always surfaces a genuine failure.
+            if "no such entry" not in str(exc) or attempt == _IPA_GROUP_SETTLE_RETRIES:
+                raise
+            time.sleep(_IPA_GROUP_SETTLE_S)
 
 
 def ipa_group_remove_member(group: str, user: str) -> None:

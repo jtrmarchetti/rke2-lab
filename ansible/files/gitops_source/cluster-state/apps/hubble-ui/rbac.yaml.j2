@@ -84,6 +84,13 @@ subjects:
 # write rules carry resourceNames (a write verb addresses individual
 # resources); the read rules do not (a list cannot carry resourceNames), so
 # reads are broad and writes are pinned to the hubble-* objects.
+#
+# One read is deliberately pinned even though it is cluster-scoped: the
+# helmchartconfigs rule below carries resourceNames=rke2-cilium, so an admin
+# may read only the one HCC that carries the hubble values - not every
+# HelmChartConfig in the cluster. (This estate's API server honors
+# resourceNames on the cluster-scoped HCC read - review D3's "leak" was a
+# false positive; verify/test_hubble locks the negative in the SAR matrix.)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
