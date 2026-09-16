@@ -17,6 +17,28 @@
       docs/source/components/secrets.rst.
     quiet: true
 
+- name: main | Reject a description that would break the shell it is embedded in
+  when: (ipa_sso_groups_enabled | bool)
+  vars:
+    _ipa_sso_groups_bad_descriptions: >-
+      {{ (ipa_sso_groups_applications
+          + ipa_sso_groups_admin_only_applications)
+         | selectattr('description', 'defined')
+         | selectattr('description', 'contains', "'")
+         | map(attribute='name') | list }}
+  ansible.builtin.assert:
+    that:
+      - (_ipa_sso_groups_bad_descriptions | length) == 0
+    fail_msg: >-
+      These application descriptions contain a single quote:
+      {{ _ipa_sso_groups_bad_descriptions | join(', ') }}. The description
+      is written into the group's description field inside a shell command
+      the role assembles, and a single quote terminates that command, so
+      the group is never created and the failure reads as an obscure shell
+      error. Keep the description free of single quotes — write
+      "Cilium" rather than "Cilium's".
+    quiet: true
+
 - name: main | Ensure each application has an administrator and a user group # noqa: risky-shell-pipe
   when: (ipa_sso_groups_enabled | bool)
   changed_when: "'changed=0' not in _reg_ipa_sso_groups_result['stdout']"

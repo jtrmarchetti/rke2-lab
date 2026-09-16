@@ -37,6 +37,9 @@ Web and API
    * - Longhorn
      - ``https://longhorn.k8s.dev.lo``
      - Behind oauth2-proxy
+   * - Hubble
+     - ``https://hubble.k8s.dev.lo``
+     - Cilium flow observability; the SSO front-end is not landed yet
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - Also ``https://<bucket>.s3.k8s.dev.lo``

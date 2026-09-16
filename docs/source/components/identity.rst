@@ -148,6 +148,14 @@ Who federates, and how
      - **No authentication of any kind exists in Longhorn.** An oauth2-proxy
        stands in front of it in full reverse-proxy mode. It is the only
        component SSO adds to the cluster
+   * - Hubble
+     - **The UI has no authentication of its own.** An oauth2-proxy will stand
+       in front of it, the way it does for Longhorn, and authorize on the
+       token's ``roles`` claim. The groups this card adds — ``hubble-users``
+       and ``hubble-admins`` — are granted the ``user`` and ``admin`` client
+       roles on the ``hubble`` client, so a member's token carries
+       ``roles: ["user"]`` or ``roles: ["admin"]``. The SSO front-end is a
+       follow-on card; the client, groups and claim it will read already exist
    * - Garage
      - Does not federate. It speaks S3 and an admin bearer token; its keys stay
        in the vault

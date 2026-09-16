@@ -153,6 +153,13 @@ inventory_keycloak_applications:
       - https://gitlab.dev.lo/users/auth/openid_connect/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_GITLAB') }}"
 
+  - name: hubble
+    description: Hubble, the service-mesh flow observability front end
+    base_url: https://hubble.k8s.dev.lo
+    redirect_uris:
+      - https://hubble.k8s.dev.lo/oauth2/callback
+    client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_HUBBLE') }}"
+
 inventory_keycloak_admin_only_applications:
   - name: keycloak
     description: Keycloak itself, the single sign-on service

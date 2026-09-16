@@ -120,6 +120,32 @@ def test_openbao_roles_claim(test_users, who, expect):
 
 
 # ---------------------------------------------------------------------------
+# Hubble (the UI fronts the claim the same way the Longhorn proxy will)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("who,expect", [("user", "user"), ("admin", "admin")],
+                         ids=["user", "admin"])
+def test_hubble_roles_claim(test_users, who, expect):
+    """Keycloak issues a token for the `hubble` client carrying the
+    expected role claim. The SSO front-end of the Hubble UI (a follow-on
+    card) authorizes on this claim exactly the way the Longhorn proxy
+    does, so proving the claim is present and correct per tier is what the
+    UI's authentication rests on."""
+    user, adm = test_users
+    subject = user if who == "user" else adm
+    result = helpers.keycloak_login(
+        helpers.make_session(), subject.name, subject.password,
+        "hubble", helpers.SPE["hubble"][0])
+    assert result.ok, f"Keycloak login failed: {result.detail}"
+    tokens = helpers.exchange_code("hubble", result.code,
+                                   helpers.SPE["hubble"][0])
+    claims = helpers.access_token_claims(tokens["access_token"])
+    assert claims.get("roles") == [expect], (
+        f"expected roles claim [{expect}] for {subject.name}, "
+        f"got {claims.get('roles')}")
+
+
+# ---------------------------------------------------------------------------
 # Keycloak administration
 # ---------------------------------------------------------------------------
 

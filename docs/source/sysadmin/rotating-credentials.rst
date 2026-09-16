@@ -99,8 +99,8 @@ step that used to fail silently.
 OIDC client secrets
 ===================
 
-Four values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
-``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``.
+Five values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
+``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``, ``_HUBBLE``.
 
 .. code-block:: console
 

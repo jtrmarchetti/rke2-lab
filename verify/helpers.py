@@ -167,6 +167,8 @@ SPE: dict[str, tuple[str, str]] = {
                  "OIDC_CLIENT_SECRET_LONGHORN"),
     "openbao": ("http://localhost:8250/oidc/callback",
                 "OIDC_CLIENT_SECRET_OPENBAO"),
+    "hubble": ("https://hubble.k8s.dev.lo/oauth2/callback",
+               "OIDC_CLIENT_SECRET_HUBBLE"),
 }
 GITLAB_CALLBACK = "https://gitlab.dev.lo/users/auth/openid_connect/callback"
 
@@ -682,11 +684,11 @@ def make_test_users() -> tuple[TestUser, TestUser]:
     user = TestUser(name="test", email="verify-test@dev.lo",
                     password=secrets.token_urlsafe(24))
     user.add_groups("gitlab-users", "grafana-users", "longhorn-users",
-                    "openbao-users")
+                    "openbao-users", "hubble-users")
     adm = TestUser(name="test.adm", email="verify-test-adm@dev.lo",
                    password=secrets.token_urlsafe(24))
     adm.add_groups("gitlab-admins", "grafana-admins", "longhorn-admins",
-                   "openbao-admins", "keycloak-admins")
+                  "openbao-admins", "hubble-admins", "keycloak-admins")
     return user, adm
 
 
