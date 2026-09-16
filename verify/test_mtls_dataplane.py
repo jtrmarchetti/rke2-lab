@@ -37,12 +37,16 @@ from verify import helpers
 
 # The throwaway probe namespace and the busybox image it runs. Manifests
 # in the estate reference upstream image refs; the node-level
-# registries.yaml rewrite (docker.io/* -> the GitLab registry mirror,
-# where the artifacts.yml mirror entry lands the tag) resolves the pull
-# in the air-gapped estate - the same convention the gitops workloads
-# (e.g. keycloak) follow.
+# registries.yaml rewrite (docker.io/* -> the GitLab registry mirror)
+# resolves the pull in the air-gapped estate. Pin the mirror source by
+# digest, not tag: the estate's artifacts.yml lands busybox digest-pinned
+# (skopeo --preserve-digests, deliberately avoiding the re-published moving
+# tag), so a tag-mirror is absent on a cold build and the probes would
+# ImagePullBackOff. The digest is a multi-arch index, so it pulls on every
+# node arch.
 _PROBE_NS = "mtls-verify"
-_PROBE_IMAGE = "docker.io/library/busybox:1.37.0"
+_PROBE_IMAGE = ("docker.io/library/busybox"
+                "@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028")
 _PROBE_PORT = "9999"
 # One probe payload per sender, so the server's log tells the tests
 # exactly which pod's traffic was admitted.
