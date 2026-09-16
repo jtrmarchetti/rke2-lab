@@ -553,6 +553,59 @@ def gitlab_sso_login(username: str, password: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Hubble UI (behind the hubble-auth oauth2-proxy; drives the real proxy flow)
+# ---------------------------------------------------------------------------
+
+HUBBLE_BASE = "https://hubble.k8s.dev.lo"
+
+
+def hubble_sso_flow(username: str, password: str) -> dict:
+    """Drive the Hubble UI's SSO front-end the way a browser would.
+
+    The hubble-ui HTTPRoute lands on the hubble-auth oauth2-proxy, which
+    302s an anonymous request to the Keycloak ``hubble`` client, admits a
+    member of hubble-users or hubble-admins onto the upstream UI, and
+    denies everyone else (a 403 at the callback, no session cookie).
+
+    Returns a report a test can assert on per tier: ``admitted`` (callback
+    and the UI page both 200) or ``denied`` (the callback 403s and the
+    proxy re-bounces the request to Keycloak instead of the upstream).
+    """
+    session = make_session()
+
+    # 1. Unauthenticated: the proxy must redirect to Keycloak, client hubble.
+    anon = session.get(HUBBLE_BASE + "/", allow_redirects=False, timeout=30)
+    location = anon.headers.get("Location", "")
+    if anon.status_code not in (302, 303) or "client_id=hubble" not in location:
+        return {"admitted": False, "denied": False, "stage": "unauthenticated",
+                "detail": (f"GET / gave {anon.status_code} loc={location[:160]}: "
+                           f"the proxy is not redirecting an anonymous request "
+                           f"to the hubble Keycloak client")}
+
+    # 2. Ride the proxy's own authorization request (its state/PKCE).
+    result = keycloak_login(session, username, password, auth_url=location)
+    if not result.ok:
+        return {"admitted": False, "denied": False, "stage": "login",
+                "detail": result.detail}
+
+    # 3. Follow the callback the proxy issued: code -> session -> upstream.
+    callback = session.get(result.location, allow_redirects=True, timeout=60)
+
+    # 4. What the UI answers with the session.
+    page = session.get(HUBBLE_BASE + "/", allow_redirects=False, timeout=30)
+    admitted = callback.status_code == 200 and page.status_code == 200
+    title = ""
+    if "<title>" in page.text:
+        title = page.text.split("<title>", 1)[-1].split("</title>", 1)[0]
+    return {"admitted": admitted, "denied": callback.status_code == 403,
+            "stage": "done",
+            "callback_status": callback.status_code,
+            "page_status": page.status_code,
+            "page_title": title,
+            "re_bounced": "client_id=hubble" in page.headers.get("Location", "")}
+
+
+# ---------------------------------------------------------------------------
 # OpenBao
 # ---------------------------------------------------------------------------
 

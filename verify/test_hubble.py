@@ -318,3 +318,146 @@ def test_hubble_rbac_tiers(group, resource_attributes, expected):
         f"{resource_attributes.get('resource')} "
         f"({resource_attributes.get('name', '')}) expected "
         f"allowed={expected}")
+
+
+# ---------------------------------------------------------------------------
+# Live SSO through the hubble-auth proxy (real identities, real flows)
+#
+# The RBAC-tier tests above ask the API what a tier may do. These drive the
+# *actual* SSO front-end the way a browser would: an anonymous request to the
+# UI 302s to the hubble Keycloak client, a member is admitted onto the UI, and
+# a non-member is turned away at the proxy. This is the end-to-end proof the
+# config-surface and SAR tests stand in for.
+# ---------------------------------------------------------------------------
+
+
+def _hubble_agent_pod() -> str:
+    """A running cilium-agent pod: the `hubble observe` channel reads the
+    flow pipeline from an agent, the estate's established way to prove the
+    mesh's traffic is observable."""
+    pods = helpers.kubectl_json(
+        "get", "pod", "-n", "kube-system", "-l", "k8s-app=cilium",
+        "--field-selector", "status.phase=Running")
+    assert pods["items"], ("no running cilium-agent pod: cannot read the "
+                           "agent-side flow pipeline to prove mesh traffic "
+                           "is observable")
+    return pods["items"][0]["metadata"]["name"]
+
+
+@_sso_tests
+def test_hubble_sso_user_admitted(hubble_tiers):
+    """A member of hubble-users, driving the real hubble-auth proxy, is
+    admitted onto the Hubble UI: the anonymous request redirects to the
+    hubble Keycloak client, the callback issues a session, and the UI page
+    answers 200 with the app's own markup. If the user tier cannot reach
+    the UI, the whole user-facing half of the feature is broken."""
+    user, _adm, _nobody = hubble_tiers
+    report = helpers.hubble_sso_flow(user.name, user.password)
+    assert report["admitted"], (
+        f"a hubble-users member was not admitted to the Hubble UI "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+    assert "Hubble" in report.get("page_title", ""), (
+        f"the admitted session reached a page titled "
+        f"{report.get('page_title', '')!r}, not the Hubble UI")
+
+
+@_sso_tests
+def test_hubble_sso_admin_admitted(hubble_tiers):
+    """A member of hubble-admins is admitted onto the Hubble UI through the
+    same proxy. The admin tier must reach at least everything the user tier
+    does; a regression that only breaks the admin path would otherwise be
+    invisible to the user-tier test."""
+    _user, adm, _nobody = hubble_tiers
+    report = helpers.hubble_sso_flow(adm.name, adm.password)
+    assert report["admitted"], (
+        f"a hubble-admins member was not admitted to the Hubble UI "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+
+
+@_sso_tests
+def test_hubble_sso_nonmember_denied(hubble_tiers):
+    """A user who is a federated SSO user but in no hubble group is denied
+    at the proxy: Keycloak still issues a token (the user is a valid
+    identity), but the hubble client carries neither the user nor the admin
+    role, so the callback 403s, no session cookie is minted, and the request
+    is bounced back to Keycloak instead of the upstream UI. This is the
+    denial half of the boundary: if a non-member is admitted, the SSO gate
+    has no teeth."""
+    _user, _adm, nobody = hubble_tiers
+    report = helpers.hubble_sso_flow(nobody.name, nobody.password)
+    assert report["denied"], (
+        f"a hubble non-member was not denied at the proxy "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+    assert not report["admitted"], (
+        "a hubble non-member was admitted to the UI: the SSO gate admits "
+        "everyone, so the roles claim is not actually the admission gate")
+    assert report["re_bounced"], (
+        "after the 403 the proxy did not re-bounce the request to the "
+        "hubble Keycloak client: the denied session is not being cleared "
+        "correctly")
+
+
+@_sso_tests
+def test_hubble_mesh_traffic_is_visible():
+    """The Hubble pipeline actually carries service-mesh traffic: an agent
+    reports live flow records. This is what the UI's service map renders, so
+    an empty agent pipeline means the UI would open on an empty board even
+    for a correctly-admitted user. Read the way the estate reads agent-side
+    data: `hubble observe` on a running cilium-agent, bounded so the test
+    cannot hang on a quiet cluster."""
+    pod = _hubble_agent_pod()
+    proc = helpers.kubectl(
+        "exec", pod, "-n", "kube-system", "-c", "cilium-agent", "--",
+        "timeout", "30", "hubble", "observe", "--last", "5", check=False)
+    assert proc.returncode == 0, (
+        f"hubble observe failed on {pod}: {(proc.stderr or '')[:300]}")
+    out = proc.stdout.strip()
+    assert out, (
+        "hubble observe returned no flows: the agent's Hubble pipeline is "
+        "not reporting service-mesh traffic, so the UI would show an empty "
+        "board even to an admitted user")
+    assert any(tok in out for tok in ("FORWARDED", "DROPPED", "->", "<->")), (
+        f"hubble observe output is not a flow record: {out[:200]!r}")
+
+
+@_sso_tests
+def test_hubble_sso_proxy_logs_show_no_auth_errors():
+    """The hubble-auth proxy's own logs carry no authentication errors. The
+    expected `[AuthFailure]` denial lines (a non-member's 403) and the two
+    benign startup WARNINGs (PKCE method, trusted-proxy-ip) are correct
+    behavior, not errors; a hard error signature (a panic, a failed OIDC
+    issuer/secret load, a 5xx) is a broken proxy."""
+    proc = helpers.kubectl(
+        "logs", "deploy/hubble-auth", "-n", "kube-system", check=False)
+    assert proc.returncode == 0, (
+        f"could not read the hubble-auth proxy logs: {proc.stderr[:300]}")
+    log = proc.stdout or ""
+    # Not a vacuous pass: we must have actually read the live proxy log.
+    # The banner proves the proxy came up and configured its Keycloak OIDC
+    # client; an empty log would mean the pod restarted and the scan says
+    # nothing.
+    assert "OAuthProxy configured for Keycloak OIDC Client ID: hubble" in log, (
+        "the hubble-auth log does not carry the OIDC banner "
+        "(OAuthProxy configured for Keycloak OIDC Client ID: hubble): the "
+        "proxy is not up and serving the hubble client, so the SSO "
+        "front-end is down")
+    hard_errors = []
+    for i, line in enumerate(log.splitlines(), 1):
+        low = line.lower()
+        if any(sig in low for sig in
+               ("panic", "fatal", "issuer not found",
+                "failed to verify", "invalid issuer",
+                "unable to load", "secret not found",
+                "connection refused", "500 internal")):
+            hard_errors.append(f"{i}: {line.strip()[:160]}")
+    assert not hard_errors, (
+        "the hubble-auth proxy logged authentication errors:\n"
+        + "\n".join(hard_errors[:10])
+        + "\na broken OIDC issuer/secret load or panic means the SSO "
+        "front-end is not serving admissions reliably")

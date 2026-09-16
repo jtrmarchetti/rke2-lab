@@ -87,7 +87,15 @@ backend is the proxy, the proxy's admission arguments
 secrets mounted from the synced ExternalSecret), and the K8s RBAC tiers
 through SubjectAccessReviews: a user reads the service-mesh surface but
 cannot manage the Hubble control-plane, an admin can do both, and a
-non-member is denied. Like the mTLS module, the Hubble tests skip until
+non-member is denied. Beyond the configuration surface, the module
+proves the live end-to-end flow the way a browser would: a hubble-users
+member and a hubble-admins member, each driving the real ``hubble-auth``
+oauth2-proxy, are admitted onto the Hubble UI (a non-member is denied at
+the proxy — the callback 403s and the request is bounced back to
+Keycloak, no session minted); an agent's ``hubble observe`` pipeline
+returns live flow records, so the mesh traffic the UI renders is
+actually flowing; and the proxy's own logs carry the OIDC banner with no
+authentication errors. Like the mTLS module, the Hubble tests skip until
 the values block is on the estate (the HCC has no ``hubble`` key) and the
 SSO tests skip until the proxy is deployed; after, everything enforces on
 every warm build. ``hubble`` also
