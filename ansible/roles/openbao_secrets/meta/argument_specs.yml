@@ -79,6 +79,19 @@ argument_specs:
           - Key oauth2-proxy encrypts its session cookie with. Must be 16, 24
             or 32 bytes; any other length is refused at start-up with an AES
             key size error that never mentions cookies.
+      openbao_secrets_hubble_oidc_client_secret:
+        type: str
+        required: true
+        description:
+          - OIDC client secret for the oauth2-proxy in front of the Hubble
+            UI, which has no authentication of its own.
+      openbao_secrets_hubble_cookie_secret:
+        type: str
+        required: true
+        description:
+          - Key the Hubble oauth2-proxy encrypts its session cookie with.
+            Must be 16, 24 or 32 bytes; any other length is refused at
+            start-up with an AES key size error that never mentions cookies.
       openbao_secrets_garage_s3_access_key:
         type: str
         default: ""

@@ -22,6 +22,7 @@
       - OIDC_CLIENT_SECRET_HUBBLE
 
       - OAUTH2_PROXY_COOKIE_SECRET
+      - OAUTH2_PROXY_COOKIE_SECRET_HUBBLE
 
       - FREEIPA_ADMIN_PASSWORD
 
@@ -164,6 +165,10 @@
           {{ lookup('env', 'OIDC_CLIENT_SECRET_LONGHORN') }}
         openbao_secrets_longhorn_cookie_secret: >-
           {{ lookup('env', 'OAUTH2_PROXY_COOKIE_SECRET') }}
+        openbao_secrets_hubble_oidc_client_secret: >-
+          {{ lookup('env', 'OIDC_CLIENT_SECRET_HUBBLE') }}
+        openbao_secrets_hubble_cookie_secret: >-
+          {{ lookup('env', 'OAUTH2_PROXY_COOKIE_SECRET_HUBBLE') }}
       ansible.builtin.include_role:
         name: openbao_secrets
         apply:
@@ -248,6 +253,10 @@
           {{ lookup('env', 'OIDC_CLIENT_SECRET_LONGHORN') }}
         openbao_secrets_longhorn_cookie_secret: >-
           {{ lookup('env', 'OAUTH2_PROXY_COOKIE_SECRET') }}
+        openbao_secrets_hubble_oidc_client_secret: >-
+          {{ lookup('env', 'OIDC_CLIENT_SECRET_HUBBLE') }}
+        openbao_secrets_hubble_cookie_secret: >-
+          {{ lookup('env', 'OAUTH2_PROXY_COOKIE_SECRET_HUBBLE') }}
       ansible.builtin.include_role:
         name: openbao_secrets
         apply:

@@ -1,0 +1,198 @@
+{{ ansible_managed | comment }}
+# RBAC tiers for the Hubble UI, bound to the FreeIPA SSO groups the
+# `hubble` client federates:
+#
+#   hubble-users  ->  hubble-view   : read the service-mesh traffic surface
+#   hubble-admins ->  hubble-admin  : manage the Hubble control-plane
+#
+# The tiers mirror what the Keycloak `roles` claim means for this service
+# (the keycloak_clients role grants hubble-users the `user` client role and
+# hubble-admins the `admin` client role, and the oauth2-proxy in sso.yaml
+# admits exactly those two at the edge). The K8s roles encode the same
+# boundary at the API level:
+#
+#   * hubble-view grants a member of hubble-users read access to the
+#     service-mesh surface the Hubble UI inspects - the Cilium Hubble
+#     resources plus the core resources its service map reads.
+#   * hubble-admin grants a member of hubble-admins that same read surface
+#     plus the manage verbs on the Hubble control-plane, so an admin can
+#     reconfigure or restart Hubble, not merely watch it.
+#
+# The estate's Kubernetes API has no user-level authentication of its own
+# (cluster access rides the estate's kubeconfig, the way Longhorn's does), so
+# the Group bindings below are the *encoded* RBAC tiers: a Group subject,
+# enforced and verifiable now through a SubjectAccessReview / `auth can-i`
+# (see verify/test_hubble). They become live for federated logins the
+# moment an API authentication bridge maps the token's `roles` claim onto
+# Kubernetes groups; until then a human holds cluster-admin through the
+# estate's kubeconfig and these are the documented, testable tier boundary.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hubble-view
+  labels:
+    app.kubernetes.io/part-of: hubble-ui
+rules:
+  # The service-mesh traffic surface: the Cilium resources Hubble reports.
+  - apiGroups:
+      - cilium.io
+    resources:
+      - ciliumnetworkpolicies
+      - ciliumendpoints
+      - ciliumidentities
+      - ciliumnodes
+      - ciliumcidrgroups
+    verbs:
+      - get
+      - list
+      - watch
+  # The core resources the Hubble UI's service map correlates flows against
+  # (the read set the rke2-cilium chart already gives the hubble-ui
+  # ServiceAccount; a human user gets the same read surface).
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - namespaces
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hubble-view
+  labels:
+    app.kubernetes.io/part-of: hubble-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hubble-view
+subjects:
+  - kind: Group
+    name: hubble-users
+    apiGroup: rbac.authorization.k8s.io
+---
+# hubble-admin is a superset of hubble-view (an admin can also view) plus the
+# manage verbs on the Hubble control-plane: the relay and UI workloads, their
+# configuration, and the RKE2 HelmChartConfig that switches Hubble on. The
+# write rules carry resourceNames (a write verb addresses individual
+# resources); the read rules do not (a list cannot carry resourceNames), so
+# reads are broad and writes are pinned to the hubble-* objects.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hubble-admin
+  labels:
+    app.kubernetes.io/part-of: hubble-ui
+rules:
+  # Read the service-mesh surface (the hubble-view set).
+  - apiGroups:
+      - cilium.io
+    resources:
+      - ciliumnetworkpolicies
+      - ciliumendpoints
+      - ciliumidentities
+      - ciliumnodes
+      - ciliumcidrgroups
+    verbs:
+      - get
+      - list
+      - watch
+  # Read the core resources the service map correlates flows against, plus
+  # the Hubble workloads themselves (an admin can see them anywhere).
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - namespaces
+      - nodes
+      - serviceaccounts
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+  # Manage the Hubble control-plane: the relay and UI workloads...
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - hubble-relay
+      - hubble-ui
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  # ...their configuration...
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - hubble-ui-nginx
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  # ...their ServiceAccounts...
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    resourceNames:
+      - hubble-ui
+      - hubble-relay
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  # ...and the RKE2 HelmChartConfig that enables Hubble on the estate.
+  # cluster-scoped, so no list; get/watch plus the write verbs.
+  - apiGroups:
+      - helm.cattle.io
+    resources:
+      - helmchartconfigs
+    resourceNames:
+      - rke2-cilium
+    verbs:
+      - get
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hubble-admin
+  labels:
+    app.kubernetes.io/part-of: hubble-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: hubble-admin
+subjects:
+  - kind: Group
+    name: hubble-admins
+    apiGroup: rbac.authorization.k8s.io

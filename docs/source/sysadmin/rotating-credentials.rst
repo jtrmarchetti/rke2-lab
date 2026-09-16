@@ -56,10 +56,10 @@ The table
    * - Garage S3 keys
      - Garage, then ``env.sh``
      - ``playbooks/cluster_init.yml`` (a second time — see below)
-   * - OIDC client secrets (4)
+   * - OIDC client secrets (5)
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
-   * - oauth2-proxy cookie secret
+   * - oauth2-proxy cookie secrets (2)
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
    * - ``rke2-nodes`` deploy token
@@ -113,9 +113,12 @@ for OpenBao and GitLab) and the Keycloak client — because the secret is
 authored rather than generated. The workloads pick it up from ESO within the
 refresh interval; restart them if you want it immediately.
 
-The cookie secret for the Longhorn proxy is different in kind: rotating
-``OAUTH2_PROXY_COOKIE_SECRET`` signs everyone out and does nothing else. It
-must be exactly 16, 24 or 32 bytes.
+The cookie secrets for the oauth2-proxies are different in kind: the
+Longhorn proxy's is ``OAUTH2_PROXY_COOKIE_SECRET`` and the Hubble
+proxy's is ``OAUTH2_PROXY_COOKIE_SECRET_HUBBLE``. Rotating either signs
+everyone out of that proxy and does nothing else — the two are
+independent, so rotating one never disturbs the other. Each must be
+exactly 16, 24 or 32 bytes.
 
 Keycloak's ``admin`` password
 =============================

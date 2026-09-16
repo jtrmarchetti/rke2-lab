@@ -79,9 +79,18 @@ and UI Deployments in ``kube-system`` are Ready (the relay's readiness
 proves it reached an agent's Hubble server over TLS); the cilium
 configmap still carries ``enable-hubble``; and the platform Gateway
 carries the ``hubble`` listener with the shim-issued ``hubble-edge-tls``
-certificate and an Accepted, bound HTTPRoute. Like the mTLS module, the
-whole module skips until the values block is on the estate (the HCC has no
-``hubble`` key) and enforces on every warm build after. ``hubble`` also
+certificate and an Accepted, bound HTTPRoute. The SSO half adds a second
+skip marker — the ``hubble-auth`` proxy, deployed by the gitops
+``apps/hubble-ui`` tree — behind which the module asserts the route's
+backend is the proxy, the proxy's admission arguments
+(``--allowed-role=hubble:user`` / ``hubble:admin``, no bypass flags,
+secrets mounted from the synced ExternalSecret), and the K8s RBAC tiers
+through SubjectAccessReviews: a user reads the service-mesh surface but
+cannot manage the Hubble control-plane, an admin can do both, and a
+non-member is denied. Like the mTLS module, the Hubble tests skip until
+the values block is on the estate (the HCC has no ``hubble`` key) and the
+SSO tests skip until the proxy is deployed; after, everything enforces on
+every warm build. ``hubble`` also
 joins the edge-host list in ``verify/test_gateway.py``: the listener, the
 route and the TLS-to-domain-CA check cover it with the other edge hosts.
 

@@ -149,13 +149,17 @@ Who federates, and how
        stands in front of it in full reverse-proxy mode. It is the only
        component SSO adds to the cluster
    * - Hubble
-     - **The UI has no authentication of its own.** An oauth2-proxy will stand
-       in front of it, the way it does for Longhorn, and authorize on the
-       token's ``roles`` claim. The groups this card adds — ``hubble-users``
-       and ``hubble-admins`` — are granted the ``user`` and ``admin`` client
-       roles on the ``hubble`` client, so a member's token carries
-       ``roles: ["user"]`` or ``roles: ["admin"]``. The SSO front-end is a
-       follow-on card; the client, groups and claim it will read already exist
+     - **The UI has no authentication of its own.** An oauth2-proxy
+       (``hubble-auth``) stands in front of it in full reverse-proxy mode,
+       the way it does for Longhorn, and authorizes on the token's
+       ``roles`` claim. ``hubble-users`` and ``hubble-admins`` are granted
+       the ``user`` and ``admin`` client roles on the ``hubble`` client, so
+       a member's token carries ``roles: ["user"]`` or ``roles: ["admin"]``,
+       and the proxy admits exactly those two. The K8s RBAC tiers
+       (``hubble-view`` bound to ``hubble-users``, ``hubble-admin`` bound to
+       ``hubble-admins``) encode the same boundary at the API level: a user
+       reads the service-mesh traffic surface, an admin manages the Hubble
+       control-plane
    * - Garage
      - Does not federate. It speaks S3 and an admin bearer token; its keys stay
        in the vault

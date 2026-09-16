@@ -29,7 +29,8 @@ The layers
        StorageClasses
    * - ``apps``
      - Keycloak, Garage, the observability stack, the Longhorn auth proxy,
-       the Hubble UI route, and the service-to-service mTLS
+       the Hubble UI tree (its route, the hubble-auth oauth2-proxy, and the
+       K8s RBAC tiers), and the service-to-service mTLS
        CiliumNetworkPolicy trees
    * - ``unsealer``
      - The OpenBao unseal loop, kept separate so retiring it is deleting one

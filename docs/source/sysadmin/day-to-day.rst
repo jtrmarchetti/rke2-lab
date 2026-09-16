@@ -33,7 +33,7 @@ Where things are
      - Keycloak, through oauth2-proxy. No other way in
    * - Hubble
      - ``https://hubble.k8s.dev.lo``
-     - Cilium flow observability; the SSO front-end is not landed yet
+     - Keycloak, through the hubble-auth proxy. No other way in
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - S3 access keys from ``kv/garage``

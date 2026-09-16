@@ -39,7 +39,7 @@ Web and API
      - Behind oauth2-proxy
    * - Hubble
      - ``https://hubble.k8s.dev.lo``
-     - Cilium flow observability; the SSO front-end is not landed yet
+     - Cilium flow observability, through Keycloak SSO (the hubble-auth proxy)
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - Also ``https://<bucket>.s3.k8s.dev.lo``

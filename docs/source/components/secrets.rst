@@ -100,6 +100,9 @@ What is in it
    * - ``kv/oidc-longhorn``
      - ``client-secret``, ``cookie-secret``
      - ``longhorn-auth``
+   * - ``kv/oidc-hubble``
+     - ``client-secret``, ``cookie-secret``
+     - ``hubble-auth``
 
 Values are written by the ``openbao_secrets`` role from ``env.sh``, and it
 reads each entry before writing it — KV v2 keeps versions, and a role that

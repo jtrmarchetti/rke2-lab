@@ -15,8 +15,10 @@
       - (openbao_secrets_garage_rpc_secret | length) > 0
       - (openbao_secrets_grafana_oidc_client_secret | length) > 0
       - (openbao_secrets_longhorn_oidc_client_secret | length) > 0
+      - (openbao_secrets_hubble_oidc_client_secret | length) > 0
 
       - (openbao_secrets_longhorn_cookie_secret | length) in [16, 24, 32]
+      - (openbao_secrets_hubble_cookie_secret | length) in [16, 24, 32]
     fail_msg: >-
       openbao_secrets needs the root token and every runtime secret it writes
       into the vault. They come from ~/.config/rke2lab/env.sh — the token is

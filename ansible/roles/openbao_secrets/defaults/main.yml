@@ -13,3 +13,8 @@ openbao_secrets_garage_s3_access_key: ""
 openbao_secrets_garage_s3_secret_key: ""
 
 openbao_secrets_no_log: true
+
+openbao_secrets_longhorn_oidc_client_secret: ""
+openbao_secrets_longhorn_cookie_secret: ""
+openbao_secrets_hubble_oidc_client_secret: ""
+openbao_secrets_hubble_cookie_secret: ""

@@ -128,10 +128,12 @@ Hubble server inside every agent, and ``hubble.relay.enabled`` and
 chart ships the three, the estate carries only the values. The relay and
 UI images are in the ``rke2-images-cilium`` mirror set already. The UI is
 exposed on the platform Gateway's ``hubble`` listener (the ``hubble``
-GitOps tree, next to the UI Service the chart creates) and is
-unauthenticated in the baseline — Keycloak SSO in front of it is a
-follow-on. The flow path, edge exposure and the ``verify/test_hubble.py``
-gate are documented in :doc:`../components/observability`.
+GitOps tree, next to the UI Service the chart creates) and is fronted
+by an oauth2-proxy (``hubble-auth``, the estate's longhorn-auth
+pattern) that authenticates against Keycloak and admits the
+``hubble-users`` / ``hubble-admins`` tiers. The flow path, edge
+exposure, SSO front-end and the ``verify/test_hubble.py`` gate are
+documented in :doc:`../components/observability`.
 
 CoreDNS
 =======

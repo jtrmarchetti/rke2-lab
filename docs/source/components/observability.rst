@@ -355,11 +355,23 @@ Gateway; the UI pod stays plain HTTP inside the encrypted pod network,
 the same boundary the mTLS work put around everything else
 (:doc:`../sysadmin/cilium-mtls`).
 
-Sign-in is the baseline's one deliberate gap: the UI is published
-unauthenticated, on a name only the lab's DNS resolves. Keycloak SSO in
-front of it — following the estate's oauth2-proxy pattern, the way
-Longhorn's UI is fronted — is a follow-on change; until it lands, treat
-the URL as internal.
+Sign-in is Keycloak: the UI is fronted by an oauth2-proxy
+(``hubble-auth``, in the gitops ``apps/hubble-ui`` tree, the estate's
+longhorn-auth pattern). Unauthenticated requests are redirected to the
+realm's login, and admission is decided on the ``hubble`` client's
+``roles`` — a ``hubble-users`` member is admitted as the ``user`` tier
+and a ``hubble-admins`` member as ``admin``; a member of neither group is
+denied, so the URL is still only reachable through SSO, on a name only
+the lab's DNS resolves. The client and cookie secrets come from OpenBao
+through an ExternalSecret (``kv/oidc-hubble``), the way the Longhorn
+proxy's do. The K8s RBAC tiers encode the same two levels at the API
+level: ``hubble-view`` (bound to ``hubble-users``) grants read access to
+the service-mesh surface the UI inspects, and ``hubble-admin`` (bound to
+``hubble-admins``) adds the manage verbs on the Hubble control-plane —
+the relay and UI workloads, their configuration, and the
+``rke2-cilium`` HelmChartConfig. The ``verify/test_hubble.py`` module
+asserts both halves: the proxy's arguments, the synced secret, and a
+SubjectAccessReview per tier.
 
 When Hubble shows nothing while flows are obviously moving, check in this
 order: the cilium configmap carries ``enable-hubble: "true"`` (an agent

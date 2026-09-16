@@ -1,17 +1,149 @@
 {{ ansible_managed | comment }}
-# Keycloak SSO for the Hubble UI is not part of the baseline; this file
-# is the seam that work lands in. The baseline publishes the UI
-# unauthenticated - route.yaml points the hubble listener at hubble-ui
-# directly.
+# Keycloak SSO for the Hubble UI. The UI has no authentication of its own, so
+# an oauth2-proxy stands in front of it in full reverse-proxy mode - the way
+# it fronts Longhorn (the estate's longhorn-auth pattern): unauthenticated
+# requests are redirected to Keycloak, and admission is decided on the
+# client's `roles` claim.
 #
-# What SSO adds:
-#   - the `hubble` Keycloak client (inventory_keycloak_applications) and
-#     its FreeIPA groups,
-#   - an authenticating proxy in front of hubble-ui, following the
-#     estate's longhorn-auth pattern (oauth2-proxy beside the service it
-#     fronts, sealed client and cookie secrets),
-#   - the HTTPRoute's backend switched from hubble-ui to that proxy.
+# The hubble client is a standard openid-connect client with the default
+# client scopes, so a member's token carries the client role under
+# `resource_access.hubble.roles` (realm `dev-lo`). The keycloak-oidc provider
+# reads exactly that shape: `--allowed-role=hubble:user` /
+# `--allowed-role=hubble:admin` authorize on `resource_access.hubble.roles`,
+# which is what FreeIPA's hubble-users -> client role `user` and
+# hubble-admins -> client role `admin` grant. A member of neither group
+# carries neither client role, so the proxy denies them - the two tiers are
+# enforced here, at the edge, not inside the UI.
 #
-# Until that lands, this file renders comment-only: the Kustomization
-# resource list stays stable, so the SSO card replaces this file rather
-# than rewiring the tree around it.
+# The proxy fronts the hubble-ui Service in kube-system (port 80 -> nginx
+# 8081). route.yaml points the platform Gateway's `hubble` listener at this
+# proxy (hubble-auth), not at hubble-ui, so the UI is unreachable without a
+# session. The client secret and cookie secret come from OpenBao through the
+# ExternalSecret below (kv/oidc-hubble); the domain CA is baked in so the
+# proxy verifies the Keycloak issuer on the estate chain, never -k.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hubble-auth-ca
+  namespace: kube-system
+data:
+  ca.crt: >-
+    {{ lookup('file', inventory_gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hubble-auth
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hubble-auth
+  template:
+    metadata:
+      labels:
+        app: hubble-auth
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+          imagePullPolicy: IfNotPresent
+          args:
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}
+            - --client-id=hubble
+            - --provider-ca-file=/etc/ssl/domain/ca.crt
+            - --redirect-url=https://hubble.{{ inventory_gitops_source_cluster_domain }}/oauth2/callback
+            - --upstream=http://hubble-ui.kube-system.svc.cluster.local:80
+            - --allowed-role=hubble:admin
+            - --allowed-role=hubble:user
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=1h
+            - --cookie-refresh=15m
+            - --email-domain=*
+            - --skip-provider-button=true
+            - --set-xauthrequest=true
+            - --pass-basic-auth=false
+            - --pass-user-headers=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hubble-auth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hubble-auth
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+              name: http
+          volumeMounts:
+            - name: domain-ca
+              mountPath: /etc/ssl/domain
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 96Mi
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: domain-ca
+          secret:
+            secretName: hubble-auth-ca
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hubble-auth
+  namespace: kube-system
+spec:
+  type: ClusterIP
+  selector:
+    app: hubble-auth
+  ports:
+    - port: 80
+      targetPort: 4180
+      name: http
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: hubble-auth
+  namespace: kube-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: hubble-auth
+  data:
+    - secretKey: client-secret
+      remoteRef:
+        key: oidc-hubble
+        property: client-secret
+    - secretKey: cookie-secret
+      remoteRef:
+        key: oidc-hubble
+        property: cookie-secret
