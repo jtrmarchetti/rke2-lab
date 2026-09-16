@@ -95,6 +95,11 @@ inventory_gitops_source_charts_repo: rke2/charts
 inventory_gitops_source_lb_range: 192.168.2.40-192.168.2.52
 inventory_gitops_source_dns_address: 192.168.2.40
 inventory_gitops_source_ingress_address: 192.168.2.41
+# The RKE2 pod network the platform Gateway (in-cluster Traefik pods) and every
+# backend pod connect on. Reverse-proxies (hubble-auth, longhorn-auth) run
+# behind the Gateway, so their immediate trusted hop is the Gateway's in-cluster
+# pod IP, not the external LB VIP; pin --trusted-proxy-ip to this CIDR.
+inventory_gitops_source_pod_cidr: 10.42.0.0/16
 
 inventory_gitops_source_domain_ca_file: >-
   /usr/local/share/ca-certificates/dev.lo-ca.crt

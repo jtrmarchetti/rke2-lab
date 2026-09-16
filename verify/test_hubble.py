@@ -240,6 +240,21 @@ def test_hubble_sso_proxy_admits_on_the_roles_claim():
                    for a in args), (
         "an open bypass flag is set: the proxy admits a request without "
         "a session")
+    # G7 hardening, reader-visible on the live args. The proxy must pin the
+    # PKCE code-challenge method to S256 (leaving it unset runs the OIDC
+    # code exchange on a plain, guessable code and the proxy logs the PKCE
+    # unset warning) and pin the reverse-proxy's hop to an explicit
+    # --trusted-proxy-ip allow-list (leaving it unset makes the proxy trust
+    # 0.0.0.0/0 to forge X-Forwarded-*). Both are the two startup warnings
+    # the G7 audit flagged.
+    assert "--code-challenge-method=S256" in args, (
+        "no --code-challenge-method=S256: the OIDC code exchange runs on a "
+        "plain (guessable) code, and the proxy logs the PKCE unset warning "
+        "G7 flagged")
+    assert any(a.startswith("--trusted-proxy-ip=") for a in args), (
+        "no --trusted-proxy-ip= pin: with --reverse-proxy on and no "
+        "trusted-proxy-ip, the proxy trusts every connecting IP (0.0.0.0/0) "
+        "to forge X-Forwarded-* headers - G7's second warning")
     # The client and cookie secrets must come from the ExternalSecret's
     # synced Secret (hubble-auth), not inline.
     envs = proxy["spec"]["template"]["spec"]["containers"][0].get("env", [])
@@ -448,11 +463,16 @@ def test_hubble_mesh_traffic_is_visible():
 
 @_sso_tests
 def test_hubble_sso_proxy_logs_show_no_auth_errors():
-    """The hubble-auth proxy's own logs carry no authentication errors. The
-    expected `[AuthFailure]` denial lines (a non-member's 403) and the two
-    benign startup WARNINGs (PKCE method, trusted-proxy-ip) are correct
-    behavior, not errors; a hard error signature (a panic, a failed OIDC
-    issuer/secret load, a 5xx) is a broken proxy."""
+    """The hubble-auth proxy's own logs carry no authentication errors.
+    The expected `[AuthFailure]` denial lines (a non-member's 403) are
+    correct behavior, not errors; a hard error signature (a panic, a
+    failed OIDC issuer/secret load, a 5xx) is a broken proxy.
+
+    G7 hardening: the two startup WARNINGs the G7 audit flagged - the
+    unset PKCE code-challenge method and the unset --trusted-proxy-ip on
+    --reverse-proxy - are now pinned in the Deployment, so a fresh proxy
+    pod's log must carry neither. The [AuthFailure] denial lines remain
+    expected (a non-member's 403 is correct behavior)."""
     proc = helpers.kubectl(
         "logs", "deploy/hubble-auth", "-n", "kube-system", check=False)
     assert proc.returncode == 0, (
@@ -467,6 +487,17 @@ def test_hubble_sso_proxy_logs_show_no_auth_errors():
         "(OAuthProxy configured for Keycloak OIDC Client ID: hubble): the "
         "proxy is not up and serving the hubble client, so the SSO "
         "front-end is down")
+    # G7: the two pinned hardening flags must have cleared the two startup
+    # warnings the G7 audit flagged. Neither signature may appear in the
+    # live proxy log.
+    g7_warnings = [l for l in log.splitlines() if
+                   "not enabled one with --code-challenge-method" in l
+                   or "no --trusted-proxy-ip CIDRs were configured" in l]
+    assert not g7_warnings, (
+        "the hubble-auth log still carries a G7-flagged startup warning "
+        "(unset PKCE code-challenge method and/or unset --trusted-proxy-ip): "
+        "the G7 hardening did not land on the live proxy:\n"
+        + "\n".join(g7_warnings[:5]))
     hard_errors = []
     for i, line in enumerate(log.splitlines(), 1):
         low = line.lower()

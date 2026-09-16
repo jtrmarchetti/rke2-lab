@@ -56,6 +56,13 @@ spec:
             - --provider=keycloak-oidc
             - --oidc-issuer-url=https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}
             - --client-id=hubble
+            # G7 hardening: pin the PKCE code-challenge method to S256 so the
+            # OIDC code exchange is authenticated instead of falling back to a
+            # plain (guessable) code; the proxy logs a PKCE warning when this
+            # is unset. S256 (uppercase) is the value the oauth2-proxy binary
+            # documents ("Either 'plain' or 'S256'") and the RFC 7636
+            # registered value, so the Keycloak callback shape is unchanged.
+            - --code-challenge-method=S256
             - --provider-ca-file=/etc/ssl/domain/ca.crt
             - --redirect-url=https://hubble.{{ inventory_gitops_source_cluster_domain }}/oauth2/callback
             - --upstream=http://hubble-ui.kube-system.svc.cluster.local:80
@@ -63,6 +70,16 @@ spec:
             - --allowed-role=hubble:user
             - --http-address=0.0.0.0:4180
             - --reverse-proxy=true
+            # G7 hardening: pin the reverse-proxy's immediate hop to an explicit
+            # allow-list instead of trusting every connecting IP (0.0.0.0/0).
+            # The proxy sits behind the platform Gateway (in-cluster RKE2
+            # Traefik pods), which fronts the UI's listener and reaches the
+            # proxy in-cluster, so its real peer is the Gateway's pod-network
+            # address, not the external LB VIP. Pin the estate's pod network
+            # CIDR (the set the Gateway and every backend pod connect on);
+            # trust the ingress VIP only as an explicit second hop.
+            - --trusted-proxy-ip={{ inventory_gitops_source_pod_cidr }}
+            - --trusted-proxy-ip={{ inventory_gitops_source_ingress_address }}/32
             - --cookie-secure=true
             - --cookie-samesite=lax
             - --cookie-expire=1h

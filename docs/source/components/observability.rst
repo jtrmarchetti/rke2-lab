@@ -369,9 +369,19 @@ level: ``hubble-view`` (bound to ``hubble-users``) grants read access to
 the service-mesh surface the UI inspects, and ``hubble-admin`` (bound to
 ``hubble-admins``) adds the manage verbs on the Hubble control-plane —
 the relay and UI workloads, their configuration, and the
-``rke2-cilium`` HelmChartConfig. The ``verify/test_hubble.py`` module
-asserts both halves: the proxy's arguments, the synced secret, and a
-SubjectAccessReview per tier.
+``rke2-cilium`` HelmChartConfig. The proxy also hardens two of its
+startup flags: it pins the PKCE code-challenge method to
+``S256`` (``--code-challenge-method``) so the OIDC code exchange is
+authenticated instead of falling back to a plain, guessable code, and it
+pins the reverse-proxy's hop to an explicit
+``--trusted-proxy-ip`` allow-list (the estate's pod-network CIDR, the
+address the platform Gateway's in-cluster Traefik pods present from, plus
+the ingress VIP) instead of the default trust-every-connecting-IP, so the
+Gateway's ``X-Forwarded-*`` headers cannot be forged by anything but the
+platform edge. The ``verify/test_hubble.py`` module
+asserts both halves: the proxy's arguments (including the two G7 pins),
+the synced secret, and a SubjectAccessReview per tier; it also asserts the
+two G7 startup warnings no longer appear in the proxy's own log.
 
 When Hubble shows nothing while flows are obviously moving, check in this
 order: the cilium configmap carries ``enable-hubble: "true"`` (an agent
