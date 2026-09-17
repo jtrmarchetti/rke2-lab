@@ -132,6 +132,21 @@ def kubectl_popen(*args: str) -> subprocess.Popen:
                             stderr=subprocess.DEVNULL, env=env)
 
 
+def kubectl_apply(text: str) -> None:
+    """Apply a YAML document (or multi-doc manifest) through kubectl's
+    stdin. A non-zero exit raises with the server-side error, so a
+    caller sees the API reason (schema, CRD missing) rather than a
+    silent no-op."""
+    proc = subprocess.run(
+        [_kubectl_exe(), "apply", "-f", "-"],
+        input=text, capture_output=True, text=True,
+        env={**os.environ, "KUBECONFIG":
+             os.environ.get("KUBECONFIG") or KUBECONFIG_DEFAULT},
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"kubectl apply failed: {proc.stderr.strip()[:400]}")
+
+
 # ---------------------------------------------------------------------------
 # Keycloak
 # ---------------------------------------------------------------------------
@@ -152,6 +167,8 @@ SPE: dict[str, tuple[str, str]] = {
                  "OIDC_CLIENT_SECRET_LONGHORN"),
     "openbao": ("http://localhost:8250/oidc/callback",
                 "OIDC_CLIENT_SECRET_OPENBAO"),
+    "hubble": ("https://hubble.k8s.dev.lo/oauth2/callback",
+               "OIDC_CLIENT_SECRET_HUBBLE"),
 }
 GITLAB_CALLBACK = "https://gitlab.dev.lo/users/auth/openid_connect/callback"
 
@@ -536,6 +553,59 @@ def gitlab_sso_login(username: str, password: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Hubble UI (behind the hubble-auth oauth2-proxy; drives the real proxy flow)
+# ---------------------------------------------------------------------------
+
+HUBBLE_BASE = "https://hubble.k8s.dev.lo"
+
+
+def hubble_sso_flow(username: str, password: str) -> dict:
+    """Drive the Hubble UI's SSO front-end the way a browser would.
+
+    The hubble-ui HTTPRoute lands on the hubble-auth oauth2-proxy, which
+    302s an anonymous request to the Keycloak ``hubble`` client, admits a
+    member of hubble-users or hubble-admins onto the upstream UI, and
+    denies everyone else (a 403 at the callback, no session cookie).
+
+    Returns a report a test can assert on per tier: ``admitted`` (callback
+    and the UI page both 200) or ``denied`` (the callback 403s and the
+    proxy re-bounces the request to Keycloak instead of the upstream).
+    """
+    session = make_session()
+
+    # 1. Unauthenticated: the proxy must redirect to Keycloak, client hubble.
+    anon = session.get(HUBBLE_BASE + "/", allow_redirects=False, timeout=30)
+    location = anon.headers.get("Location", "")
+    if anon.status_code not in (302, 303) or "client_id=hubble" not in location:
+        return {"admitted": False, "denied": False, "stage": "unauthenticated",
+                "detail": (f"GET / gave {anon.status_code} loc={location[:160]}: "
+                           f"the proxy is not redirecting an anonymous request "
+                           f"to the hubble Keycloak client")}
+
+    # 2. Ride the proxy's own authorization request (its state/PKCE).
+    result = keycloak_login(session, username, password, auth_url=location)
+    if not result.ok:
+        return {"admitted": False, "denied": False, "stage": "login",
+                "detail": result.detail}
+
+    # 3. Follow the callback the proxy issued: code -> session -> upstream.
+    callback = session.get(result.location, allow_redirects=True, timeout=60)
+
+    # 4. What the UI answers with the session.
+    page = session.get(HUBBLE_BASE + "/", allow_redirects=False, timeout=30)
+    admitted = callback.status_code == 200 and page.status_code == 200
+    title = ""
+    if "<title>" in page.text:
+        title = page.text.split("<title>", 1)[-1].split("</title>", 1)[0]
+    return {"admitted": admitted, "denied": callback.status_code == 403,
+            "stage": "done",
+            "callback_status": callback.status_code,
+            "page_status": page.status_code,
+            "page_title": title,
+            "re_bounced": "client_id=hubble" in page.headers.get("Location", "")}
+
+
+# ---------------------------------------------------------------------------
 # OpenBao
 # ---------------------------------------------------------------------------
 
@@ -629,8 +699,28 @@ def ipa_user_add(name: str, email: str, password: str) -> None:
     )
 
 
+# FreeIPA directory settle: a fresh ``user-add`` is not always visible to
+# the very next ``group-add-member`` channel under full-suite load.  A
+# just-added entry that has not settled yet is reported as ``no such
+# entry``; retry a few times with a short backoff instead of hard-failing
+# (review D1: the hubble_tiers fixture flaked on exactly this window, and
+# the same settle family behind the proxmox-test F1 incident).
+_IPA_GROUP_SETTLE_S = 5
+_IPA_GROUP_SETTLE_RETRIES = 3
+
+
 def ipa_group_add_member(group: str, user: str) -> None:
-    _ipa_admin(f"ipa group-add-member {group} --users={user}")
+    for attempt in range(_IPA_GROUP_SETTLE_RETRIES + 1):
+        try:
+            _ipa_admin(f"ipa group-add-member {group} --users={user}")
+            return
+        except RuntimeError as exc:
+            # Only a just-added entry that has not settled yet is transient;
+            # any other failure (unknown group, kinit) is raised immediately,
+            # and the final attempt always surfaces a genuine failure.
+            if "no such entry" not in str(exc) or attempt == _IPA_GROUP_SETTLE_RETRIES:
+                raise
+            time.sleep(_IPA_GROUP_SETTLE_S)
 
 
 def ipa_group_remove_member(group: str, user: str) -> None:
@@ -667,11 +757,11 @@ def make_test_users() -> tuple[TestUser, TestUser]:
     user = TestUser(name="test", email="verify-test@dev.lo",
                     password=secrets.token_urlsafe(24))
     user.add_groups("gitlab-users", "grafana-users", "longhorn-users",
-                    "openbao-users")
+                    "openbao-users", "hubble-users")
     adm = TestUser(name="test.adm", email="verify-test-adm@dev.lo",
                    password=secrets.token_urlsafe(24))
     adm.add_groups("gitlab-admins", "grafana-admins", "longhorn-admins",
-                   "openbao-admins", "keycloak-admins")
+                  "openbao-admins", "hubble-admins", "keycloak-admins")
     return user, adm
 
 

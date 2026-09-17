@@ -1,0 +1,39 @@
+---
+
+- name: Verify required secrets are present
+  ansible.builtin.import_playbook: preflight_secrets.yml
+  vars:
+    _preflight_required_env: []
+
+# Generate (or re-read) the cluster's Cilium IPsec key on the controller
+# before any RKE2 node is formed. The key is cluster key material held in
+# ~/.config/rke2lab/ alongside the k8s-ca keypair and the Sealed Secrets
+# sealing key, and it is never committed to the cluster-state GitLab repo.
+# This play is part of the RKE2 control plane phase (imported at the top
+# of kubecp.yml), which is what guarantees the key exists before the
+# rke2_server role renders the cilium-ipsec-keys Secret onto the control
+# plane. It is idempotent: a recorded key is read back and the generation
+# is skipped, so the encrypted pod network is stable across warm builds.
+
+- name: Generate the cluster IPsec key material
+  hosts: controller
+  gather_facts: true
+  become: false
+  tags:
+    - cilium_ipsec_keygen
+  tasks:
+    - name: cilium_ipsec | Include the key generation role
+      tags:
+        - cilium_ipsec_keygen
+      vars:
+        cilium_ipsec_keygen_key_id: >-
+          {{ inventory_cilium_ipsec_keygen_key_id }}
+        cilium_ipsec_keygen_key_file: >-
+          {{ inventory_cilium_ipsec_keygen_key_file }}
+        cilium_ipsec_keygen_env_file: >-
+          {{ inventory_cilium_ipsec_keygen_env_file }}
+      ansible.builtin.include_role:
+        name: cilium_ipsec_keygen
+        apply:
+          tags:
+            - cilium_ipsec_keygen

@@ -77,6 +77,64 @@ Installed as RKE2's packaged chart, sidecarless, and it is why nodes reach
 A node stuck ``NotReady`` with ``NetworkPluginNotReady`` is a Cilium pod that
 has not started on that node.
 
+Service-to-service mTLS
+-----------------------
+
+East-west traffic is encrypted and authenticated: mutual authentication
+backed by SPIRE's in-cluster install (every pod gets a SPIFFE SVID, and the
+chart's ``cilium-spire`` namespace carries the SPIRE server and per-node
+agents), and IPsec on the pod network. Both ride the same packaged chart —
+the estate's ``rke2-cilium`` HelmChartConfig turns ``authentication.mutual``
+on with the spire integration, and ``encryption`` on with type ``ipsec`` —
+so there is no separate mesh to deploy or version against anything.
+
+Encryption keys are not chart material: the ``cilium-ipsec-keys`` Secret in
+``kube-system`` carries one PSK line generated on the controller and held
+under ``~/.config/rke2lab/`` (recorded in ``env.sh`` as
+``CILIUM_IPSEC_KEYS``), written as a static RKE2 manifest like the others.
+A rotation is a new generated line, not a re-keyed file.
+
+.. code-block:: console
+
+   $ kubectl -n cilium-spire get sts spire-server
+   $ kubectl -n cilium-spire get ds spire-agent
+   $ kubectl -n kube-system get secret cilium-ipsec-keys
+   $ kubectl -n keycloak get cnp cnp-mutual-auth-keycloak-db
+
+Policies are CiliumNetworkPolicies with ``authentication.mode: required`` on
+the path being enforced — the pilot is the SSO path, keycloak to its
+database (port 5432). A policy in ``required`` fails closed on a missing
+handshake, so a stuck SPIRE server or an agent that never scheduled
+surfaces as denied connections, not clear-text traffic. The runbook —
+enable, verify, roll back, and the edge-TLS boundary — is
+:doc:`../sysadmin/cilium-mtls`.
+
+One hard coupling: the estate runs the chart's L7 proxy (``enable-l7-proxy``
+is the chart default) together with IPsec, and Cilium refuses to start an
+agent that has both without DNS-proxy transparent mode — proxied DNS would
+otherwise leave the node unencrypted. The estate therefore ships
+``dnsProxy.enableTransparentMode`` in the same HelmChartConfig. If the
+agents crash-loop on a fresh cluster and every pod is stuck ``ContainerCreating``
+with a CNI error, read the agent log:
+``IPSec requires DNS proxy transparent mode`` is the symptom of that block
+having been removed.
+
+Hubble
+------
+
+The same HelmChartConfig turns Hubble on: ``hubble.enabled`` starts the
+Hubble server inside every agent, and ``hubble.relay.enabled`` and
+``hubble.ui.enabled`` deploy the relay and the UI into kube-system — the
+chart ships the three, the estate carries only the values. The relay and
+UI images are in the ``rke2-images-cilium`` mirror set already. The UI is
+exposed on the platform Gateway's ``hubble`` listener (the ``hubble``
+GitOps tree, next to the UI Service the chart creates) and is fronted
+by an oauth2-proxy (``hubble-auth``, the estate's longhorn-auth
+pattern) that authenticates against Keycloak and admits the
+``hubble-users`` / ``hubble-admins`` tiers. The flow path, edge
+exposure, SSO front-end and the ``verify/test_hubble.py`` gate are
+documented in :doc:`../components/observability`.
+
 CoreDNS
 =======
 

@@ -85,6 +85,25 @@ argument_specs:
       rke2_server_cilium_config_template:
         type: path
         description: Path to the Cilium HelmChartConfig template, from inventory.
+      rke2_server_cilium_ipsec_secret_template:
+        type: path
+        description:
+          - Path to the cilium-ipsec-keys Secret template, from inventory.
+          - Rendered into the auto-deploy manifest directory so the Cilium
+            agent has its IPsec keys before the chart's encryption datapath
+            starts. Skipped when no key is supplied.
+      rke2_server_cilium_ipsec_keys:
+        type: str
+        default: ""
+        description:
+          - The one-line IPsec key (key-id + algo + PSK + key-size) the
+            rendered Secret carries. Empty disables the Secret and the
+            encryption datapath. Held on the controller, never in a path a
+            cluster member can read.
+      rke2_server_no_log:
+        type: bool
+        default: true
+        description: Set false only to debug the rendered IPsec Secret.
       rke2_server_kube_vip_template:
         type: path
         description: Path to the kube-vip manifest template, from inventory.

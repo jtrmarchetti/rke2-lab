@@ -31,6 +31,9 @@ Where things are
    * - Longhorn
      - ``https://longhorn.k8s.dev.lo``
      - Keycloak, through oauth2-proxy. No other way in
+   * - Hubble
+     - ``https://hubble.k8s.dev.lo``
+     - Keycloak, through the hubble-auth proxy. No other way in
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - S3 access keys from ``kv/garage``
@@ -67,7 +70,8 @@ Always in FreeIPA. Never in Keycloak, and never in the service:
    $ ipa group-show grafana-admins       # who has this today
 
 Groups follow the pattern ``<app>-admins`` and ``<app>-users`` for every
-federated application: ``grafana``, ``longhorn``, ``openbao``, ``gitlab``.
+federated application: ``grafana``, ``longhorn``, ``openbao``, ``gitlab``,
+``hubble``.
 Removal is ``ipa group-remove-member``.
 
 ``keycloak-admins`` is the exception with no ``-users`` half: its members

@@ -1,0 +1,45 @@
+{{ ansible_managed | comment }}
+---
+# The pilot mTLS policy: the SSO path.
+#
+# Keycloak is the estate's single-consumer SSO gateway and its only
+# east-west dependency is its own database (keycloak-db, port 5432). That
+# makes it the cleanest pair to enforce mutual authentication on: no
+# shared provider, no shared consumer, so requiring mTLS on this one flow
+# cannot black-hole anything else, and a broken rule is visible as the SSO
+# path, not as a cascade. It is the pilot per the plan's D2 (the final
+# per-service list is owned by the implement task and expands from here).
+#
+# What this enforces: a connection entering keycloak-db from keycloak on
+# 5432/TCP must complete an out-of-band mTLS handshake between the two
+# Cilium agents (port 4250, backed by SPIRE SVIDs) before it is admitted.
+# The mTLS requirement attaches to the receiving side (the database's
+# ingress), which is the enforcement point - the sender needs no policy of
+# its own. Because the chart runs with enableNonDefaultDenyPolicies: false,
+# this rule is purely additive: it adds mTLS to this one flow and leaves
+# every other flow into keycloak-db default-allow. Removing this file
+# (via Flux prune) restores default-allow on 5432 and drops mTLS, the
+# pre-feature baseline.
+#
+# Nothing here touches Traefik or the platform Gateway: they keep
+# terminating TLS at the edge and simply ride the now-encrypted pod
+# network as ordinary endpoints.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnp-mutual-auth-keycloak-db
+  namespace: keycloak
+spec:
+  endpointSelector:
+    matchLabels:
+      app: keycloak-db
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: keycloak
+      authentication:
+        mode: "required"
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

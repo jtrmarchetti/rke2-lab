@@ -31,6 +31,8 @@ Order of the pages
      - Growing storage and what Longhorn's numbers mean
    * - :doc:`storage-pvc`
      - Expanding a claim and unsticking one that will not
+   * - :doc:`cilium-mtls`
+     - The service-to-service mTLS runbook: enable, verify, roll back
    * - :doc:`troubleshooting`
      - Ordered by symptom, not by component — start here when it hurts
    * - :doc:`versions`
@@ -49,6 +51,7 @@ Order of the pages
    rotating-credentials
    storage-longhorn
    storage-pvc
+   cilium-mtls
    troubleshooting
    versions
    urls-and-access

@@ -1,0 +1,26 @@
+---
+
+# The key id is the leading number on the recorded line. A fresh cluster
+# starts at 1; a deliberate rotation bumps it so per-tunnel keys re-derive
+# (the "+" forces per-tunnel derivation, so the old global key is retired).
+cilium_ipsec_keygen_key_id: 1
+
+# Where the one-time key line is recorded on the controller, beside the
+# k8s-ca keypair and the Sealed Secrets sealing key. Never committed.
+cilium_ipsec_keygen_key_file: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/cilium-ipsec-keys
+
+# The controller secret environment that the rest of the build sources.
+# The line is appended here so that `source ~/.config/rke2lab/env.sh` on a
+# later (warm) build exports CILIUM_IPSEC_KEYS without re-generation.
+cilium_ipsec_keygen_env_file: >-
+  {{ ansible_facts['env']['HOME'] }}/.config/rke2lab/env.sh
+
+# The controller user that owns both files (the local controller user, not
+# a cluster user). Overridable, but the estate runs this as the automation
+# account.
+cilium_ipsec_keygen_owner: claw
+cilium_ipsec_keygen_group: claw
+
+# Set false only to debug the generated line; it prints the PSK.
+cilium_ipsec_keygen_no_log: true

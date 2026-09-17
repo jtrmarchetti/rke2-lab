@@ -56,10 +56,10 @@ The table
    * - Garage S3 keys
      - Garage, then ``env.sh``
      - ``playbooks/cluster_init.yml`` (a second time — see below)
-   * - OIDC client secrets (4)
+   * - OIDC client secrets (5)
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
-   * - oauth2-proxy cookie secret
+   * - oauth2-proxy cookie secrets (2)
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
    * - ``rke2-nodes`` deploy token
@@ -74,6 +74,9 @@ The table
    * - Cluster intermediate CA
      - ``ipa_sub_ca`` output directory
      - ``playbooks/cluster_init.yml`` + ``gitops.yml``
+   * - Cilium IPsec key
+     - Delete ``~/.config/rke2lab/cilium-ipsec-keys`` (and its ``env.sh`` line), bump the key id
+     - ``playbooks/kubecp.yml`` — the keygen play regenerates; the agent picks it up on watch
    * - Service certificates
      - Nothing — cert-manager renews them
      - —
@@ -96,8 +99,8 @@ step that used to fail silently.
 OIDC client secrets
 ===================
 
-Four values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
-``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``.
+Five values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
+``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``, ``_HUBBLE``.
 
 .. code-block:: console
 
@@ -110,9 +113,12 @@ for OpenBao and GitLab) and the Keycloak client — because the secret is
 authored rather than generated. The workloads pick it up from ESO within the
 refresh interval; restart them if you want it immediately.
 
-The cookie secret for the Longhorn proxy is different in kind: rotating
-``OAUTH2_PROXY_COOKIE_SECRET`` signs everyone out and does nothing else. It
-must be exactly 16, 24 or 32 bytes.
+The cookie secrets for the oauth2-proxies are different in kind: the
+Longhorn proxy's is ``OAUTH2_PROXY_COOKIE_SECRET`` and the Hubble
+proxy's is ``OAUTH2_PROXY_COOKIE_SECRET_HUBBLE``. Rotating either signs
+everyone out of that proxy and does nothing else — the two are
+independent, so rotating one never disturbs the other. Each must be
+exactly 16, 24 or 32 bytes.
 
 Keycloak's ``admin`` password
 =============================
@@ -210,6 +216,17 @@ The RKE2 cluster token
 worker. Changing it does not rotate anything on a running cluster — a node with
 the wrong value is simply rejected at registration. Treat it as a rebuild-time
 value.
+
+The Cilium IPsec key
+====================
+
+One generated PSK line that encrypts the pod network, held on the controller
+under ``~/.config/rke2lab/`` (beside the sealing key and the k8s-ca
+keypair), never in GitLab. Deleting the file and re-running ``kubecp.yml``
+regenerates it; the static manifest re-renders onto the servers, so the new
+line reaches the API on the next ``rke2-server`` restart. The step-by-step,
+including the key-id bump that retires the old key, is in
+:doc:`cilium-mtls`.
 
 After any rotation
 ==================

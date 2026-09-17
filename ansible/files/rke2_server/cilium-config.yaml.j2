@@ -29,3 +29,117 @@ spec:
           operator: Exists
         - key: "CriticalAddonsOnly"
           operator: Exists
+    # Service-to-service mTLS: mutual authentication backed by the chart's
+    # in-cluster SPIRE. Identities are SPIFFE SVIDs minted by SPIRE, one per
+    # endpoint, so an east-west connection performs an out-of-band mTLS
+    # handshake between the two agents (port 4250) and is admitted only when
+    # a CiliumNetworkPolicy requires it (the cilium-mtls GitOps tree). This
+    # is the identity half of mTLS; the confidentiality half is the
+    # encryption block below. Traefik and the platform Gateway are
+    # deliberately untouched - they keep terminating TLS at the edge and
+    # ride the encrypted pod network as ordinary endpoints.
+    authentication:
+      enabled: true
+      mutual:
+        spire:
+          enabled: true
+          install:
+            enabled: true
+            server:
+              # Longhorn storage is worker-only in this estate: the
+              # longhornDriver/Manager pin node-role.kubernetes.io/worker
+              # and the csi-plugin runs on the three workers, while the
+              # control-plane nodes carry CriticalAddonsOnly and no CSI
+              # driver. The server's RWO longhorn-single PVC can therefore
+              # never attach on a control-plane node, so pin the server to
+              # a worker: otherwise it lands on a control-plane node, the
+              # PVC stays Pending, the server never starts, no SVID is ever
+              # issued and every required-auth policy fails closed.
+              nodeSelector:
+                node-role.kubernetes.io/worker: "true"
+              # Keep the mesh CA and SPIRE entries on the 1Gi longhorn-single
+              # PVC across restarts. Deleting the PVC re-generates the CA and
+              # re-issues every SVID (workloads still authenticate; revocation
+              # and audit state resets), so it is never deleted on a routine
+              # rollback.
+              dataStorage:
+                enabled: true
+                size: 1Gi
+                storageClass: longhorn-single
+              # The chart default for the server is no tolerations, so the
+              # StatefulSet would not land on a tainted node at all; these
+              # are what let it schedule onto the workers it is pinned to
+              # above (the worker nodes carry node.kubernetes.io/not-ready
+              # and CriticalAddonsOnly taints while booting). The agent
+              # follows the cilium agent's tolerations by default, so only
+              # the server needs an explicit list.
+              tolerations:
+                - key: "node-role.kubernetes.io/control-plane"
+                  operator: Exists
+                - key: "node-role.kubernetes.io/master"
+                  operator: Exists
+                - key: "node.kubernetes.io/not-ready"
+                  operator: Exists
+                - key: "node.cloudprovider.kubernetes.io/uninitialized"
+                  operator: Exists
+                - key: "node-role.kubernetes.io/etcd"
+                  operator: Exists
+                - key: "CriticalAddonsOnly"
+                  operator: Exists
+    # With the chart default (true) the first CiliumNetworkPolicy in a
+    # namespace silently flips that namespace to default-deny and can
+    # black-hole DNS or egress the moment a keycloak policy lands. Keeping
+    # it false makes CNP rollout purely additive: every rule is an explicit
+    # allow/require, and removing a CNP restores default-allow.
+    enableNonDefaultDenyPolicies: false
+    # Confidentiality half of the mTLS: encrypt node-to-node and pod-to-pod
+    # traffic. IPsec (the chart's own default type) rather than WireGuard,
+    # per the estate decision - the key material is the
+    # cilium-ipsec-keys Secret, delivered on every node as a RKE2 static
+    # manifest so the agent has its keys before the datapath starts. The
+    # chart's keyWatcher is already true, so a key rotation is picked up
+    # without a manual agent restart.
+    encryption:
+      enabled: true
+      type: ipsec
+    # This estate runs the L7/Envoy proxy (enable-l7-proxy, the chart
+    # default here) together with the IPsec encryption above. Cilium
+    # refuses to start an agent that has both without DNS-proxy
+    # transparent mode: with L7 on, the DNS proxy terminates the encrypted
+    # connection before the request reaches the real upstream, so the
+    # proxied DNS leg would otherwise leave the node unencrypted.
+    # Transparent mode keeps the original source-pod address on proxied
+    # DNS and is the configuration the agent is validated against.
+    # Omitting this block is a hard config error on every node
+    # (the agents fail their start hook and crash-loop) until it is set.
+    dnsProxy:
+      enableTransparentMode: true
+    # Hubble: service-mesh flow observability. Enabling it turns on the
+    # Hubble server inside every cilium agent, and the chart deploys
+    # hubble-relay and hubble-ui (plus their RBAC) into kube-system. The
+    # relay and UI images are already in the rke2-images-cilium mirror
+    # set, so the air-gapped build needs nothing new.
+    #
+    # The TLS defaults are left as the chart's: hubble.tls.enabled is
+    # true with auto.method=helm, a self-contained self-signed cert loop
+    # for the relay/agent/UI. No cert-manager issuer is involved, and the
+    # helm templates look up the existing secret on upgrade, so the key
+    # material stays stable across chart upgrades.
+    #
+    # The UI is not exposed through the chart's Ingress template (left at
+    # its default, off): this estate terminates edge TLS on the platform
+    # Gateway instead. The GitOps tree adds the `hubble` listener on that
+    # Gateway - the cert-manager Gateway shim issues the hubble-edge-tls
+    # certificate for it - and an HTTPRoute that lands the listener on the
+    # hubble-auth oauth2-proxy (the estate's longhorn-auth pattern) in
+    # front of the UI, not on the UI service: unauthenticated requests
+    # redirect to Keycloak, and admission is decided on the `hubble`
+    # client's roles claim. The UI is therefore unreachable without an SSO
+    # session; the RBAC tiers (hubble-view for hubble-users, hubble-admin
+    # for hubble-admins) are the API-level half of the same boundary.
+    hubble:
+      enabled: true
+      relay:
+        enabled: true
+      ui:
+        enabled: true

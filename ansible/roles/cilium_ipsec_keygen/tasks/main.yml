@@ -1,0 +1,87 @@
+---
+# Generate the cluster's IPsec pre-shared key material for Cilium's
+# encryption datapath, on the controller, before any RKE2 node is formed.
+#
+# The key is cluster key material: held on the controller under
+# ~/.config/rke2lab/ (the same place the k8s-ca keypair and the Sealed
+# Secrets sealing key live), never committed to the cluster-state GitLab
+# repo (a PSK in GitLab would let anyone who can read the repo decrypt
+# every east-west packet). It is generated exactly once, on the first
+# cold build; every warm build re-reads the recorded line and skips the
+# generation, so the key - and the encrypted pod network it protects - is
+# stable across rebuilds. Rotating the key is a deliberate operator act:
+# delete the key file (and the env.sh line) and re-run, or bump the key id
+# and regenerate.
+
+- name: main | Assert the required inputs are present
+  ansible.builtin.assert:
+    that:
+      - (cilium_ipsec_keygen_key_file | length) > 0
+      - (cilium_ipsec_keygen_env_file | length) > 0
+    fail_msg: >-
+      cilium_ipsec_keygen needs a key file and the controller secret
+      environment to record the key in. See
+      docs/source/components/secrets.rst.
+    quiet: true
+
+- name: main | Read the recorded key line
+  # A failed slurp (no marker) registers without a content key, and its
+  # failed_when override means there is no failed key either, so the value
+  # must be read key-safely with subscript access: no file -> empty ->
+  # the key is generated. Healthy warm builds have the file and skip it.
+  changed_when: false
+  failed_when: false
+  register: _reg_cilium_ipsec_existing
+  ansible.builtin.slurp:
+    src: "{{ cilium_ipsec_keygen_key_file }}"
+
+- name: main | Parse the recorded key line
+  ansible.builtin.set_fact:
+    _var_cilium_ipsec_existing: >-
+      {{ (_reg_cilium_ipsec_existing['content'] | default('', true))
+         | b64decode | trim | default('', true) }}
+
+- name: main | Determine whether a key must be generated
+  ansible.builtin.set_fact:
+    _var_cilium_ipsec_key_needed: >-
+      {{ (_var_cilium_ipsec_existing | length) == 0 }}
+
+- name: main | Report the generation decision
+  ansible.builtin.debug:
+    msg: >-
+      cilium-ipsec-keys: generation required =
+      {{ _var_cilium_ipsec_key_needed }}
+    verbosity: 0
+
+- name: main | Generate the cluster IPsec key line
+  when: (_var_cilium_ipsec_key_needed | bool)
+  block:
+
+    - name: main | Generate a 20-byte AES-GCM-128 pre-shared key
+      no_log: "{{ cilium_ipsec_keygen_no_log | bool }}"
+      changed_when: true
+      register: _reg_cilium_ipsec_psk
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -euo pipefail
+          psk=$(head -c 20 /dev/urandom | od -An -tx1 | tr -d ' \n')
+          printf '%s+ rfc4106(gcm(aes)) %s 128\n' \
+            "{{ cilium_ipsec_keygen_key_id | int }}" "$psk"
+
+    - name: main | Record the key on the controller
+      no_log: "{{ cilium_ipsec_keygen_no_log | bool }}"
+      ansible.builtin.copy:
+        content: "{{ _reg_cilium_ipsec_psk['stdout'] }}\n"
+        dest: "{{ cilium_ipsec_keygen_key_file }}"
+        mode: "0600"
+
+    - name: main | Record the key in the controller's secret environment
+      no_log: "{{ cilium_ipsec_keygen_no_log | bool }}"
+      ansible.builtin.blockinfile:
+        path: "{{ cilium_ipsec_keygen_env_file }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK cilium-ipsec-keys"
+        create: true
+        mode: "0600"
+        block: |
+          export CILIUM_IPSEC_KEYS="{{ _reg_cilium_ipsec_psk['stdout'] | trim }}"

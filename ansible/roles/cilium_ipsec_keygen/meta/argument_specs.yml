@@ -1,0 +1,22 @@
+---
+argument_specs:
+  main:
+    short_description: Generate and record the cluster's Cilium IPsec key
+    description:
+      - Generates the AES-GCM-128 pre-shared key for Cilium's IPsec datapath and records it on the controller - a key file beside the k8s-ca keypair and an exported line in the controller secret environment - so the RKE2 server role can render the cilium-ipsec-keys Secret onto the control plane.
+      - Idempotent: a recorded key is read back and generation skipped, so the encrypted pod network is stable across warm builds; a rotation is a deliberate operator act that bumps the key id.
+    options:
+      cilium_ipsec_keygen_key_id:
+        type: int
+        default: 1
+        description: Leading number on the recorded key line; a rotation bumps it so per-tunnel keys re-derive.
+      cilium_ipsec_keygen_key_file:
+        type: str
+        description: Where the one-time key line is recorded on the controller.
+      cilium_ipsec_keygen_env_file:
+        type: str
+        description: The controller secret environment the key is exported into.
+      cilium_ipsec_keygen_no_log:
+        type: bool
+        default: true
+        description: Set false only to debug the generated line; it prints the PSK.

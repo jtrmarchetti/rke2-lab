@@ -51,6 +51,61 @@ cold rebuild needs (including the Garage S3 key), the SSO ACL policies are
 defined, the admin policy is scoped, and the root token still carries the
 root policy (the offline way-in).
 
+``verify/test_mtls.py`` — the service-to-service mTLS configuration surface:
+the ``rke2-cilium`` HelmChartConfig carries mutual authentication (SPIRE)
+and IPsec encryption, the ``cilium-ipsec-keys`` Secret holds a well-formed
+key line, the pilot policy enforces the SSO path, the SPIRE stack is
+scheduled, and the edge TLS termination is still owned by the platform
+Gateway — nothing in the mesh pulls it in. The whole module skips until
+the feature is deployed on the estate (the HCC has no ``authentication``
+block yet); once the build lands it, it enforces on every warm build so a
+drift or rollback fails fast.
+
+``verify/test_mtls_dataplane.py`` — the data-plane half of the same feature:
+the SPIRE server reports healthy (SVIDs can be issued), a live agent-to-agent
+mTLS handshake between two throwaway pods in a ``mtls-verify`` namespace
+succeeds under a required-auth CiliumNetworkPolicy, a third pod outside the
+rule's ``fromEndpoints`` is refused (per-connection enforcement, not just a
+config flag), the running agents report IPsec enabled and the node kernels
+carry ESP xfrm policies, and the edge hosts still terminate TLS with the
+domain CA. The probes run in the throwaway namespace, which the fixture
+tears down on exit; like the config surface, the whole module skips until
+the feature is deployed.
+
+``verify/test_hubble.py`` — the Hubble configuration surface: the
+``rke2-cilium`` HelmChartConfig carries the ``hubble`` values block that
+switches on the agent-side Hubble server, the relay and the UI; the relay
+and UI Deployments in ``kube-system`` are Ready (the relay's readiness
+proves it reached an agent's Hubble server over TLS); the cilium
+configmap still carries ``enable-hubble``; and the platform Gateway
+carries the ``hubble`` listener with the shim-issued ``hubble-edge-tls``
+certificate and an Accepted, bound HTTPRoute. The SSO half adds a second
+skip marker — the ``hubble-auth`` proxy, deployed by the gitops
+``apps/hubble-ui`` tree — behind which the module asserts the route's
+backend is the proxy, the proxy's admission arguments
+(``--allowed-role=hubble:user`` / ``hubble:admin``, no bypass flags,
+secrets mounted from the synced ExternalSecret), and the K8s RBAC tiers
+through SubjectAccessReviews: a user reads the service-mesh surface but
+cannot manage the Hubble control-plane, an admin can do both, and a
+non-member is denied. The matrix also asserts the negatives that lock
+the tier boundaries: the admin's HelmChartConfig read is pinned to
+``rke2-cilium`` by ``resourceNames`` (an admin may not read another
+chart's HCC, even though the resource is cluster-scoped), and the view
+tier has no HCC rule at all. Beyond the configuration surface, the module
+proves the live end-to-end flow the way a browser would: a hubble-users
+member and a hubble-admins member, each driving the real ``hubble-auth``
+oauth2-proxy, are admitted onto the Hubble UI (a non-member is denied at
+the proxy — the callback 403s and the request is bounced back to
+Keycloak, no session minted); an agent's ``hubble observe`` pipeline
+returns live flow records, so the mesh traffic the UI renders is
+actually flowing; and the proxy's own logs carry the OIDC banner with no
+authentication errors. Like the mTLS module, the Hubble tests skip until
+the values block is on the estate (the HCC has no ``hubble`` key) and the
+SSO tests skip until the proxy is deployed; after, everything enforces on
+every warm build. ``hubble`` also
+joins the edge-host list in ``verify/test_gateway.py``: the listener, the
+route and the TLS-to-domain-CA check cover it with the other edge hosts.
+
 Running it
 ==========
 

@@ -1,0 +1,29 @@
+{{ ansible_managed | comment }}
+---
+# Hubble UI on the platform Gateway's hubble listener. The listener's
+# TLS is terminated at the edge (the cert-manager shim issues
+# hubble-edge-tls for it, the same way as every other edge host); the
+# pods behind it stay plain HTTP inside the encrypted pod network.
+#
+# The backend is the hubble-auth proxy, not hubble-ui: the UI has no
+# authentication of its own, so the route lands on the oauth2-proxy that
+# fronts it (sso.yaml). Unauthenticated requests are redirected to
+# Keycloak; a member of hubble-users or hubble-admins is admitted onto
+# the hubble-ui Service (port 80 -> nginx 8081) behind the proxy.
+# sso.yaml creates hubble-auth in kube-system, next to its backend.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hubble-ui
+  namespace: kube-system
+spec:
+  parentRefs:
+    - name: platform
+      namespace: kube-system
+      sectionName: hubble
+  hostnames:
+    - hubble.{{ inventory_gitops_source_cluster_domain }}
+  rules:
+    - backendRefs:
+        - name: hubble-auth
+          port: 80

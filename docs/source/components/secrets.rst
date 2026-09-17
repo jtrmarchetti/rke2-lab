@@ -100,6 +100,9 @@ What is in it
    * - ``kv/oidc-longhorn``
      - ``client-secret``, ``cookie-secret``
      - ``longhorn-auth``
+   * - ``kv/oidc-hubble``
+     - ``client-secret``, ``cookie-secret``
+     - ``hubble-auth``
 
 Values are written by the ``openbao_secrets`` role from ``env.sh``, and it
 reads each entry before writing it — KV v2 keeps versions, and a role that
@@ -136,6 +139,15 @@ before the vault can be reached at all:
   certificate — including the vault's own HTTPRoute on the platform Gateway
   listener;
 * the vault's **unseal keys**, which are what make it readable at all.
+
+None of those is the **Cilium IPsec key** — it travels the same
+discipline as the controller-held key material, but not the SealedSecret
+channel. It is one PSK line that encrypts the pod network: generated on
+the controller, written to the controller's ``~/.config/rke2lab/`` and
+recorded in ``env.sh`` as ``CILIUM_IPSEC_KEYS``, delivered to the cluster
+as a static RKE2 manifest (``cilium-ipsec-keys`` in ``kube-system``). A
+rotation is a regeneration of that one line, so the key is handled like the
+sealing key set: a recorded break-glass value, not a workload credential.
 
 .. code-block:: console
 

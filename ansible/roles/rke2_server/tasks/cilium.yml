@@ -14,3 +14,23 @@
     owner: root
     group: root
     mode: "0600"
+
+# The encryption block in the chart config above turns Cilium's IPsec
+# datapath on, and that datapath starts only if the agent can read its
+# keys. The keys are cluster key material held on the controller, not
+# something the chart generates (the bundled chart ships no keygen Job,
+# unlike the wireguard path), so they are delivered here as a RKE2 static
+# manifest: applied by every control plane node at boot, before the
+# helm-controller deploys the cilium chart, so the agent already has its
+# keys when the IPsec datapath comes up. A cluster-scoped Secret means one
+# application is enough for every node's agent to mount it.
+- name: cilium | Render the IPsec key Secret
+  when: >-
+    (rke2_server_cilium_ipsec_keys | default('', true) | length) > 0
+  no_log: "{{ rke2_server_no_log | bool }}"
+  ansible.builtin.template:
+    src: "{{ rke2_server_cilium_ipsec_secret_template }}"
+    dest: "{{ rke2_server_data_dir }}/server/manifests/cilium-ipsec-keys-secret.yaml"
+    owner: root
+    group: root
+    mode: "0600"
