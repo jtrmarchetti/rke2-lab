@@ -56,7 +56,7 @@ The table
    * - Garage S3 keys
      - Garage, then ``env.sh``
      - ``playbooks/cluster_init.yml`` (a second time — see below)
-   * - OIDC client secrets (5)
+   * - OIDC client secrets (6)
      - ``env.sh``
      - ``playbooks/cluster_init.yml``
    * - oauth2-proxy cookie secrets (2)
@@ -99,8 +99,8 @@ step that used to fail silently.
 OIDC client secrets
 ===================
 
-Five values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
-``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``, ``_HUBBLE``.
+Six values, one per federated service: ``OIDC_CLIENT_SECRET_GRAFANA``,
+``_LONGHORN``, ``_OPENBAO``, ``_GITLAB``, ``_HUBBLE``, ``_TRAEFIK``.
 
 .. code-block:: console
 

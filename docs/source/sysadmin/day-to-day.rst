@@ -71,7 +71,7 @@ Always in FreeIPA. Never in Keycloak, and never in the service:
 
 Groups follow the pattern ``<app>-admins`` and ``<app>-users`` for every
 federated application: ``grafana``, ``longhorn``, ``openbao``, ``gitlab``,
-``hubble``.
+``hubble``, ``traefik``.
 Removal is ``ipa group-remove-member``.
 
 ``keycloak-admins`` is the exception with no ``-users`` half: its members

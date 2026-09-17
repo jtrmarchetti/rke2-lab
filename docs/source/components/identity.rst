@@ -160,6 +160,17 @@ Who federates, and how
        ``hubble-admins``) encode the same boundary at the API level: a user
        reads the service-mesh traffic surface, an admin manages the Hubble
        control-plane
+   * - Traefik
+     - The ingress controller's dashboard, federated through the
+       ``traefik`` client. The two FreeIPA groups ``traefik-users``
+       (GID ``1040000023``) and ``traefik-admins`` (GID ``1040000022``)
+       are granted the ``user`` and ``admin`` client roles on the
+       ``traefik`` client, so a member's token carries
+       ``roles: ["user"]`` or ``roles: ["admin"]``. The groups are
+       populated in FreeIPA the way every other grant is
+       (``ipa group-add-member traefik-users --users alice``); the
+       client-side enforcement of those roles on the dashboard route is
+       the SSO-enforcement lane, layered on top of this mapping
    * - Garage
      - Does not federate. It speaks S3 and an admin bearer token; its keys stay
        in the vault
