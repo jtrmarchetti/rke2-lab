@@ -34,6 +34,11 @@ Where things are
    * - Hubble
      - ``https://hubble.k8s.dev.lo``
      - Keycloak, through the hubble-auth proxy. No other way in
+   * - Traefik dashboard
+     - ``https://traefik.k8s.dev.lo``
+     - Keycloak, through the traefik-auth proxy. No other way in; both the
+       ``traefik-users`` and ``traefik-admins`` tiers are admitted to view
+       it (the dashboard has no admin tier of its own)
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - S3 access keys from ``kv/garage``
