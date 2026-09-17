@@ -1,0 +1,53 @@
+{{ ansible_managed | comment }}
+---
+# Traefik dashboard on the platform Gateway's traefik listener. The listener
+# terminates TLS at the edge with the pre-declared traefik-edge-tls secret
+# (the cert-manager Gateway shim issues it from the listener, the same way
+# as every other edge host); the cluster's CoreDNS answers
+# traefik.k8s.dev.lo with the ingress address automatically.
+#
+# The backend is the rke2-traefik-dashboard Service, created by the
+# rke2-traefik HelmChartConfig (service.additionalServices): it exposes the
+# dashboard/API entrypoint of the rke2-traefik pods (container port 8080)
+# as a ClusterIP, so the dashboard is reachable only through this route —
+# never as a port on the LoadBalancer Service, which stays web/websecure.
+# The dashboard UI (/) and its API (/api/...) both serve off that
+# entrypoint, so this one route exposes both.
+#
+# This lane is the unauthenticated exposure the SSO lane builds on: a
+# later oauth2-proxy front (the estate's hubble-auth pattern, the `traefik`
+# OIDC client) is placed between this route and the dashboard Service.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: traefik-dashboard
+  namespace: kube-system
+spec:
+  parentRefs:
+    - name: platform
+      namespace: kube-system
+      sectionName: traefik
+  hostnames:
+    - traefik.{{ inventory_gitops_source_cluster_domain }}
+  rules:
+    # The dashboard UI serves at /dashboard/ (its assets and /api are
+    # path-relative to that prefix), so the bare host root is a permanent
+    # redirect to /dashboard/. It is done here, at the TLS-terminating
+    # listener, so the redirect stays https: the plain-HTTP dashboard
+    # entrypoint behind the backend hop would otherwise emit an http://
+    # Location (its internal dashboard_redirect middleware is bound to the
+    # scheme the entrypoint sees, which is plain HTTP behind the edge), and
+    # the browser would follow it to port 80 and 404.
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /dashboard/
+    - backendRefs:
+        - name: rke2-traefik-dashboard
+          port: 8080

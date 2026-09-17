@@ -173,6 +173,40 @@ hostname — check a route for that host exists and its ``hostnames`` is exactly
 right. A 503 means the route matched and its backend Service has no ready
 endpoints, which is a workload problem, not an edge one.
 
+Dashboard
+---------
+
+The ingress controller's own dashboard is exposed on the platform Gateway's
+``traefik`` listener at ``https://traefik.k8s.dev.lo``. The split follows the
+estate's lane pattern: the ``rke2-traefik`` HelmChartConfig owns the backend
+surface and the GitOps tree owns the edge surface.
+
+* **Backend (the HCC).** ``service.additionalServices.dashboard`` renders
+  the ``rke2-traefik-dashboard`` ClusterIP on the dashboard entrypoint
+  (container port 8080), and ``ports.traefik.expose`` keeps that entrypoint
+  off the LoadBalancer Service — the dashboard is reachable only through
+  the Gateway, never as a direct edge port. ``api.insecure`` is set
+  deliberately: Traefik v3 publishes the ``api@internal`` service on a
+  plain-HTTP entrypoint only with that flag, and the hop behind the edge
+  listener is plain HTTP after TLS termination. The entrypoint's
+  ``forwardedHeaders`` trust is pinned to the estate's pod network plus the
+  ingress VIP as a /32 second hop — the same G7 audit class the
+  hubble-auth lane closed with its ``--trusted-proxy-ip`` allow-list.
+* **Edge (the GitOps tree).** ``apps/traefik-dashboard`` adds the
+  ``traefik`` listener on the platform Gateway (edge TLS from the
+  cert-manager Gateway shim's ``traefik-edge-tls``, like every other edge
+  host) and the HTTPRoute that lands the listener on the dashboard
+  Service. The route's root rule redirects ``/`` to ``/dashboard/`` *at
+  the listener*: the dashboard entrypoint's own internal redirect is bound
+  to the plain-HTTP scheme it sees behind the edge, so left to the
+  backend the Location downgrades to ``http://`` and a browser following
+  the documented host root ends on port 80 with a 404. The redirect is
+  therefore produced where TLS terminated, so it stays https.
+
+The lane is unauthenticated: it is the exposure the SSO lane builds on,
+the later oauth2-proxy front (the ``traefik`` OIDC client) placed between
+this route and the dashboard Service.
+
 .. note::
 
    Traefik is here because ingress-nginx reached end of life in March 2026.
