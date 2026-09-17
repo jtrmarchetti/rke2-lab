@@ -195,17 +195,23 @@ surface and the GitOps tree owns the edge surface.
 * **Edge (the GitOps tree).** ``apps/traefik-dashboard`` adds the
   ``traefik`` listener on the platform Gateway (edge TLS from the
   cert-manager Gateway shim's ``traefik-edge-tls``, like every other edge
-  host) and the HTTPRoute that lands the listener on the dashboard
-  Service. The route's root rule redirects ``/`` to ``/dashboard/`` *at
-  the listener*: the dashboard entrypoint's own internal redirect is bound
+  host) and the HTTPRoute that lands the listener on the SSO front. The
+  route's root rule redirects ``/`` to ``/dashboard/`` *at the
+  listener*: the dashboard entrypoint's own internal redirect is bound
   to the plain-HTTP scheme it sees behind the edge, so left to the
   backend the Location downgrades to ``http://`` and a browser following
   the documented host root ends on port 80 with a 404. The redirect is
   therefore produced where TLS terminated, so it stays https.
-
-The lane is unauthenticated: it is the exposure the SSO lane builds on,
-the later oauth2-proxy front (the ``traefik`` OIDC client) placed between
-this route and the dashboard Service.
+* **SSO front.** The dashboard has no authentication of its own, so the
+  route's catch-all rule lands on the ``traefik-auth`` oauth2-proxy
+  (``sso.yaml`` in the same tree — the estate's hubble-auth pattern).
+  An anonymous request is redirected to the Keycloak ``traefik``
+  client; a member of ``traefik-users`` or ``traefik-admins`` is
+  admitted onto the dashboard behind the proxy. The dashboard carries
+  no admin tier of its own, so both tiers are admitted to view it:
+  admission is decided on the token's ``roles`` claim, at the edge,
+  not inside the UI. The client secret and cookie secret sync from
+  OpenBao (``kv/oidc-traefik``) through an ExternalSecret.
 
 .. note::
 

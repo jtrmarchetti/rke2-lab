@@ -608,6 +608,89 @@ def hubble_sso_flow(username: str, password: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Traefik dashboard (behind the traefik-auth oauth2-proxy; drives the real
+# proxy flow)
+# ---------------------------------------------------------------------------
+
+TRAEFIK_DASH_BASE = "https://traefik.k8s.dev.lo"
+
+
+def traefik_sso_flow(username: str, password: str) -> dict:
+    """Drive the Traefik dashboard's SSO front-end the way a browser would.
+
+    The traefik-dashboard HTTPRoute lands on the traefik-auth
+    oauth2-proxy, which 302s an anonymous request to the Keycloak
+    ``traefik`` client, admits a member of traefik-users or
+    traefik-admins onto the dashboard upstream, and denies everyone
+    else (a 403 at the callback, no session cookie).
+
+    The dashboard UI serves at ``/dashboard/`` (its root is a
+    Gateway-level redirect onto that prefix), so the flow starts
+    there rather than at the host root.
+
+    Returns a report a test can assert on per tier: ``admitted``
+    (callback and the dashboard page both 200) or ``denied`` (the
+    callback 403s and the proxy re-bounces the request to Keycloak
+    instead of the upstream).
+    """
+    session = make_session()
+
+    # 1. Unauthenticated: the proxy must redirect to Keycloak, client
+    # traefik.
+    anon = session.get(TRAEFIK_DASH_BASE + "/dashboard/", allow_redirects=
+                       False, timeout=30)
+    location = anon.headers.get("Location", "")
+    if anon.status_code not in (302, 303) or "client_id=traefik" not in location:
+        return {"admitted": False, "denied": False, "stage": "unauthenticated",
+                "detail": (f"GET /dashboard/ gave {anon.status_code} "
+                           f"loc={location[:160]}: the proxy is not "
+                           f"redirecting an anonymous request to the "
+                           f"traefik Keycloak client")}
+
+    # 2. Ride the proxy's own authorization request (its state/PKCE).
+    result = keycloak_login(session, username, password, auth_url=location)
+    if not result.ok:
+        return {"admitted": False, "denied": False, "stage": "login",
+                "detail": result.detail}
+
+    # 3. Follow the callback the proxy issued: code -> session -> upstream.
+    callback = session.get(result.location, allow_redirects=True, timeout=60)
+
+    # 4. What the dashboard answers with the session.
+    page = session.get(TRAEFIK_DASH_BASE + "/dashboard/", allow_redirects=
+                       False, timeout=30)
+    admitted = callback.status_code == 200 and page.status_code == 200
+    title = ""
+    if "<title>" in page.text:
+        title = page.text.split("<title>", 1)[-1].split("</title>", 1)[0]
+
+    # 5. The ingress data the dashboard is for, through the same session:
+    # a 200 with router/service totals proves the dashboard is the
+    # admitted upstream, not just the proxy's own page.
+    api_status, api_routers, api_services = None, 0, 0
+    if admitted:
+        overview = session.get(TRAEFIK_DASH_BASE + "/api/overview",
+                               allow_redirects=False, timeout=30)
+        api_status = overview.status_code
+        if overview.status_code == 200:
+            data = overview.json()
+            api_routers = data.get("http", {}).get("routers", {}).get(
+                "total", 0)
+            api_services = data.get("http", {}).get("services", {}).get(
+                "total", 0)
+
+    return {"admitted": admitted, "denied": callback.status_code == 403,
+            "stage": "done",
+            "callback_status": callback.status_code,
+            "page_status": page.status_code,
+            "page_title": title,
+            "api_status": api_status,
+            "api_routers": api_routers,
+            "api_services": api_services,
+            "re_bounced": "client_id=traefik" in page.headers.get("Location", "")}
+
+
+# ---------------------------------------------------------------------------
 # OpenBao
 # ---------------------------------------------------------------------------
 

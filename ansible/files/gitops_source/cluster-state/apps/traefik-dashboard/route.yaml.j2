@@ -14,9 +14,17 @@
 # The dashboard UI (/) and its API (/api/...) both serve off that
 # entrypoint, so this one route exposes both.
 #
-# This lane is the unauthenticated exposure the SSO lane builds on: a
-# later oauth2-proxy front (the estate's hubble-auth pattern, the `traefik`
-# OIDC client) is placed between this route and the dashboard Service.
+# The backend of the catch-all rule is the traefik-auth oauth2-proxy, not
+# the dashboard Service: the dashboard has no authentication of its own, so
+# SSO is enforced at the edge (sso.yaml), the estate's hubble-auth
+# pattern. Unauthenticated requests are redirected to the Keycloak
+# `traefik` client; a member of traefik-users or traefik-admins is
+# admitted onto the rke2-traefik-dashboard Service behind the proxy.
+# sso.yaml creates traefik-auth in kube-system, next to its backend.
+#
+# The exact-root rule below still lands on nothing: it is a pure
+# redirect, so it does not bypass the proxy; /dashboard/ and everything
+# else fall through to the catch-all and are session-checked there.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -49,5 +57,5 @@ spec:
               type: ReplaceFullPath
               replaceFullPath: /dashboard/
     - backendRefs:
-        - name: rke2-traefik-dashboard
-          port: 8080
+        - name: traefik-auth
+          port: 80

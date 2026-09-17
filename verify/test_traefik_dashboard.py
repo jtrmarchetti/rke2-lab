@@ -1,4 +1,4 @@
-"""Traefik dashboard: the pre-SSO edge-exposure lane.
+"""Traefik dashboard: the edge-exposure lane and its SSO front.
 
 The estate's rke2-traefik HelmChartConfig owns the backend surface:
 ``service.additionalServices.dashboard`` renders the rke2-traefik-dashboard
@@ -16,14 +16,19 @@ behind it — is what keeps the Location https: the entrypoint's own
 internal dashboard redirect is bound to the scheme it sees, which is
 plain HTTP behind the edge.
 
-The G7 hardening (audit class of the hubble-auth --trusted-proxy-ip pin,
-commit 00fb020): the dashboard entrypoint trusts X-Forwarded-* only from
-the estate's pod network and the ingress VIP, pinned in the HCC's
-``ports.traefik.forwardedHeaders`` block.
+The dashboard has no authentication of its own, so the route's catch-all
+rule lands on the traefik-auth oauth2-proxy (the estate's hubble-auth
+pattern): an anonymous request is redirected to the Keycloak ``traefik``
+client, and a member of traefik-users or traefik-admins is admitted onto
+the dashboard behind the proxy. The dashboard carries no admin tier of
+its own, so both tiers are admitted to view it; the two tiers are
+enforced at the edge, on the token's ``roles`` claim, not inside the UI.
 
-Like test_mtls, this module is a configuration-surface gate: the tests
-skip while the rke2-traefik HCC carries no dashboard block, and enforce
-on every warm build after, so a rollback or drift fails fast.
+Like test_mtls and test_hubble, this module is a configuration-surface
+gate: the HCC-shape tests skip while the rke2-traefik HCC carries no
+dashboard block, the SSO tests skip while the traefik-auth proxy is not
+deployed, and everything enforces on every warm build after, so a
+rollback or drift fails fast.
 """
 
 from __future__ import annotations
@@ -111,8 +116,8 @@ def test_traefik_dashboard_hcc_pins_the_surface():
 def test_traefik_dashboard_service_shape():
     """The live Services match the pinned shape: the rke2-traefik
     LoadBalancer stays 80/443 (web/websecure only) and the dashboard
-    Service is the ClusterIP the route's backendRef points at. A dashboard
-    port appearing on the LB means the edge surface grew outside the
+    Service is the ClusterIP the proxy fronts. A dashboard port
+    appearing on the LB means the edge surface grew outside the
     Gateway lane."""
     lb = helpers.kubectl_json("get", "svc", "rke2-traefik", "-n",
                               "kube-system")
@@ -139,8 +144,8 @@ def test_traefik_dashboard_service_shape():
 def test_traefik_dashboard_edge_surface():
     """The platform Gateway carries the traefik listener with edge TLS,
     the cert-manager shim issued the listener certificate, and the
-    traefik-dashboard HTTPRoute is Accepted and lands on the dashboard
-    Service. That is the whole edge path the HCC block stands behind."""
+    traefik-dashboard HTTPRoute is Accepted and lands on the SSO
+    proxy. That is the whole edge path the HCC block stands behind."""
     gw = helpers.kubectl_json("get", "gateway", "platform", "-n",
                               "kube-system")
     listener = next((l for l in gw["spec"]["listeners"]
@@ -177,9 +182,10 @@ def test_traefik_dashboard_edge_surface():
         f"unreachable at the edge even with a ready listener")
     backends = [r["backendRefs"][0]["name"] for r in route["spec"]["rules"]
                 if r.get("backendRefs")]
-    assert "rke2-traefik-dashboard" in backends, (
-        f"no rule lands on the rke2-traefik-dashboard Service "
-        f"(backends: {backends}): the dashboard has no backend")
+    assert "traefik-auth" in backends, (
+        f"no rule lands on the traefik-auth proxy "
+        f"(backends: {backends}): the SSO front is not in the edge "
+        f"path, so the dashboard would serve unauthenticated")
 
 
 def test_traefik_dashboard_root_redirects_https():
@@ -208,32 +214,221 @@ def test_traefik_dashboard_root_redirects_https():
         f"prefix")
 
 
-def test_traefik_dashboard_serves_ingress_data():
-    """The acceptance behavior of the lane: the dashboard UI and its API
-    answer through the edge with the ingress's own data. A 200 on an
-    empty board would still be 'reachable'; the router/service totals
-    prove the ingress is what the dashboard is monitoring. The UI page
-    carries the dashboard's own markup (its window.APIUrl bootstrap
-    script), which pins the body, not just the status code."""
-    session = helpers.make_session()
-    page = session.get(TRAEFIK_DASH_BASE + "/dashboard/", allow_redirects=
-                      False, timeout=30)
-    assert page.status_code == 200, (
-        f"GET /dashboard/ gave {page.status_code}: the dashboard UI does "
-        f"not serve through the edge")
-    assert "window.APIUrl" in page.text, (
-        "the /dashboard/ body is not the Traefik dashboard markup "
-        "(no window.APIUrl bootstrap): the edge is answering a fallback "
-        "page, not the dashboard")
+# ---------------------------------------------------------------------------
+# SSO front (the traefik-auth oauth2-proxy in front of the dashboard)
+# ---------------------------------------------------------------------------
 
-    overview = session.get(TRAEFIK_DASH_BASE + "/api/overview",
-                           allow_redirects=False, timeout=30)
-    assert overview.status_code == 200, (
-        f"GET /api/overview gave {overview.status_code}: the dashboard "
-        f"API does not serve through the edge")
-    data = overview.json()
-    routers = data.get("http", {}).get("routers", {}).get("total", 0)
-    services = data.get("http", {}).get("services", {}).get("total", 0)
-    assert routers > 0 and services > 0, (
-        f"/api/overview reports {routers} routers / {services} services: "
-        f"the ingress data the dashboard is for is not reaching it")
+def _traefik_sso_live() -> bool:
+    """Whether the traefik-auth oauth2-proxy is deployed: the SSO front
+    lives in the gitops apps/traefik-dashboard tree, so its absence
+    means the SSO card has not been applied to this cluster yet. Skip
+    the SSO tests in that case; the HCC-shape tests above still run."""
+    try:
+        helpers.kubectl_json("get", "deploy", "traefik-auth", "-n",
+                             "kube-system")
+        return True
+    except RuntimeError:
+        return False
+
+
+_sso_tests = pytest.mark.skipif(
+    not _traefik_sso_live(),
+    reason=("traefik-auth (the dashboard's oauth2-proxy) is not deployed "
+            "on this estate yet; the SSO tests skip until the gitops "
+            "build lands it"))
+
+
+@_sso_tests
+def test_traefik_sso_proxy_fronts_the_dashboard():
+    """The traefik-dashboard HTTPRoute's catch-all backend is the
+    traefik-auth proxy, not the dashboard Service: that switch is what
+    puts SSO in front of the dashboard. A route that still points at
+    rke2-traefik-dashboard means the dashboard is serving
+    unauthenticated at the edge again."""
+    route = helpers.kubectl_json("get", "httproute", "traefik-dashboard",
+                                 "-n", "kube-system")
+    refs = [r["backendRefs"][0]["name"] for r in route["spec"]["rules"]
+            if r.get("backendRefs")]
+    assert "traefik-auth" in refs, (
+        f"the traefik-dashboard route backend is {refs}: the dashboard is "
+        f"not fronted by the traefik-auth proxy, so it serves "
+        f"unauthenticated at the edge")
+
+    proxy = helpers.kubectl_json("get", "deploy", "traefik-auth", "-n",
+                                 "kube-system")
+    assert proxy["status"].get("readyReplicas", 0) >= 1, (
+        "traefik-auth is not ready: the proxy in front of the dashboard "
+        "is down and the whole dashboard is unreachable (a down SSO "
+        "proxy is a hard outage, not a degraded one)")
+
+
+@_sso_tests
+def test_traefik_sso_proxy_admits_on_the_roles_claim():
+    """The proxy authorizes on the traefik client's roles: its args carry
+    --allowed-role=traefik:user and traefik:admin (the keycloak-oidc
+    shape, matching resource_access.traefik.roles) and neither an open
+    upstream nor a wildcard allowed-group. The dashboard carries no
+    admin tier of its own, so both tiers are admitted to view it. That
+    is the whole authentication surface: get those wrong and either
+    nobody can get in or anyone can."""
+    proxy = helpers.kubectl_json("get", "deploy", "traefik-auth", "-n",
+                                 "kube-system")
+    args = proxy["spec"]["template"]["spec"]["containers"][0].get("args", [])
+    assert "--provider=keycloak-oidc" in args, (
+        f"the proxy runs no keycloak-oidc provider ({args}): SSO is not "
+        f"actually on")
+    assert "--allowed-role=traefik:user" in args, (
+        "no --allowed-role=traefik:user: a traefik-users member is "
+        "denied the dashboard even though the claim says otherwise")
+    assert "--allowed-role=traefik:admin" in args, (
+        "no --allowed-role=traefik:admin: a traefik-admins member is "
+        "denied the dashboard")
+    assert not any(a.startswith("--allowed-group=") for a in args), (
+        "an allowed-group is set: admission is no longer decided on the "
+        "roles claim")
+    assert not any(a.startswith("--trusted-ip") or a == "--pass-user-to-upstream"
+                   for a in args), (
+        "an open bypass flag is set: the proxy admits a request without "
+        "a session")
+    # G7 hardening, reader-visible on the live args. The proxy must pin
+    # the PKCE code-challenge method to S256 (leaving it unset runs the
+    # OIDC code exchange on a plain, guessable code and the proxy logs
+    # the PKCE unset warning) and pin the reverse-proxy's hop to an
+    # explicit --trusted-proxy-ip allow-list (leaving it unset makes
+    # the proxy trust 0.0.0.0/0 to forge X-Forwarded-*).
+    assert "--code-challenge-method=S256" in args, (
+        "no --code-challenge-method=S256: the OIDC code exchange runs on "
+        "a plain (guessable) code, and the proxy logs the PKCE unset "
+        "warning G7 flagged")
+    assert any(a.startswith("--trusted-proxy-ip=") for a in args), (
+        "no --trusted-proxy-ip= pin: with --reverse-proxy on and no "
+        "trusted-proxy-ip, the proxy trusts every connecting IP "
+        "(0.0.0.0/0) to forge X-Forwarded-* headers - G7's second "
+        "warning")
+    # The upstream must be the dashboard Service, not an open one.
+    assert any(a == "--upstream=http://rke2-traefik-dashboard.kube-system"
+               ".svc.cluster.local:8080" for a in args), (
+        f"the proxy's upstream is {args}: the admission has nothing "
+        f"dashboard-shaped behind it")
+    # The client and cookie secrets must come from the ExternalSecret's
+    # synced Secret (traefik-auth), not inline.
+    envs = proxy["spec"]["template"]["spec"]["containers"][0].get("env", [])
+    by_name = {e["name"]: e.get("valueFrom", {}) for e in envs}
+    client_ref = by_name.get("OAUTH2_PROXY_CLIENT_SECRET", {}).get(
+        "secretKeyRef", {})
+    assert client_ref.get("key") == "client-secret" and \
+        client_ref.get("name") == "traefik-auth", (
+        f"the client secret is not mounted from the traefik-auth secret "
+        f"(got {client_ref})")
+    cookie_ref = by_name.get("OAUTH2_PROXY_COOKIE_SECRET", {}).get(
+        "secretKeyRef", {})
+    assert cookie_ref.get("key") == "cookie-secret" and \
+        cookie_ref.get("name") == "traefik-auth", (
+        f"the cookie secret is not mounted from the traefik-auth secret "
+        f"(got {cookie_ref})")
+
+
+@_sso_tests
+def test_traefik_sso_secret_is_synced():
+    """The traefik-auth Secret exists and holds both keys: the
+    ExternalSecret synced kv/oidc-traefik (client-secret +
+    cookie-secret). A Secret missing one key is the proxy crashing on
+    start (client) or refusing to mint cookies (cookie)."""
+    secret = helpers.kubectl_json("get", "secret", "traefik-auth", "-n",
+                                  "kube-system")
+    data = secret.get("data", {})
+    assert "client-secret" in data, (
+        "traefik-auth has no client-secret: the ExternalSecret did not "
+        "sync, and the proxy cannot start")
+    assert "cookie-secret" in data, (
+        "traefik-auth has no cookie-secret: the proxy starts but cannot "
+        "establish a session")
+
+
+@_sso_tests
+def test_traefik_sso_anonymous_denied():
+    """An unauthenticated request to the dashboard is denied at the
+    edge: the proxy redirects to the Keycloak ``traefik`` client
+    instead of serving the UI. This is the anonymous half of the
+    boundary; a 200 here means the SSO front is not actually in the
+    path."""
+    session = helpers.make_session()
+    anon = session.get(TRAEFIK_DASH_BASE + "/dashboard/", allow_redirects=
+                       False, timeout=30)
+    location = anon.headers.get("Location", "")
+    assert anon.status_code in (302, 303), (
+        f"an anonymous GET /dashboard/ gave {anon.status_code}, expected "
+        f"a redirect to Keycloak: the dashboard answers an anonymous "
+        f"request, so the SSO front is bypassed")
+    assert "client_id=traefik" in location, (
+        f"the anonymous redirect's Location is {location[:160]!r}: the "
+        f"proxy did not bounce to the traefik Keycloak client")
+
+
+@_sso_tests
+def test_traefik_sso_user_admitted(traefik_tiers):
+    """A member of traefik-users, driving the real traefik-auth proxy, is
+    admitted onto the dashboard: the anonymous request redirects to the
+    traefik Keycloak client, the callback issues a session, and the
+    dashboard page answers 200 with the app's own markup plus its
+    /api/overview data. If the user tier cannot reach the dashboard, the
+    whole user-facing half of the feature is broken."""
+    user, _adm, _nobody = traefik_tiers
+    report = helpers.traefik_sso_flow(user.name, user.password)
+    assert report["admitted"], (
+        f"a traefik-users member was not admitted to the dashboard "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+    assert "Traefik" in report.get("page_title", ""), (
+        f"the admitted session reached a page titled "
+        f"{report.get('page_title')!r}, not the dashboard")
+    assert report.get("api_status") == 200 and \
+        report.get("api_routers", 0) > 0 and report.get("api_services", 0) > 0, (
+        f"the admitted session's /api/overview gave "
+        f"{report.get('api_status')} "
+        f"({report.get('api_routers')} routers / "
+        f"{report.get('api_services')} services): the ingress data the "
+        f"dashboard is for is not reaching it behind the SSO gate")
+
+
+@_sso_tests
+def test_traefik_sso_admin_admitted(traefik_tiers):
+    """A member of traefik-admins is admitted onto the dashboard through
+    the same proxy. The dashboard carries no admin tier of its own, so
+    the admin tier is admitted to view it exactly like the user tier;
+    a regression that only breaks the admin path would otherwise be
+    invisible to the user-tier test."""
+    _user, adm, _nobody = traefik_tiers
+    report = helpers.traefik_sso_flow(adm.name, adm.password)
+    assert report["admitted"], (
+        f"a traefik-admins member was not admitted to the dashboard "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+
+
+@_sso_tests
+def test_traefik_sso_nonmember_denied(traefik_tiers):
+    """A user who is a federated SSO user but in no traefik group is
+    denied at the proxy: Keycloak still issues a token (the user is a
+    valid identity), but the traefik client carries neither the user
+    nor the admin role, so the callback 403s, no session cookie is
+    minted, and the request is bounced back to Keycloak instead of the
+    upstream dashboard. This is the denial half of the boundary: if a
+    non-member is admitted, the SSO gate has no teeth."""
+    _user, _adm, nobody = traefik_tiers
+    report = helpers.traefik_sso_flow(nobody.name, nobody.password)
+    assert report["denied"], (
+        f"a traefik non-member was not denied at the proxy "
+        f"(stage={report['stage']} detail={report.get('detail', '')} "
+        f"callback={report.get('callback_status')} "
+        f"page={report.get('page_status')})")
+    assert not report["admitted"], (
+        "a traefik non-member was admitted to the dashboard: the SSO "
+        "gate admits everyone, so the roles claim is not actually the "
+        "admission gate")
+    assert report["re_bounced"], (
+        "after the 403 the proxy did not re-bounce the request to the "
+        "traefik Keycloak client: the denied session is not being "
+        "cleared correctly")

@@ -168,9 +168,11 @@ Who federates, and how
        ``traefik`` client, so a member's token carries
        ``roles: ["user"]`` or ``roles: ["admin"]``. The groups are
        populated in FreeIPA the way every other grant is
-       (``ipa group-add-member traefik-users --users alice``); the
-       client-side enforcement of those roles on the dashboard route is
-       the SSO-enforcement lane, layered on top of this mapping
+       (``ipa group-add-member traefik-users --users alice``). The
+       dashboard's SSO front (the ``traefik-auth`` oauth2-proxy, the
+       estate's hubble-auth pattern) authorizes on exactly that
+       ``roles`` claim: both tiers are admitted to view the dashboard,
+       which carries no admin tier of its own
    * - Garage
      - Does not federate. It speaks S3 and an admin bearer token; its keys stay
        in the vault

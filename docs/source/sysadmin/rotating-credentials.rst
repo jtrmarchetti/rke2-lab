@@ -114,11 +114,12 @@ authored rather than generated. The workloads pick it up from ESO within the
 refresh interval; restart them if you want it immediately.
 
 The cookie secrets for the oauth2-proxies are different in kind: the
-Longhorn proxy's is ``OAUTH2_PROXY_COOKIE_SECRET`` and the Hubble
-proxy's is ``OAUTH2_PROXY_COOKIE_SECRET_HUBBLE``. Rotating either signs
-everyone out of that proxy and does nothing else — the two are
-independent, so rotating one never disturbs the other. Each must be
-exactly 16, 24 or 32 bytes.
+Longhorn proxy's is ``OAUTH2_PROXY_COOKIE_SECRET``, the Hubble proxy's
+is ``OAUTH2_PROXY_COOKIE_SECRET_HUBBLE``, and the Traefik dashboard
+proxy's is ``OAUTH2_PROXY_COOKIE_SECRET_TRAEFIK``. Rotating any of
+them signs everyone out of that proxy and does nothing else — the
+three are independent, so rotating one never disturbs the others.
+Each must be exactly 16, 24 or 32 bytes.
 
 Keycloak's ``admin`` password
 =============================
