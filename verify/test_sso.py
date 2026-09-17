@@ -146,6 +146,33 @@ def test_hubble_roles_claim(test_users, who, expect):
 
 
 # ---------------------------------------------------------------------------
+# Traefik (the dashboard lane enforces on the same claim shape)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("who,expect", [("user", "user"), ("admin", "admin")],
+                         ids=["user", "admin"])
+def test_traefik_roles_claim(test_users, who, expect):
+    """Keycloak issues a token for the `traefik` client carrying the
+    expected role claim. The dashboard's SSO front-end enforces that
+    claim exactly the way the Hubble proxy does, so proving the claim is
+    present and correct per tier is what the dashboard's authentication
+    rests on."""
+    user, adm = test_users
+    subject = user if who == "user" else adm
+    result = helpers.keycloak_login(
+        helpers.make_session(), subject.name, subject.password,
+        "traefik", helpers.SPE["traefik"][0])
+    assert result.ok, f"Keycloak login failed: {result.detail}"
+    tokens = helpers.exchange_code("traefik", result.code,
+                                   helpers.SPE["traefik"][0])
+    claims = helpers.access_token_claims(tokens["access_token"])
+    assert claims.get("roles") == [expect], (
+        f"expected roles claim [{expect}] for {subject.name}, "
+        f"got {claims.get('roles')}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Keycloak administration
 # ---------------------------------------------------------------------------
 
