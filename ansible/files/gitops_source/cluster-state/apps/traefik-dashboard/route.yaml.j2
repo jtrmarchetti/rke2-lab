@@ -1,0 +1,61 @@
+{{ ansible_managed | comment }}
+---
+# Traefik dashboard on the platform Gateway's traefik listener. The listener
+# terminates TLS at the edge with the pre-declared traefik-edge-tls secret
+# (the cert-manager Gateway shim issues it from the listener, the same way
+# as every other edge host); the cluster's CoreDNS answers
+# traefik.k8s.dev.lo with the ingress address automatically.
+#
+# The backend is the rke2-traefik-dashboard Service, created by the
+# rke2-traefik HelmChartConfig (service.additionalServices): it exposes the
+# dashboard/API entrypoint of the rke2-traefik pods (container port 8080)
+# as a ClusterIP, so the dashboard is reachable only through this route —
+# never as a port on the LoadBalancer Service, which stays web/websecure.
+# The dashboard UI (/) and its API (/api/...) both serve off that
+# entrypoint, so this one route exposes both.
+#
+# The backend of the catch-all rule is the traefik-auth oauth2-proxy, not
+# the dashboard Service: the dashboard has no authentication of its own, so
+# SSO is enforced at the edge (sso.yaml), the estate's hubble-auth
+# pattern. Unauthenticated requests are redirected to the Keycloak
+# `traefik` client; a member of traefik-users or traefik-admins is
+# admitted onto the rke2-traefik-dashboard Service behind the proxy.
+# sso.yaml creates traefik-auth in kube-system, next to its backend.
+#
+# The exact-root rule below still lands on nothing: it is a pure
+# redirect, so it does not bypass the proxy; /dashboard/ and everything
+# else fall through to the catch-all and are session-checked there.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: traefik-dashboard
+  namespace: kube-system
+spec:
+  parentRefs:
+    - name: platform
+      namespace: kube-system
+      sectionName: traefik
+  hostnames:
+    - traefik.{{ inventory_gitops_source_cluster_domain }}
+  rules:
+    # The dashboard UI serves at /dashboard/ (its assets and /api are
+    # path-relative to that prefix), so the bare host root is a permanent
+    # redirect to /dashboard/. It is done here, at the TLS-terminating
+    # listener, so the redirect stays https: the plain-HTTP dashboard
+    # entrypoint behind the backend hop would otherwise emit an http://
+    # Location (its internal dashboard_redirect middleware is bound to the
+    # scheme the entrypoint sees, which is plain HTTP behind the edge), and
+    # the browser would follow it to port 80 and 404.
+    - matches:
+        - path:
+            type: Exact
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /dashboard/
+    - backendRefs:
+        - name: traefik-auth
+          port: 80

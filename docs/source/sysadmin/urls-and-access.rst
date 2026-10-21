@@ -40,6 +40,9 @@ Web and API
    * - Hubble
      - ``https://hubble.k8s.dev.lo``
      - Cilium flow observability, through Keycloak SSO (the hubble-auth proxy)
+   * - Traefik
+     - ``https://traefik.k8s.dev.lo``
+     - Ingress controller dashboard, through Keycloak SSO (the ``traefik`` client)
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - Also ``https://<bucket>.s3.k8s.dev.lo``

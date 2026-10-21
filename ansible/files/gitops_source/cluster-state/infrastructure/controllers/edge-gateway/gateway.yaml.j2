@@ -95,3 +95,14 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: hubble-edge-tls
+    - name: traefik
+      hostname: traefik.{{ inventory_gitops_source_cluster_domain }}
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: traefik-edge-tls

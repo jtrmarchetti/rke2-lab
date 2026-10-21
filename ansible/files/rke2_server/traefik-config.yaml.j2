@@ -12,6 +12,15 @@ spec:
     nodeSelector:
       {{ inventory_rke2_server_ingress_node_selector }}: "true"
 
+    # The dashboard/API serves on the plain-HTTP traefik entrypoint
+    # (container 8080). Traefik v3 only publishes the api@internal service
+    # on non-TLS entrypoints with api.insecure enabled (the chart's
+    # dashboard flag alone leaves the router unregistered), so enable it:
+    # the dashboard hop behind the platform Gateway is plain HTTP after the
+    # edge TLS termination.
+    api:
+      insecure: true
+
     providers:
       kubernetesGateway:
         enabled: true
@@ -23,10 +32,38 @@ spec:
     # container port 443; the service's named targetPort (websecure) and the
     # hostPort 443 mapping keep pointing at the same entrypoint.
     ports:
+      traefik:
+        # The dashboard/API entrypoint stays off the LoadBalancer Service
+        # (expose.default false): it is reachable only through the platform
+        # Gateway's traefik listener, never as a direct edge port.
+        expose:
+          default: false
+          dashboard: true
+        # The dashboard hop is plain HTTP behind the platform Gateway (edge TLS
+        # already terminated). Without pinned trusted IPs this entrypoint
+        # ignores the Gateway's X-Forwarded-Proto, so the api@internal
+        # `/` -> /dashboard/ redirect downgrades the scheme to http://
+        # (audit G7, same class as the hubble-auth --trusted-proxy-ip pin).
+        # Trust the in-cluster pod network (the Gateway's own pod IP) and the
+        # ingress VIP as the second hop.
+        forwardedHeaders:
+          # Without this the entrypoint never trusts X-Forwarded-Proto on a
+          # plain-HTTP (non-TLS) connection, so the scheme stays http.
+          # Scoped by trustedIPs below.
+          insecure: true
+          trustedIPs:
+            - "{{ inventory_rke2_server_pod_cidr }}"
+            - "{{ inventory_rke2_server_ingress_address }}/32"
       websecure:
         port: 443
 
     service:
+      additionalServices:
+        dashboard:
+          # The rke2-traefik-dashboard Service the platform Gateway's traefik
+          # listener routes to (gitops apps/traefik-dashboard). ClusterIP:
+          # the dashboard is an internal target, so no LoadBalancer VIP.
+          type: ClusterIP
       spec:
         type: LoadBalancer
       annotations:

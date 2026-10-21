@@ -1,0 +1,176 @@
+{{ ansible_managed | comment }}
+# Keycloak SSO for the Traefik dashboard. The dashboard has no
+# authentication of its own, so an oauth2-proxy stands in front of it in
+# full reverse-proxy mode - the way hubble-auth fronts the Hubble UI
+# (the estate's sso.yaml pattern): unauthenticated requests are
+# redirected to Keycloak, and admission is decided on the client's
+# `roles` claim.
+#
+# The traefik client is a standard openid-connect client with the
+# default client scopes, so a member's token carries the client role
+# under `resource_access.traefik.roles` (realm `dev-lo`). The
+# keycloak-oidc provider reads exactly that shape:
+# `--allowed-role=traefik:user` / `--allowed-role=traefik:admin`
+# authorize on `resource_access.traefik.roles`, which is what
+# FreeIPA's traefik-users -> client role `user` and
+# traefik-admins -> client role `admin` grant. The dashboard carries
+# no admin tier of its own, so both tiers are admitted to view it:
+# the two tiers are enforced here, at the edge, not inside the UI.
+#
+# The proxy fronts the rke2-traefik-dashboard Service in kube-system
+# (container port 8080, the plain-HTTP dashboard entrypoint). The
+# route.yaml root rule still lands on the dashboard Service for its
+# exact-root redirect; the catch-all rule below now lands on the
+# proxy (traefik-auth), not the dashboard Service, so the UI and its
+# API are unreachable without a session. The client secret and cookie
+# secret come from OpenBao through the ExternalSecret below
+# (kv/oidc-traefik); the domain CA is baked in so the proxy verifies
+# the Keycloak issuer on the estate chain, never -k.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: traefik-auth-ca
+  namespace: kube-system
+data:
+  ca.crt: >-
+    {{ lookup('file', inventory_gitops_source_domain_ca_file, rstrip=false) | b64encode }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik-auth
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik-auth
+  template:
+    metadata:
+      labels:
+        app: traefik-auth
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+          imagePullPolicy: IfNotPresent
+          args:
+            - --provider=keycloak-oidc
+            - --oidc-issuer-url=https://sso.{{ inventory_gitops_source_cluster_domain }}/realms/{{ inventory_gitops_source_keycloak_realm }}
+            - --client-id=traefik
+            # G7 hardening: pin the PKCE code-challenge method to S256 so
+            # the OIDC code exchange is authenticated instead of falling
+            # back to a plain (guessable) code; the proxy logs a PKCE
+            # warning when this is unset. S256 (uppercase) is the value
+            # the oauth2-proxy binary documents and the RFC 7636
+            # registered value, so the Keycloak callback shape is
+            # unchanged.
+            - --code-challenge-method=S256
+            - --provider-ca-file=/etc/ssl/domain/ca.crt
+            - --redirect-url=https://traefik.{{ inventory_gitops_source_cluster_domain }}/oauth2/callback
+            - --upstream=http://rke2-traefik-dashboard.kube-system.svc.cluster.local:8080
+            # The dashboard carries no admin tier of its own: a
+            # traefik-users member and a traefik-admins member are both
+            # admitted to view it, so both client roles are allowed.
+            - --allowed-role=traefik:admin
+            - --allowed-role=traefik:user
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            # G7 hardening: pin the reverse-proxy's immediate hop to an
+            # explicit allow-list instead of trusting every connecting
+            # IP (0.0.0.0/0). The proxy sits behind the platform
+            # Gateway (in-cluster RKE2 Traefik pods), which fronts the
+            # dashboard's listener and reaches the proxy in-cluster, so
+            # its real peer is the Gateway's pod-network address, not
+            # the external LB VIP. Pin the estate's pod network CIDR
+            # (the set the Gateway and every backend pod connect on);
+            # trust the ingress VIP only as an explicit second hop.
+            - --trusted-proxy-ip={{ inventory_gitops_source_pod_cidr }}
+            - --trusted-proxy-ip={{ inventory_gitops_source_ingress_address }}/32
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=1h
+            - --cookie-refresh=15m
+            - --email-domain=*
+            - --skip-provider-button=true
+            - --set-xauthrequest=true
+            - --pass-basic-auth=false
+            - --pass-user-headers=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: traefik-auth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: traefik-auth
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+              name: http
+          volumeMounts:
+            - name: domain-ca
+              mountPath: /etc/ssl/domain
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 96Mi
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+              initialDelaySeconds: 30
+              periodSeconds: 30
+      volumes:
+        - name: domain-ca
+          secret:
+            secretName: traefik-auth-ca
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-auth
+  namespace: kube-system
+spec:
+  type: ClusterIP
+  selector:
+    app: traefik-auth
+  ports:
+    - port: 80
+      targetPort: 4180
+      name: http
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: traefik-auth
+  namespace: kube-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: openbao
+    kind: ClusterSecretStore
+  target:
+    name: traefik-auth
+  data:
+    - secretKey: client-secret
+      remoteRef:
+        key: oidc-traefik
+        property: client-secret
+    - secretKey: cookie-secret
+      remoteRef:
+        key: oidc-traefik
+        property: cookie-secret

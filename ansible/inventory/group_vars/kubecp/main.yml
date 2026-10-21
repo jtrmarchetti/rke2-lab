@@ -118,3 +118,10 @@ inventory_rke2_node_ca_system_path: /usr/local/share/ca-certificates/dev.lo.crt
 inventory_rke2_node_ca_rke2_path: /etc/rancher/rke2/dev.lo-ca.crt
 
 inventory_rke2_server_ingress_address: 192.168.2.41
+# The RKE2 pod network the platform Gateway (in-cluster Traefik pods) and
+# every backend pod connect on. The dashboard's traefik entrypoint sits
+# behind the edge Gateway, so its immediate trusted hop is the Gateway's
+# in-cluster pod IP, not the external LB VIP; pin the forwarded-header
+# trust to this CIDR (audit G7 shape, like the hubble-auth trusted-proxy
+# pin in the gitops tree).
+inventory_rke2_server_pod_cidr: 10.42.0.0/16

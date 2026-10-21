@@ -77,3 +77,35 @@ def hubble_tiers() -> tuple[helpers.TestUser, helpers.TestUser,
                 helpers.remove_user(u)
             except Exception:
                 print(f"WARNING: teardown for {u.name!r} failed")
+
+
+@pytest.fixture(scope="session")
+def traefik_tiers() -> tuple[helpers.TestUser, helpers.TestUser,
+                             helpers.TestUser]:
+    """The Traefik dashboard's three identities, driven through the live
+    traefik-auth proxy: a traefik-users member, a traefik-admins member,
+    and a user who is a federated SSO user but in no traefik group (the
+    denied tier).
+
+    The first two are the estate's test_users, which already join
+    traefik-users / traefik-admins; the third exists only for the denial
+    proof, so this fixture provisions exactly that one user and tears it
+    down on its own.
+    """
+    user, adm = helpers.make_test_users()
+    nobody = helpers.TestUser(name="traefik-sso-none-test",
+                              email="traefik-sso-none@dev.lo",
+                              password=secrets.token_urlsafe(24))
+    nobody.add_groups("gitlab-users")  # an SSO user, but no traefik group
+    for u in (user, adm, nobody):
+        helpers.provision_user(u)
+    helpers.wait_for_keycloak_sync()
+    helpers.keycloak_clear_user_cache()
+    try:
+        yield user, adm, nobody
+    finally:
+        for u in (nobody, adm, user):
+            try:
+                helpers.remove_user(u)
+            except Exception:
+                print(f"WARNING: teardown for {u.name!r} failed")

@@ -165,6 +165,13 @@ inventory_keycloak_applications:
       - https://hubble.k8s.dev.lo/oauth2/callback
     client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_HUBBLE') }}"
 
+  - name: traefik
+    description: Traefik, the ingress controller dashboard
+    base_url: https://traefik.k8s.dev.lo
+    redirect_uris:
+      - https://traefik.k8s.dev.lo/oauth2/callback
+    client_secret: "{{ lookup('env', 'OIDC_CLIENT_SECRET_TRAEFIK') }}"
+
 inventory_keycloak_admin_only_applications:
   - name: keycloak
     description: Keycloak itself, the single sign-on service

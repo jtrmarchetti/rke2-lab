@@ -103,6 +103,9 @@ What is in it
    * - ``kv/oidc-hubble``
      - ``client-secret``, ``cookie-secret``
      - ``hubble-auth``
+   * - ``kv/oidc-traefik``
+     - ``client-secret``, ``cookie-secret``
+     - ``traefik-auth``
 
 Values are written by the ``openbao_secrets`` role from ``env.sh``, and it
 reads each entry before writing it — KV v2 keeps versions, and a role that

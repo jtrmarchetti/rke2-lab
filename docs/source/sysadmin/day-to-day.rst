@@ -34,6 +34,11 @@ Where things are
    * - Hubble
      - ``https://hubble.k8s.dev.lo``
      - Keycloak, through the hubble-auth proxy. No other way in
+   * - Traefik dashboard
+     - ``https://traefik.k8s.dev.lo``
+     - Keycloak, through the traefik-auth proxy. No other way in; both the
+       ``traefik-users`` and ``traefik-admins`` tiers are admitted to view
+       it (the dashboard has no admin tier of its own)
    * - Garage S3
      - ``https://s3.k8s.dev.lo``
      - S3 access keys from ``kv/garage``
@@ -71,7 +76,7 @@ Always in FreeIPA. Never in Keycloak, and never in the service:
 
 Groups follow the pattern ``<app>-admins`` and ``<app>-users`` for every
 federated application: ``grafana``, ``longhorn``, ``openbao``, ``gitlab``,
-``hubble``.
+``hubble``, ``traefik``.
 Removal is ``ipa group-remove-member``.
 
 ``keycloak-admins`` is the exception with no ``-users`` half: its members

@@ -106,6 +106,33 @@ every warm build. ``hubble`` also
 joins the edge-host list in ``verify/test_gateway.py``: the listener, the
 route and the TLS-to-domain-CA check cover it with the other edge hosts.
 
+``verify/test_traefik_dashboard.py`` — the Traefik dashboard and its SSO
+front. The configuration half pins the backend surface the
+``rke2-traefik`` HelmChartConfig carries: the dashboard ``rke2-traefik-dashboard``
+ClusterIP (off the LoadBalancer pool, so the dashboard is never a direct
+edge port), the dashboard entrypoint kept off the LB but exposed for that
+Service, and the G7-scoped ``forwardedHeaders`` trust (pod network plus the
+ingress VIP /32). It then pins the edge surface: the platform Gateway's
+``traefik`` listener with the shim-issued ``traefik-edge-tls`` certificate,
+the Accepted HTTPRoute whose catch-all lands on the ``traefik-auth``
+oauth2-proxy, and the live root ``/`` -> ``/dashboard/`` redirect staying
+https. The SSO half carries a second skip marker — the ``traefik-auth``
+proxy, deployed by the gitops ``apps/traefik-dashboard`` tree — behind which
+it asserts the proxy's admission arguments
+(``--allowed-role=traefik:user`` / ``traefik:admin``, the two G7 pins,
+secrets mounted from the synced ExternalSecret) and proves the live
+end-to-end flow the way a browser would: an anonymous request is bounced to
+the Keycloak ``traefik`` client, a ``traefik-users`` member and a
+``traefik-admins`` member each drive the real proxy onto the dashboard (whose
+``/api/overview`` returns the router and service totals, so the ingress data
+reaches it behind the gate), and a member of neither group is denied at the
+proxy — the callback 403s and the request is re-bounced to Keycloak, no
+session minted. The dashboard carries no admin tier of its own, so both
+tiers are admitted to view it and the test proves that parity rather than an
+admin-only surface. Like the Hubble module, everything skips until the HCC
+carries the dashboard block and the SSO tests skip until the proxy is
+deployed; after, it enforces on every warm build.
+
 Running it
 ==========
 
